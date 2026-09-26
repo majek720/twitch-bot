@@ -6,12 +6,12 @@ from twitchio.ext import commands
 # 1. حل مشكلة Event Loop
 asyncio.set_event_loop(asyncio.new_event_loop())
 
-# 2. البيانات الخاصة بك
+# 2. البيانات والتوكين
 ACCESS_TOKEN = 'oauth:o0loluf3tnd57pdkio1o0q43e131ry'
 CHANNELS = ['majek113']
 
 
-# 3. سيرفر الويب المصغر لإبقاء Render مستيقظاً عبر UptimeRobot
+# 3. سيرفر الويب المصغر
 async def handle_ping(request):
     return web.Response(text="Bot is alive!")
 
@@ -39,44 +39,37 @@ class Bot(commands.Bot):
     async def event_ready(self):
         print(f'Logged in as | {self.nick}')
         print(f'User id is | {self.user_id}')
-        # تشغيل سيرفر الويب في الخلفية
         asyncio.create_task(start_web_server())
-        # تشغيل مهمة إرسال الرسائل التلقائية الدورية
-        asyncio.create_task(self.auto_messages())
 
     async def event_message(self, message):
-        # تجاهل الرسائل الصادرة من البوت نفسه
+        # تجاهل رسائل البوت نفسه
         if message.echo:
             return
 
-        # 1. الرد التلقائي عند دخول شخص وإلقاء التحية (السلام عليكم / هلا / مرحبا)
+        # طباعة الرسالة في السجلات للتأكد من قراءتها
+        print(
+            f'[{message.channel.name}] {message.author.name}: {message.content}'
+        )
+
         content_lower = message.content.lower()
+
+        # الرد التلقائي على التحية باستخدام message.send() مباشرة
         if any(
             word in content_lower
             for word in ['السلام عليكم', 'سلام', 'مرحبا', 'هلا', 'hi', 'hello']
         ):
-            await message.channel.send(
-                f'وعليكم السلام ورحمة الله وبركاته، أهلاً بك @{message.author.name}! ❤️'
-            )
-
-        # 2. الرد التلقائي على أي شخص يكتب في الشات (ترحيب آلي)
-        # يمكنك تفعيل السطر التالي إذا أردت أن يرد البوت على كل رسالة تكتب:
-        # await message.channel.send(f"أهلاً بك يا @{message.author.name} في البث!")
+            try:
+                await message.send(
+                    f'وعليكم السلام ورحمة الله وبركاته، أهلاً بك @{message.author.name}! ❤️'
+                )
+            except Exception as e:
+                print(f'Error sending reply: {e}')
 
         await self.handle_commands(message)
 
-    # 4. إرسال رسائل دورية تلقائية كل فترة زمنية (مثلاً كل 15 دقيقة)
-    async def auto_messages(self):
-        await self.wait_for_ready()
-        channel = self.get_channel(CHANNELS[0])
-
-        while True:
-            # انتظر 15 دقيقة (900 ثانية)
-            await asyncio.sleep(900)
-            if channel:
-                await channel.send(
-                    '🤖 أهلاً بكم في القناة! لا تنسوا المتابعة وتفعيل التنبيهات!'
-                )
+    @commands.command(name='ping')
+    async def ping_command(self, ctx: commands.Context):
+        await ctx.send(f'Pong! @{ctx.author.name}')
 
 
 if __name__ == '__main__':
