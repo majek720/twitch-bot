@@ -8,8 +8,8 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 
 ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
 
-# القنوات المعنية
-CHANNELS = ["majek113", "teamiik", "ghaith", "iz0yi"]
+# القنوات المعنية (تم إزالة ghaith)
+CHANNELS = ["majek113", "teamiik", "iz0yi"]
 
 
 # سيرفر الويب المصغر لإبقاء Render مستيقظاً عبر UptimeRobot
