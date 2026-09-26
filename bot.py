@@ -3,17 +3,17 @@ import os
 from aiohttp import web
 from twitchio.ext import commands
 
-# 1. حل مشكلة الـ Event Loop
+# 1. حل مشكلة Event Loop
 asyncio.set_event_loop(asyncio.new_event_loop())
 
-# 2. البيانات والتوكين
+# 2. البيانات والتوكين الخاص بك
 ACCESS_TOKEN = 'oauth:o0loluf3tnd57pdkio1o0q43e131ry'
 CHANNELS = ['majek113']
 
 
-# 3. سيرفر ويب بسيط ليرد على UptimeRobot وإبقاء الخدمة مستيقظة
+# 3. سيرفر ويب مصغر ليرد على UptimeRobot ويمنع خمول السيرفر
 async def handle_ping(request):
-    return web.Response(text="Bot is alive!")
+    return web.Response(text="Bot is online!")
 
 
 async def start_web_server():
@@ -21,7 +21,6 @@ async def start_web_server():
     app.router.add_get('/', handle_ping)
     runner = web.AppRunner(app)
     await runner.setup()
-    # استخدام المنفذ المخصص من Render أو 10000 كافتراضي
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
