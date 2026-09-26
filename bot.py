@@ -8,7 +8,7 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 
 ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
 
-# القنوات المعنية (تم إزالة mr_7sn__)
+# القنوات المعنية
 CHANNELS = ["majek113", "teamiik", "iz0yi"]
 
 
@@ -43,7 +43,7 @@ class Bot(commands.Bot):
         # تشغيل سيرفر الويب في الخلفية لـ Render
         asyncio.create_task(start_web_server())
 
-        # بدء مهمة تذكير شرب الماء التلقائية كل 5 دقائق
+        # بدء مهمة تذكير شرب الماء التلقائية كل 20 دقيقة
         asyncio.create_task(self.water_reminder())
 
     async def is_channel_live(self, channel_name):
@@ -56,15 +56,15 @@ class Bot(commands.Bot):
             return False
 
     async def water_reminder(self):
-        """مهمة إرسال تذكير شرب الماء كل 5 دقائق فقط إذا كانت القناة اونلاين"""
+        """مهمة إرسال تذكير شرب الماء كل 20 دقيقة فقط إذا كانت القناة اونلاين"""
         while True:
-            await asyncio.sleep(300)  # الانتظار 5 دقائق
+            await asyncio.sleep(1200)  # الانتظار 20 دقيقة (1200 ثانية)
             for channel_name in CHANNELS:
                 is_live = await self.is_channel_live(channel_name)
                 if is_live:
                     channel = self.get_channel(channel_name)
                     if channel:
-                        await channel.send("اشرب ماااااااي")
+                        await channel.send("اشربوا ماااااااي")
 
     async def event_message(self, message):
         # تجاهل الرسائل المرسلة من حساب البوت نفسه
