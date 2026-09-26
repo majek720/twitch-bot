@@ -8,7 +8,7 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 
 ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
 
-# القنوات المعنية (تمت إضافة mr_7sn__)
+# القنوات المعنية
 CHANNELS = ["majek113", "teamiik", "iz0yi", "mr_7sn__"]
 
 
@@ -69,6 +69,10 @@ class Bot(commands.Bot):
     async def event_message(self, message):
         # تجاهل الرسائل المرسلة من حساب البوت نفسه
         if message.echo:
+            return
+
+        # تجاهل الرسائل إذا كانت صادرة من حسابك الشخصي majek113
+        if message.author.name.lower() == "majek113":
             return
 
         # التحقق مما إذا كانت القناة الحالية اونلاين (تبث الآن)
