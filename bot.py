@@ -3,75 +3,114 @@ import os
 from aiohttp import web
 from twitchio.ext import commands
 
-# 1. حل مشكلة Event Loop
+# تثبيت الـ Event Loop لبيئة Render
 asyncio.set_event_loop(asyncio.new_event_loop())
 
-# 2. البيانات والتوكين
-ACCESS_TOKEN = 'oauth:o0loluf3tnd57pdkio1o0q43e131ry'
-CHANNELS = ['majek113']
+ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
+
+# القنوات المعنية
+CHANNELS = ["majek113", "teamiik", "ghaith", "iz0yi"]
 
 
-# 3. سيرفر الويب المصغر
+# سيرفر الويب المصغر لإبقاء Render مستيقظاً عبر UptimeRobot
 async def handle_ping(request):
     return web.Response(text="Bot is alive!")
 
 
 async def start_web_server():
     app = web.Application()
-    app.router.add_get('/', handle_ping)
+    app.router.add_get("/", handle_ping)
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, '0.0.0.0', port)
+    site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    print(f"Web server running on port {port}")
 
 
 class Bot(commands.Bot):
 
     def __init__(self):
         super().__init__(
-            token=ACCESS_TOKEN,
-            prefix='!',
-            initial_channels=CHANNELS,
+            token=ACCESS_TOKEN, prefix="", initial_channels=CHANNELS
         )
 
     async def event_ready(self):
-        print(f'Logged in as | {self.nick}')
-        print(f'User id is | {self.user_id}')
+        print(
+            f"تم الاتصال بنجاح! حسابك ({self.nick}) يعمل الآن كبوت رد تلقائي."
+        )
+        print(f'القنوات المتصل بها: {", ".join(CHANNELS)}')
+
+        # تشغيل سيرفر الويب في الخلفية لـ Render
         asyncio.create_task(start_web_server())
 
+        # بدء مهمة تذكير شرب الماء التلقائية كل 5 دقائق
+        asyncio.create_task(self.water_reminder())
+
+    async def is_channel_live(self, channel_name):
+        """فحص ما إذا كانت القناة تبث حالياً (Online)"""
+        try:
+            streams = await self.fetch_streams(user_logins=[channel_name])
+            return len(streams) > 0
+        except Exception as e:
+            print(f"خطأ أثناء التحقق من حالة القناة {channel_name}: {e}")
+            return False
+
+    async def water_reminder(self):
+        """مهمة إرسال تذكير شرب الماء كل 5 دقائق فقط إذا كانت القناة اونلاين"""
+        while True:
+            await asyncio.sleep(300)  # الانتظار 5 دقائق
+            for channel_name in CHANNELS:
+                is_live = await self.is_channel_live(channel_name)
+                if is_live:
+                    channel = self.get_channel(channel_name)
+                    if channel:
+                        await channel.send("اشرب ماااااااي")
+
     async def event_message(self, message):
-        # تجاهل رسائل البوت نفسه
+        # تجاهل الرسائل المرسلة من حساب البوت نفسه
         if message.echo:
             return
 
-        # طباعة الرسالة في السجلات للتأكد من قراءتها
-        print(
-            f'[{message.channel.name}] {message.author.name}: {message.content}'
-        )
+        # التحقق مما إذا كانت القناة الحالية اونلاين (تبث الآن)
+        is_live = await self.is_channel_live(message.channel.name)
+        if not is_live:
+            return
 
-        content_lower = message.content.lower()
+        content = message.content.strip().lower()
+        author_mention = f"@{message.author.name}"
 
-        # الرد التلقائي على التحية باستخدام message.send() مباشرة
-        if any(
-            word in content_lower
-            for word in ['السلام عليكم', 'سلام', 'مرحبا', 'هلا', 'hi', 'hello']
-        ):
-            try:
-                await message.send(
-                    f'وعليكم السلام ورحمة الله وبركاته، أهلاً بك @{message.author.name}! ❤️'
-                )
-            except Exception as e:
-                print(f'Error sending reply: {e}')
+        # 1. الرد على "مساء الخير" في أي مكان في الجملة
+        if "مساء الخير" in content:
+            await message.channel.send(f"{author_mention} مساء النور")
+            await self.handle_commands(message)
+            return
+
+        # 2. الرد على "باك" في بداية الجملة فقط
+        if content.startswith("باك"):
+            await message.channel.send(f"{author_mention} ولكم باك")
+            await self.handle_commands(message)
+            return
+
+        # 3. الرد على "برب" أو "brb" في بداية الجملة فقط
+        if content.startswith("برب") or content.startswith("brb"):
+            await message.channel.send(
+                f"{author_mention} خذ راحتك بس لا تطول علينا"
+            )
+            await self.handle_commands(message)
+            return
+
+        # 4. الرد على السلام الصريح فقط في بداية الجملة
+        greetings = ("السلام عليكم", "سلام عليكم", "السلام", "سلام")
+        if content.startswith(greetings):
+            await message.channel.send(
+                f"{author_mention} وعليكم السلام ورحمة الله وبركاته، نورت البث"
+            )
+            await self.handle_commands(message)
+            return
 
         await self.handle_commands(message)
 
-    @commands.command(name='ping')
-    async def ping_command(self, ctx: commands.Context):
-        await ctx.send(f'Pong! @{ctx.author.name}')
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     bot = Bot()
     bot.run()
