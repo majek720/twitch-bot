@@ -2,13 +2,12 @@ import asyncio
 import os
 from twitchio.ext import commands
 
-# 1. حل مشكلة Event Loop مع الإصدارات الحديثة على Render
+# 1. حل مشكلة الـ Event Loop مع الإصدارات الحديثة
 asyncio.set_event_loop(asyncio.new_event_loop())
 
-# 2. إعدادات البوت والاتصال
-# ضع التوكين الخاص بك واسم القنوات التي تريد للبوت الانضمام لها
-ACCESS_TOKEN = 'oauth:your_oauth_token_here'
-CHANNELS = ['majek113']  # أضف بقية القنوات هنا مثل: ['channel1', 'channel2']
+# 2. البيانات والتوكين الخاص بك من الصورة
+ACCESS_TOKEN = 'oauth:o0loluf3tnd57pdkio1o0q43e131ry'
+CHANNELS = ['majek113']
 
 
 class Bot(commands.Bot):
@@ -16,16 +15,17 @@ class Bot(commands.Bot):
     def __init__(self):
         super().__init__(
             token=ACCESS_TOKEN,
-            prefix='!',  # البادئة الخاصة بالأوامر (مثال: !ping)
+            prefix='!',  # البادئة للأوامر
             initial_channels=CHANNELS,
         )
 
     async def event_ready(self):
         print(f'Logged in as | {self.nick}')
         print(f'User id is | {self.user_id}')
+        print('Bot is ready and running!')
 
     async def event_message(self, message):
-        # تجاهل الرسائل التي يرسلها البوت نفسه
+        # تجاهل الرسائل الصادرة من البوت نفسه
         if message.echo:
             return
 
