@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 from aiohttp import web
 from twitchio.ext import commands
 
@@ -8,7 +9,7 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 
 ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
 
-# القنوات المعنية (تمت إضافة sh_2i)
+# القنوات المعنية
 CHANNELS = ["majek113", "teamiik", "iz0yi", "sh_2i"]
 
 
@@ -82,10 +83,24 @@ class Bot(commands.Bot):
 
         content = message.content.strip().lower()
         author_mention = f"@{message.author.name}"
-        greetings = ("السلام عليكم", "سلام عليكم", "السلام", "سلام")
 
-        has_greeting = any(g in content for g in greetings)
+        # تنظيف النص وتقسيمه إلى كلمات منفصلة
+        # إزالة علامات الترقيم الشائعة لتسهيل المقارنة
+        clean_content = re.sub(r'[^\w\s]', '', content)
+        words = clean_content.split()
+
+        if not words:
+            return
+
         has_evening = "مساء الخير" in content
+
+        # فحص السلام ككلمات منفصلة محددة
+        has_full_greeting = (
+            "السلام عليكم" in content or "سلام عليكم" in content
+        )
+        has_single_greeting = words[0] in ["السلام", "سلام"]
+
+        has_greeting = has_full_greeting or has_single_greeting
 
         # 1. إذا جمع المتابع بين السلام ومساء الخير في نفس الرسالة
         if has_greeting and has_evening:
@@ -101,22 +116,22 @@ class Bot(commands.Bot):
             await self.handle_commands(message)
             return
 
-        # 3. الرد على "باك" في بداية الجملة فقط
-        if content.startswith("باك"):
+        # 3. الرد على "باك" ككلمة منفصلة في البداية فقط
+        if words[0] == "باك":
             await message.channel.send(f"{author_mention} ولكم باك")
             await self.handle_commands(message)
             return
 
-        # 4. الرد على "برب" أو "brb" في بداية الجملة فقط
-        if content.startswith("برب") or content.startswith("brb"):
+        # 4. الرد على "برب" أو "brb" ككلمة منفصلة في البداية فقط
+        if words[0] in ["برب", "brb"]:
             await message.channel.send(
                 f"{author_mention} خذ راحتك بس لا تطول علينا"
             )
             await self.handle_commands(message)
             return
 
-        # 5. الرد على السلام فقط في بداية الجملة
-        if content.startswith(greetings):
+        # 5. الرد على السلام المنفصل فقط
+        if has_greeting:
             await message.channel.send(
                 f"{author_mention} وعليكم السلام ورحمة الله وبركاته، نورت البث"
             )
