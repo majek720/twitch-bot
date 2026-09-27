@@ -8,8 +8,8 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 
 ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
 
-# القنوات المعنية
-CHANNELS = ["majek113", "teamiik", "iz0yi"]
+# القنوات المعنية (تمت إضافة sh_2i)
+CHANNELS = ["majek113", "teamiik", "iz0yi", "sh_2i"]
 
 
 # سيرفر الويب المصغر لإبقاء Render مستيقظاً عبر UptimeRobot
@@ -58,7 +58,7 @@ class Bot(commands.Bot):
     async def water_reminder(self):
         """مهمة إرسال تذكير شرب الماء كل 20 دقيقة فقط إذا كانت القناة اونلاين"""
         while True:
-            await asyncio.sleep(1200)  # الانتظار 20 دقيقة (1200 ثانية)
+            await asyncio.sleep(1200)  # الانتظار 20 دقيقة
             for channel_name in CHANNELS:
                 is_live = await self.is_channel_live(channel_name)
                 if is_live:
@@ -82,20 +82,32 @@ class Bot(commands.Bot):
 
         content = message.content.strip().lower()
         author_mention = f"@{message.author.name}"
+        greetings = ("السلام عليكم", "سلام عليكم", "السلام", "سلام")
 
-        # 1. الرد على "مساء الخير" في أي مكان في الجملة
-        if "مساء الخير" in content:
+        has_greeting = any(g in content for g in greetings)
+        has_evening = "مساء الخير" in content
+
+        # 1. إذا جمع المتابع بين السلام ومساء الخير في نفس الرسالة
+        if has_greeting and has_evening:
+            await message.channel.send(
+                f"{author_mention} وعليكم السلام ورحمة الله وبركاته، ومساء النور نورت البث"
+            )
+            await self.handle_commands(message)
+            return
+
+        # 2. الرد على "مساء الخير" فقط
+        if has_evening:
             await message.channel.send(f"{author_mention} مساء النور")
             await self.handle_commands(message)
             return
 
-        # 2. الرد على "باك" في بداية الجملة فقط
+        # 3. الرد على "باك" في بداية الجملة فقط
         if content.startswith("باك"):
             await message.channel.send(f"{author_mention} ولكم باك")
             await self.handle_commands(message)
             return
 
-        # 3. الرد على "برب" أو "brb" في بداية الجملة فقط
+        # 4. الرد على "برب" أو "brb" في بداية الجملة فقط
         if content.startswith("برب") or content.startswith("brb"):
             await message.channel.send(
                 f"{author_mention} خذ راحتك بس لا تطول علينا"
@@ -103,8 +115,7 @@ class Bot(commands.Bot):
             await self.handle_commands(message)
             return
 
-        # 4. الرد على السلام الصريح فقط في بداية الجملة
-        greetings = ("السلام عليكم", "سلام عليكم", "السلام", "سلام")
+        # 5. الرد على السلام فقط في بداية الجملة
         if content.startswith(greetings):
             await message.channel.send(
                 f"{author_mention} وعليكم السلام ورحمة الله وبركاته، نورت البث"
