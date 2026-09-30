@@ -3,7 +3,7 @@ import os
 import random
 import re
 import time
-from aiohttp import web
+from aiohttp import ClientSession, web
 import streamlink
 from twitchio.ext import commands
 
@@ -12,10 +12,9 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 
 ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
 
-# كافة القنوات المعنية
+# القنوات المطلوب التواجد بها كـ Viewer
 CHANNELS = ["majek113", "teamiik", "iz0yi", "sh_2i", "vul1_"]
 
-# قائمة الأذكار (بدون إيموجيات)
 DHIKR_LIST = [
     "سبحان الله وبحمده، سبحان الله العظيم",
     "لا إله إلا أنت سبحانك إني كنت من الظالمين",
@@ -25,9 +24,7 @@ DHIKR_LIST = [
     "اللهم أعنا على ذكرك وشكرك وحسن عبادتك",
 ]
 
-# متغيّر لتتبع آخر وقت رد لتطبيق الـ Cooldown (5 ثوانٍ)
 last_reply_time = {}
-active_viewers = {}
 
 
 # سيرفر الويب المصغر لإبقاء Render مستيقظاً عبر UptimeRobot
@@ -50,86 +47,76 @@ class Bot(commands.Bot):
   def __init__(self):
     super().__init__(token=ACCESS_TOKEN, prefix="", initial_channels=CHANNELS)
     self.last_dhikr = None
+    self.active_viewers = {}
 
   async def event_ready(self):
-    print(f"تم الاتصال بنجاح! حسابك ({self.nick}) يعمل الآن كبوت رد تلقائي.")
-    print(f'القنوات المتصل بها: {", ".join(CHANNELS)}')
-
-    # تشغيل سيرفر الويب في الخلفية لـ Render
+    print(f"تم الاتصال بنجاح! ({self.nick}) يعمل كـ Bot و Viewer خفيف.")
     asyncio.create_task(start_web_server())
-
-    # بدء التذكيرات التناوبية كل 30 دقيقة
     asyncio.create_task(self.periodic_reminders())
-
-    # بدء إدارة المشاهدة التلقائية لكافة البثوث المباشرة
-    asyncio.create_task(self.manage_stream_viewers())
+    # تشغيل حلقة فحص واستهلاك البث لزيادة المشاهدات
+    asyncio.create_task(self.watch_streams_loop())
 
   async def is_channel_live(self, channel_name):
-    """فحص ما إذا كانت القناة تبث حالياً (Online)"""
     try:
       streams = await self.fetch_streams(user_logins=[channel_name])
       return len(streams) > 0
     except Exception as e:
-      print(f"خطأ أثناء التحقق من حالة القناة {channel_name}: {e}")
       return False
 
-  async def consume_stream(self, channel_name):
-    """فتح وتغذية البث لقراءته كمشاهد حقيقي في قائمة تويتش"""
-    print(f"بدء مشاهدة البث للقناة: {channel_name}")
-    while True:
-      try:
+  async def watch_stream_worker(self, channel_name):
+    """قراءة بيانات البث بأقل استهلاك ذاكرة ممكن لمنع إغلاق Render"""
+    print(f"بدء احتساب المشاهدة للقناة: {channel_name}")
+    try:
+      session = ClientSession()
+      while True:
         is_live = await self.is_channel_live(channel_name)
         if not is_live:
-          print(f"توقف البث للقناة: {channel_name}")
+          print(f"توقف البث في قناة {channel_name}")
           break
 
-        # استخراج رابط البث الخفيف
-        streams = streamlink.streams(f"https://www.twitch.tv/{channel_name}")
-        if "audio_only" in streams:
-          stream_url = streams["audio_only"].url
-        elif "worst" in streams:
-          stream_url = streams["worst"].url
-        else:
-          await asyncio.sleep(60)
-          continue
+        # جلب رابط البث بأدنى جودة لتوفير الذاكرة والشبكة
+        try:
+          streams = await asyncio.to_thread(
+              streamlink.streams, f"https://www.twitch.tv/{channel_name}"
+          )
+          if "worst" in streams or "audio_only" in streams:
+            stream_url = streams.get("audio_only", streams.get("worst")).url
+            async with session.get(stream_url) as resp:
+              if resp.status == 200:
+                # قراءة البيانات وتجاهلها فوراً من الذاكرة
+                async for chunk in resp.content.iter_chunked(1024 * 64):
+                  pass
+        except Exception:
+          pass
 
-        # قراءة الأجزاء في الخلفية ليُحتسب الحساب كمشاهد فعال
-        async with self.session.get(stream_url) as resp:
-          async for _ in resp.content.iter_chunked(1024):
-            if not await self.is_channel_live(channel_name):
-              break
-            await asyncio.sleep(0.1)
+        await asyncio.sleep(5)
+    except Exception as e:
+      print(f"خطأ في جلسة مشاهدة {channel_name}: {e}")
+    finally:
+      await session.close()
+      if channel_name in self.active_viewers:
+        del self.active_viewers[channel_name]
 
-      except Exception as e:
-        await asyncio.sleep(30)
-
-    if channel_name in active_viewers:
-      del active_viewers[channel_name]
-
-  async def manage_stream_viewers(self):
-    """إدارة واستدامة المشاهدة لكل القنوات المضافة بمجرد أن تبث أونلاين"""
+  async def watch_streams_loop(self):
+    """مراقبة القنوات وتفعيل احتساب المشاهدة عند فتح البث"""
     while True:
-      for channel_name in CHANNELS:
-        is_live = await self.is_channel_live(channel_name)
-        if is_live and channel_name not in active_viewers:
-          task = asyncio.create_task(self.consume_stream(channel_name))
-          active_viewers[channel_name] = task
+      for ch in CHANNELS:
+        is_live = await self.is_channel_live(ch)
+        if is_live and ch not in self.active_viewers:
+          task = asyncio.create_task(self.watch_stream_worker(ch))
+          self.active_viewers[ch] = task
       await asyncio.sleep(60)
 
   def get_random_dhikr(self):
-    """اختيار ذكر عشوائي دون تكرار نفس الذكر السابق مباشرة"""
     available = [d for d in DHIKR_LIST if d != self.last_dhikr]
     selected = random.choice(available)
     self.last_dhikr = selected
     return selected
 
   async def periodic_reminders(self):
-    """مهمة تذكير دائرية كل 30 دقيقة: صلاة على النبي -> ذكر -> ماي"""
-    step = 0  # 0: صلاة على النبي, 1: ذكر, 2: ماي
-
+    step = 0
     while True:
-      await asyncio.sleep(1800)  # الانتظار 30 دقيقة
-
+      await asyncio.sleep(1800)
       if step == 0:
         message_text = "اللهم صلِّ وسلم على نبينا محمد"
       elif step == 1:
@@ -147,11 +134,9 @@ class Bot(commands.Bot):
       step = (step + 1) % 3
 
   async def event_message(self, message):
-    # تجاهل الرسائل المرسلة من حساب البوت نفسه أو حسابك الشخصي
     if message.echo or message.author.name.lower() == "majek113":
       return
 
-    # تطبيق Cooldown لمدة 5 ثوانٍ على القناة لتفادي السبيام
     channel_name = message.channel.name
     current_time = time.time()
     if (
@@ -160,15 +145,12 @@ class Bot(commands.Bot):
     ):
       return
 
-    # التحقق مما إذا كانت القناة الحالية اونلاين
     is_live = await self.is_channel_live(channel_name)
     if not is_live:
       return
 
     content = message.content.strip().lower()
     author_mention = f"@{message.author.name}"
-
-    # تنظيف النص وتقسيمه إلى كلمات منفصلة
     clean_content = re.sub(r"[^\w\s]", "", content)
     words = clean_content.split()
 
@@ -176,38 +158,27 @@ class Bot(commands.Bot):
       return
 
     has_evening = "مساء الخير" in content
-
     has_full_greeting = "السلام عليكم" in content or "سلام عليكم" in content
     has_single_greeting = words[0] in ["السلام", "سلام"]
-
     has_greeting = has_full_greeting or has_single_greeting
 
     replied = False
 
-    # 1. إذا جمع المتابع بين السلام ومساء الخير في نفس الرسالة
     if has_greeting and has_evening:
       await message.channel.send(
           f"{author_mention} وعليكم السلام ورحمة الله وبركاته، ومساء النور"
           " نورت البث"
       )
       replied = True
-
-    # 2. الرد على "مساء الخير" فقط
     elif has_evening:
       await message.channel.send(f"{author_mention} مساء النور")
       replied = True
-
-    # 3. الرد على "باك" ككلمة منفصلة في البداية فقط
     elif words[0] == "باك":
       await message.channel.send(f"{author_mention} ولكم باك")
       replied = True
-
-    # 4. الرد على "برب" أو "brb" ككلمة منفصلة في البداية فقط
     elif words[0] in ["برب", "brb"]:
       await message.channel.send(f"{author_mention} خذ راحتك بس لا تطول علينا")
       replied = True
-
-    # 5. الرد على السلام المنفصل فقط
     elif has_greeting:
       await message.channel.send(
           f"{author_mention} وعليكم السلام ورحمة الله وبركاته، نورت البث"
