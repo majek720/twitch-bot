@@ -11,8 +11,8 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 
 ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
 
-# القنوات المعنية
-CHANNELS = ["majek113", "teamiik", "iz0yi", "sh_2i"]
+# القنوات المعنية (تمت إضافة vul1_)
+CHANNELS = ["majek113", "teamiik", "iz0yi", "sh_2i", "vul1_"]
 
 # قائمة الأذكار (بدون إيموجيات)
 DHIKR_LIST = [
