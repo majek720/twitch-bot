@@ -12,7 +12,7 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 
 ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
 
-# القنوات المطلوب التواجد بها كـ Viewer
+# القنوات المتابعة
 CHANNELS = ["majek113", "teamiik", "iz0yi", "sh_2i", "vul1_"]
 
 DHIKR_LIST = [
@@ -24,10 +24,10 @@ DHIKR_LIST = [
     "اللهم أعنا على ذكرك وشكرك وحسن عبادتك",
 ]
 
+# قاموس لتتبع وقت آخر رد بشكل مستقل لكل قناة
 last_reply_time = {}
 
 
-# سيرفر الويب المصغر لإبقاء Render مستيقظاً عبر UptimeRobot
 async def handle_ping(request):
   return web.Response(text="Bot is alive!")
 
@@ -53,18 +53,17 @@ class Bot(commands.Bot):
     print(f"تم الاتصال بنجاح! ({self.nick}) يعمل كـ Bot و Viewer خفيف.")
     asyncio.create_task(start_web_server())
     asyncio.create_task(self.periodic_reminders())
-    # تشغيل حلقة فحص واستهلاك البث لزيادة المشاهدات
     asyncio.create_task(self.watch_streams_loop())
 
   async def is_channel_live(self, channel_name):
     try:
       streams = await self.fetch_streams(user_logins=[channel_name])
       return len(streams) > 0
-    except Exception as e:
+    except Exception:
       return False
 
   async def watch_stream_worker(self, channel_name):
-    """قراءة بيانات البث بأقل استهلاك ذاكرة ممكن لمنع إغلاق Render"""
+    """قراءة البث كمشاهد بدون استهلاك ذاكرة السيرفر"""
     print(f"بدء احتساب المشاهدة للقناة: {channel_name}")
     try:
       session = ClientSession()
@@ -74,7 +73,6 @@ class Bot(commands.Bot):
           print(f"توقف البث في قناة {channel_name}")
           break
 
-        # جلب رابط البث بأدنى جودة لتوفير الذاكرة والشبكة
         try:
           streams = await asyncio.to_thread(
               streamlink.streams, f"https://www.twitch.tv/{channel_name}"
@@ -83,7 +81,6 @@ class Bot(commands.Bot):
             stream_url = streams.get("audio_only", streams.get("worst")).url
             async with session.get(stream_url) as resp:
               if resp.status == 200:
-                # قراءة البيانات وتجاهلها فوراً من الذاكرة
                 async for chunk in resp.content.iter_chunked(1024 * 64):
                   pass
         except Exception:
@@ -98,7 +95,6 @@ class Bot(commands.Bot):
         del self.active_viewers[channel_name]
 
   async def watch_streams_loop(self):
-    """مراقبة القنوات وتفعيل احتساب المشاهدة عند فتح البث"""
     while True:
       for ch in CHANNELS:
         is_live = await self.is_channel_live(ch)
@@ -134,11 +130,14 @@ class Bot(commands.Bot):
       step = (step + 1) % 3
 
   async def event_message(self, message):
+    # تجاهل رسائل البوت ونفس صاحب الحساب
     if message.echo or message.author.name.lower() == "majek113":
       return
 
     channel_name = message.channel.name
     current_time = time.time()
+
+    # الـ Cooldown منفصل ومستقل تماماً لكل قناة عبر channel_name
     if (
         channel_name in last_reply_time
         and current_time - last_reply_time[channel_name] < 5
@@ -186,6 +185,7 @@ class Bot(commands.Bot):
       replied = True
 
     if replied:
+      # تسجيل زمن الرد فقط للقناة الحالية دون التأثير على القنوات الأخرى
       last_reply_time[channel_name] = current_time
       await self.handle_commands(message)
 
