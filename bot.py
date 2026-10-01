@@ -3,8 +3,7 @@ import os
 import random
 import re
 import time
-from aiohttp import ClientSession, web
-import streamlink
+from aiohttp import web
 from twitchio.ext import commands
 
 # تثبيت الـ Event Loop لبيئة Render
@@ -28,6 +27,7 @@ DHIKR_LIST = [
 last_reply_time = {}
 
 
+# سيرفر الويب المصغر لإبقاء Render مستيقظاً عبر UptimeRobot
 async def handle_ping(request):
   return web.Response(text="Bot is alive!")
 
@@ -47,61 +47,19 @@ class Bot(commands.Bot):
   def __init__(self):
     super().__init__(token=ACCESS_TOKEN, prefix="", initial_channels=CHANNELS)
     self.last_dhikr = None
-    self.active_viewers = {}
 
   async def event_ready(self):
-    print(f"تم الاتصال بنجاح! ({self.nick}) يعمل كـ Bot و Viewer خفيف.")
+    print(f"تم الاتصال بنجاح! ({self.nick}) يعمل كـ Bot للردود والتذكيرات.")
     asyncio.create_task(start_web_server())
     asyncio.create_task(self.periodic_reminders())
-    asyncio.create_task(self.watch_streams_loop())
 
   async def is_channel_live(self, channel_name):
+    """فحص ما إذا كانت القناة تبث حالياً"""
     try:
       streams = await self.fetch_streams(user_logins=[channel_name])
       return len(streams) > 0
     except Exception:
       return False
-
-  async def watch_stream_worker(self, channel_name):
-    """قراءة البث كمشاهد بدون استهلاك ذاكرة السيرفر"""
-    print(f"بدء احتساب المشاهدة للقناة: {channel_name}")
-    try:
-      session = ClientSession()
-      while True:
-        is_live = await self.is_channel_live(channel_name)
-        if not is_live:
-          print(f"توقف البث في قناة {channel_name}")
-          break
-
-        try:
-          streams = await asyncio.to_thread(
-              streamlink.streams, f"https://www.twitch.tv/{channel_name}"
-          )
-          if "worst" in streams or "audio_only" in streams:
-            stream_url = streams.get("audio_only", streams.get("worst")).url
-            async with session.get(stream_url) as resp:
-              if resp.status == 200:
-                async for chunk in resp.content.iter_chunked(1024 * 64):
-                  pass
-        except Exception:
-          pass
-
-        await asyncio.sleep(5)
-    except Exception as e:
-      print(f"خطأ في جلسة مشاهدة {channel_name}: {e}")
-    finally:
-      await session.close()
-      if channel_name in self.active_viewers:
-        del self.active_viewers[channel_name]
-
-  async def watch_streams_loop(self):
-    while True:
-      for ch in CHANNELS:
-        is_live = await self.is_channel_live(ch)
-        if is_live and ch not in self.active_viewers:
-          task = asyncio.create_task(self.watch_stream_worker(ch))
-          self.active_viewers[ch] = task
-      await asyncio.sleep(60)
 
   def get_random_dhikr(self):
     available = [d for d in DHIKR_LIST if d != self.last_dhikr]
@@ -110,6 +68,7 @@ class Bot(commands.Bot):
     return selected
 
   async def periodic_reminders(self):
+    """مهمة تذكير دائرية كل 30 دقيقة: صلاة على النبي -> ذكر -> ماي"""
     step = 0
     while True:
       await asyncio.sleep(1800)
@@ -130,14 +89,13 @@ class Bot(commands.Bot):
       step = (step + 1) % 3
 
   async def event_message(self, message):
-    # تجاهل رسائل البوت ونفس صاحب الحساب
     if message.echo or message.author.name.lower() == "majek113":
       return
 
     channel_name = message.channel.name
     current_time = time.time()
 
-    # الـ Cooldown منفصل ومستقل تماماً لكل قناة عبر channel_name
+    # الـ Cooldown منفصل ومستقل تماماً لكل قناة
     if (
         channel_name in last_reply_time
         and current_time - last_reply_time[channel_name] < 5
@@ -175,7 +133,7 @@ class Bot(commands.Bot):
     elif words[0] == "باك":
       await message.channel.send(f"{author_mention} ولكم باك")
       replied = True
-    elif words[0] in ["برب", "brb"]:
+    elif words[0] in ["brb", "برب"]:
       await message.channel.send(f"{author_mention} خذ راحتك بس لا تطول علينا")
       replied = True
     elif has_greeting:
@@ -185,7 +143,6 @@ class Bot(commands.Bot):
       replied = True
 
     if replied:
-      # تسجيل زمن الرد فقط للقناة الحالية دون التأثير على القنوات الأخرى
       last_reply_time[channel_name] = current_time
       await self.handle_commands(message)
 
