@@ -3,8 +3,7 @@ import os
 import random
 import re
 import time
-from aiohttp import ClientSession, web
-import streamlink
+from aiohttp import web
 from twitchio.ext import commands
 
 # تثبيت الـ Event Loop لبيئة Render
@@ -47,13 +46,11 @@ class Bot(commands.Bot):
   def __init__(self):
     super().__init__(token=ACCESS_TOKEN, prefix="", initial_channels=CHANNELS)
     self.last_dhikr = None
-    self.active_viewers = {}
 
   async def event_ready(self):
-    print(f"تم الاتصال بنجاح! ({self.nick}) يعمل كـ Bot و Viewer خفيف.")
+    print(f"تم الاتصال بنجاح! ({self.nick}) يعمل كـ Bot للردود والتذكيرات.")
     asyncio.create_task(start_web_server())
     asyncio.create_task(self.periodic_reminders())
-    asyncio.create_task(self.watch_streams_loop())
 
   async def is_channel_live(self, channel_name):
     try:
@@ -61,43 +58,6 @@ class Bot(commands.Bot):
       return len(streams) > 0
     except Exception:
       return False
-
-  async def watch_stream_worker(self, channel_name):
-    print(f"بدء احتساب المشاهدة للقناة: {channel_name}")
-    try:
-      session = ClientSession()
-      while True:
-        is_live = await self.is_channel_live(channel_name)
-        if not is_live:
-          break
-        try:
-          streams = await asyncio.to_thread(
-              streamlink.streams, f"https://www.twitch.tv/{channel_name}"
-          )
-          if "worst" in streams or "audio_only" in streams:
-            stream_url = streams.get("audio_only", streams.get("worst")).url
-            async with session.get(stream_url) as resp:
-              if resp.status == 200:
-                async for chunk in resp.content.iter_chunked(1024 * 64):
-                  pass
-        except Exception:
-          pass
-        await asyncio.sleep(5)
-    except Exception:
-      pass
-    finally:
-      await session.close()
-      if channel_name in self.active_viewers:
-        del self.active_viewers[channel_name]
-
-  async def watch_streams_loop(self):
-    while True:
-      for ch in CHANNELS:
-        is_live = await self.is_channel_live(ch)
-        if is_live and ch not in self.active_viewers:
-          task = asyncio.create_task(self.watch_stream_worker(ch))
-          self.active_viewers[ch] = task
-      await asyncio.sleep(60)
 
   def get_random_dhikr(self):
     available = [d for d in DHIKR_LIST if d != self.last_dhikr]
@@ -132,7 +92,6 @@ class Bot(commands.Bot):
     channel_name = message.channel.name
     current_time = time.time()
 
-    # الـ Cooldown منفصل ومستقل تماماً لكل قناة
     if (
         channel_name in last_reply_time
         and current_time - last_reply_time[channel_name] < 5
@@ -156,7 +115,6 @@ class Bot(commands.Bot):
     has_single_greeting = words[0] in ["السلام", "سلام"]
     has_greeting = has_full_greeting or has_single_greeting
 
-    # التحقق من منشن البوت أو اسم حسابه
     bot_name = self.nick.lower() if self.nick else ""
     is_mentioned = (
         f"@{bot_name}" in content
@@ -164,49 +122,33 @@ class Bot(commands.Bot):
         or any(w == bot_name for w in words)
     )
 
-    # التحقق من كلمات ماجيك / مجك
     has_magic = any(w in ["ماجيك", "مجك", "ماجك"] for w in words)
 
     replied = False
 
-    # 1. الرد عند المنشن
     if is_mentioned:
       await message.channel.send(
           f"{author_mention} لا تمنشن يا بشر قاعد اذاكر"
       )
       replied = True
-
-    # 2. الرد عند ذكر ماجيك / مجك / ماجك
     elif has_magic:
-      await message.channel.send(
-          f"{author_mention} عيون ماجيك، امرني؟"
-      )
+      await message.channel.send(f"{author_mention} عيون ماجيك، امرني؟")
       replied = True
-
-    # 3. إذا جمع المتابع بين السلام ومساء الخير
     elif has_greeting and has_evening:
       await message.channel.send(
           f"{author_mention} وعليكم السلام ورحمة الله وبركاته، ومساء النور"
           " نورت البث"
       )
       replied = True
-
-    # 4. الرد على "مساء الخير"
     elif has_evening:
       await message.channel.send(f"{author_mention} مساء النور")
       replied = True
-
-    # 5. الرد على "باك"
     elif words[0] == "باك":
       await message.channel.send(f"{author_mention} ولكم باك")
       replied = True
-
-    # 6. الرد على "برب" أو "brb"
     elif words[0] in ["brb", "برب"]:
       await message.channel.send(f"{author_mention} خذ راحتك بس لا تطول علينا")
       replied = True
-
-    # 7. الرد على السلام المنفصل
     elif has_greeting:
       await message.channel.send(
           f"{author_mention} وعليكم السلام ورحمة الله وبركاته، نورت البث"
