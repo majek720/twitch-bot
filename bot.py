@@ -115,40 +115,32 @@ class Bot(commands.Bot):
     has_single_greeting = words[0] in ["السلام", "سلام"]
     has_greeting = has_full_greeting or has_single_greeting
 
-    bot_name = self.nick.lower() if self.nick else ""
-    is_mentioned = (
-        f"@{bot_name}" in content
-        or bot_name in words
-        or any(w == bot_name for w in words)
-    )
-
-    has_magic = any(w in ["ماجيك", "مجك", "ماجك"] for w in words)
-
     replied = False
 
-    if is_mentioned:
-      await message.channel.send(
-          f"{author_mention} لا تمنشن يا بشر قاعد اذاكر"
-      )
-      replied = True
-    elif has_magic:
-      await message.channel.send(f"{author_mention} عيون ماجيك، امرني؟")
-      replied = True
-    elif has_greeting and has_evening:
+    # 1. إذا جمع المتابع بين السلام ومساء الخير
+    if has_greeting and has_evening:
       await message.channel.send(
           f"{author_mention} وعليكم السلام ورحمة الله وبركاته، ومساء النور"
           " نورت البث"
       )
       replied = True
+
+    # 2. الرد على "مساء الخير"
     elif has_evening:
       await message.channel.send(f"{author_mention} مساء النور")
       replied = True
+
+    # 3. الرد على "باك"
     elif words[0] == "باك":
       await message.channel.send(f"{author_mention} ولكم باك")
       replied = True
+
+    # 4. الرد على "برب" أو "brb"
     elif words[0] in ["brb", "برب"]:
       await message.channel.send(f"{author_mention} خذ راحتك بس لا تطول علينا")
       replied = True
+
+    # 5. الرد على السلام المنفصل
     elif has_greeting:
       await message.channel.send(
           f"{author_mention} وعليكم السلام ورحمة الله وبركاته، نورت البث"
