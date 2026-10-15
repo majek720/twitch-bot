@@ -27,15 +27,18 @@ DHIKR_LIST = [
     "حسبي الله لا إله إلا هو عليه توكلت وهو رب العرش العظيم",
 ]
 
-# قائمة أدعية مخصصة للمملكة العربية السعودية
+# قائمة أدعية مخصصة للمملكة العربية السعودية (موسعة)
 SAUDI_PRAYERS = [
     "اللهم احفظ المملكة العربية السعودية وبارك في أمنها ورخائها وولاة أمرها وشعبها",
     "اللهم أدِم على السعودية أمنها وأمانها واحفظها من كل شر وسوء",
     "اللهم اجعل هذا البلد آمناً مطمئناً وسائر بلاد المسلمين واحفظ وطننا السعودية",
+    "اللهم احفظ خادم الحرمين الشريفين وولي عهده الأمين وبارك في جهودهما لخدمة الوطن",
+    "اللهم إنا استودعناك السعودية أمنها وأرضها وسمائها وسلامة أهلها",
+    "اللهم انصر قواتنا المرابطة واحفظ حدودنا وجد ليالينا بالأمن والأمان يا رب العالمين",
 ]
 
-# قاموس لتتبع وقت آخر رد بشكل مستقل لكل قناة
-last_reply_time = {}
+# قاموس لتتبع وقت آخر رد لكل مستخدم بشكل مستقل (Cooldown 15 ثانية لكل يوزر)
+user_reply_time = {}
 
 
 async def handle_ping(request):
@@ -109,15 +112,14 @@ class Bot(commands.Bot):
     if message.echo or message.author.name.lower() == "majek113":
       return
 
-    channel_name = message.channel.name
+    username = message.author.name.lower()
     current_time = time.time()
 
-    if (
-        channel_name in last_reply_time
-        and current_time - last_reply_time[channel_name] < 5
-    ):
+    # فحص الكول داون لكل يوزر (15 ثانية)
+    if username in user_reply_time and current_time - user_reply_time[username] < 15:
       return
 
+    channel_name = message.channel.name
     is_live = await self.is_channel_live(channel_name)
     if not is_live:
       return
@@ -146,9 +148,6 @@ class Bot(commands.Bot):
     ) or any(
         w.startswith("هلا") or w.startswith("مرحب") for w in norm_words
     )
-    has_praise = any(
-        w in ["اسطور", "سطور", "كفو", "لقط", "شوت"] for w in norm_words
-    ) or any(w.startswith("كفو") for w in norm_words)
     has_light = any(w in ["منور", "منور"] for w in norm_words) or "منور" in normalized_content
     has_back = norm_words[0] in ["باك", "bak", "back"] if norm_words else False
     has_brb = norm_words[0] in ["برب", "brb"] if norm_words else False
@@ -169,9 +168,6 @@ class Bot(commands.Bot):
     elif has_welcome:
       await message.channel.send(f"{author_mention} ارحب هلا والله")
       replied = True
-    elif has_praise:
-      await message.channel.send(f"{author_mention} كفوك الطيب")
-      replied = True
     elif has_light:
       await message.channel.send(f"{author_mention} النور نورك يا بعدي")
       replied = True
@@ -183,7 +179,7 @@ class Bot(commands.Bot):
       replied = True
 
     if replied:
-      last_reply_time[channel_name] = current_time
+      user_reply_time[username] = current_time
       await self.handle_commands(message)
 
 
