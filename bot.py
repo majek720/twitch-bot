@@ -14,6 +14,7 @@ ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
 # القنوات المتابعة
 CHANNELS = ["majek113", "teamiik", "iz0yi", "sh_2i", "vul1_"]
 
+# أذكار مأثورة وصحيحة من الأحاديث النبوية
 DHIKR_LIST = [
     "سبحان الله وبحمده، سبحان الله العظيم",
     "لا إله إلا أنت سبحانك إني كنت من الظالمين",
@@ -21,6 +22,16 @@ DHIKR_LIST = [
     "أستغفر الله العظيم وأتوب إليه",
     "سبحان الله، والحمد لله، ولا إله إلا الله، والله أكبر",
     "اللهم أعنا على ذكرك وشكرك وحسن عبادتك",
+    "اللهم أنت ربي لا إله إلا أنت، خلقتني وأنا عبدك، وأنا على عهدك ووعدك ما استطعت",
+    "رضيت بالله رباً، وبالإسلام ديناً، وبمحمد صلى الله عليه وسلم نبياً ورسولاً",
+    "حسبي الله لا إله إلا هو عليه توكلت وهو رب العرش العظيم",
+]
+
+# قائمة أدعية مخصصة للمملكة العربية السعودية
+SAUDI_PRAYERS = [
+    "اللهم احفظ المملكة العربية السعودية وبارك في أمنها ورخائها وولاة أمرها وشعبها",
+    "اللهم أدِم على السعودية أمنها وأمانها واحفظها من كل شر وسوء",
+    "اللهم اجعل هذا البلد آمناً مطمئناً وسائر بلاد المسلمين واحفظ وطننا السعودية",
 ]
 
 # قاموس لتتبع وقت آخر رد بشكل مستقل لكل قناة
@@ -46,6 +57,7 @@ class Bot(commands.Bot):
   def __init__(self):
     super().__init__(token=ACCESS_TOKEN, prefix="", initial_channels=CHANNELS)
     self.last_dhikr = None
+    self.last_saudi_prayer = None
 
   async def event_ready(self):
     print(f"تم الاتصال بنجاح! ({self.nick}) يعمل كـ Bot للردود والتذكيرات.")
@@ -65,16 +77,24 @@ class Bot(commands.Bot):
     self.last_dhikr = selected
     return selected
 
+  def get_random_saudi_prayer(self):
+    available = [p for p in SAUDI_PRAYERS if p != self.last_saudi_prayer]
+    selected = random.choice(available)
+    self.last_saudi_prayer = selected
+    return selected
+
   async def periodic_reminders(self):
     step = 0
     while True:
       await asyncio.sleep(1800)
       if step == 0:
-        message_text = "اللهم صلِّ وسلم على نبينا محمد"
+        message_text = (
+            f"صلوا على النبي واذكروا الله، {self.get_random_saudi_prayer()}"
+        )
       elif step == 1:
         message_text = self.get_random_dhikr()
       else:
-        message_text = "اشربوا ماااااااي"
+        message_text = "اشربوا مويا لا تنشفون"
 
       for channel_name in CHANNELS:
         is_live = await self.is_channel_live(channel_name)
@@ -110,41 +130,57 @@ class Bot(commands.Bot):
     if not words:
       return
 
-    has_evening = "مساء الخير" in content
-    has_full_greeting = "السلام عليكم" in content or "سلام عليكم" in content
-    has_single_greeting = words[0] in ["السلام", "سلام"]
-    has_greeting = has_full_greeting or has_single_greeting
+    # فحص الكلمات المفتاحية
+    has_greeting = words[0] in [
+        "السلام",
+        "سلام",
+        "السلام عليكم",
+        "سلام عليكم",
+    ] or "السلام عليكم" in content
+    has_evening = "مساء" in content
+    has_morning = "صباح" in content
+    has_welcome = any(
+        w in ["مرحبا", "هلا", "أهلاً", "اهلا", "اررحب", "ارحب", "حي"]
+        for w in words
+    )
+    has_praise = any(
+        w in ["اسطورة", "سطورة", "كفو", "لقطة", "شوت"] for w in words
+    )
+    has_light = any(w in ["منور", "منورة"] for w in words)
+    has_laugh = any("هه" in w or "خخ" in w for w in words) or "ضحك" in content
+    has_back = words[0] in ["باك", "back"]
+    has_brb = words[0] in ["brb", "برب"]
 
     replied = False
 
-    # 1. إذا جمع المتابع بين السلام ومساء الخير
-    if has_greeting and has_evening:
-      await message.channel.send(
-          f"{author_mention} وعليكم السلام ورحمة الله وبركاته، ومساء النور"
-          " نورت البث"
-      )
-      replied = True
-
-    # 2. الرد على "مساء الخير"
-    elif has_evening:
-      await message.channel.send(f"{author_mention} مساء النور")
-      replied = True
-
-    # 3. الرد على "باك"
-    elif words[0] == "باك":
-      await message.channel.send(f"{author_mention} ولكم باك")
-      replied = True
-
-    # 4. الرد على "برب" أو "brb"
-    elif words[0] in ["brb", "برب"]:
-      await message.channel.send(f"{author_mention} خذ راحتك بس لا تطول علينا")
-      replied = True
-
-    # 5. الرد على السلام المنفصل
-    elif has_greeting:
+    if has_greeting:
       await message.channel.send(
           f"{author_mention} وعليكم السلام ورحمة الله وبركاته، نورت البث"
       )
+      replied = True
+    elif has_evening:
+      await message.channel.send(f"{author_mention} مساء النور والسرور")
+      replied = True
+    elif has_morning:
+      await message.channel.send(f"{author_mention} صباح النور")
+      replied = True
+    elif has_welcome:
+      await message.channel.send(f"{author_mention} ارحب هلا والله")
+      replied = True
+    elif has_praise:
+      await message.channel.send(f"{author_mention} كفوك الطيب")
+      replied = True
+    elif has_light:
+      await message.channel.send(f"{author_mention} النور نورك يا بعدي")
+      replied = True
+    elif has_laugh:
+      await message.channel.send(f"{author_mention} دوم هالضحكة")
+      replied = True
+    elif has_back:
+      await message.channel.send(f"{author_mention} ولكم باك")
+      replied = True
+    elif has_brb:
+      await message.channel.send(f"{author_mention} خذ راحتك")
       replied = True
 
     if replied:
