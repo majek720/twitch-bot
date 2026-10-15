@@ -27,7 +27,7 @@ DHIKR_LIST = [
     "حسبي الله لا إله إلا هو عليه توكلت وهو رب العرش العظيم",
 ]
 
-# قائمة أدعية مخصصة للمملكة العربية السعودية (موسعة)
+# قائمة أدعية مخصصة للمملكة العربية السعودية
 SAUDI_PRAYERS = [
     "اللهم احفظ المملكة العربية السعودية وبارك في أمنها ورخائها وولاة أمرها وشعبها",
     "اللهم أدِم على السعودية أمنها وأمانها واحفظها من كل شر وسوء",
@@ -136,11 +136,15 @@ class Bot(commands.Bot):
     if not words:
       return
 
-    has_greeting = (
-        "سلام" in normalized_content
-        or "السلام" in normalized_content
-        or "السلام عليكم" in content
-    )
+    # تجاهل تماماً إذا كانت الرسالة تحتوي على "وعليكم"
+    has_already_replied_greeting = "وعليكم" in normalized_content or "وعليكم" in clean_content
+
+    # فحص أن الرسالة هي إلقاء سلام (وليس رد سلام)
+    has_greeting = False
+    if not has_already_replied_greeting:
+      if norm_words[0] in ["سلام", "السلام"] or "السلام عليكم" in content or "سلام عليكم" in content:
+        has_greeting = True
+
     has_evening = "مساء" in normalized_content
     has_morning = "صباح" in normalized_content
     has_welcome = any(
@@ -148,7 +152,7 @@ class Bot(commands.Bot):
     ) or any(
         w.startswith("هلا") or w.startswith("مرحب") for w in norm_words
     )
-    has_light = any(w in ["منور", "منور"] for w in norm_words) or "منور" in normalized_content
+    has_light = any(w in ["منور", "منورة"] for w in norm_words) or "منور" in normalized_content
     has_back = norm_words[0] in ["باك", "bak", "back"] if norm_words else False
     has_brb = norm_words[0] in ["برب", "brb"] if norm_words else False
 
