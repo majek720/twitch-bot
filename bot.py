@@ -147,12 +147,6 @@ class Bot(commands.Bot):
 
     has_evening = "مساء" in normalized_content
     has_morning = "صباح" in normalized_content
-    has_welcome = any(
-        w in ["مرحبا", "هلا", "اهل", "ارحب", "حي"] for w in norm_words
-    ) or any(
-        w.startswith("هلا") or w.startswith("مرحب") for w in norm_words
-    )
-    has_light = any(w in ["منور", "منورة"] for w in norm_words) or "منور" in normalized_content
     has_back = norm_words[0] in ["باك", "bak", "back"] if norm_words else False
     has_brb = norm_words[0] in ["برب", "brb"] if norm_words else False
 
@@ -168,12 +162,6 @@ class Bot(commands.Bot):
       replied = True
     elif has_morning:
       await message.channel.send(f"{author_mention} صباح النور")
-      replied = True
-    elif has_welcome:
-      await message.channel.send(f"{author_mention} ارحب هلا والله")
-      replied = True
-    elif has_light:
-      await message.channel.send(f"{author_mention} النور نورك يا بعدي")
       replied = True
     elif has_back:
       await message.channel.send(f"{author_mention} ولكم باك")
