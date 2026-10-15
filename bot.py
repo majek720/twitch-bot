@@ -124,32 +124,39 @@ class Bot(commands.Bot):
 
     content = message.content.strip().lower()
     author_mention = f"@{message.author.name}"
+    
+    # تنظيف النص من الرموز والتشكيل
     clean_content = re.sub(r"[^\w\s]", "", content)
+    
+    # إزالة تكرار الحروف المفرط (مثل: هلاااااا تجعلها هلا، كفوووو تجعلها كفو)
+    normalized_content = re.sub(r'(.)\1+', r'\1', clean_content)
+    
     words = clean_content.split()
+    norm_words = normalized_content.split()
 
     if not words:
       return
 
-    # فحص الكلمات المفتاحية
-    has_greeting = words[0] in [
-        "السلام",
-        "سلام",
-        "السلام عليكم",
-        "سلام عليكم",
-    ] or "السلام عليكم" in content
-    has_evening = "مساء" in content
-    has_morning = "صباح" in content
+    # فحص الكلمات مع دعم الحروف المكررة
+    has_greeting = (
+        "سلام" in normalized_content
+        or "السلام" in normalized_content
+        or "السلام عليكم" in content
+    )
+    has_evening = "مساء" in normalized_content
+    has_morning = "صباح" in normalized_content
     has_welcome = any(
-        w in ["مرحبا", "هلا", "أهلاً", "اهلا", "اررحب", "ارحب", "حي"]
-        for w in words
+        w in ["مرحبا", "هلا", "اهل", "ارحب", "حي"] for w in norm_words
+    ) or any(
+        w.startswith("هلا") or w.startswith("مرحب") for w in norm_words
     )
     has_praise = any(
-        w in ["اسطورة", "سطورة", "كفو", "لقطة", "شوت"] for w in words
-    )
-    has_light = any(w in ["منور", "منورة"] for w in words)
-    has_laugh = any("هه" in w or "خخ" in w for w in words) or "ضحك" in content
-    has_back = words[0] in ["باك", "back"]
-    has_brb = words[0] in ["brb", "برب"]
+        w in ["اسطور", "سطور", "كفو", "لقط", "شوت"] for w in norm_words
+    ) or any(w.startswith("كفو") for w in norm_words)
+    has_light = any(w in ["منور", "منور"] for w in norm_words) or "منور" in normalized_content
+    has_laugh = any("ه" in w or "خ" in w for w in norm_words) and ("هه" in content or "خخ" in content or "ضحك" in content)
+    has_back = norm_words[0] in ["باك", "bak", "back"] if norm_words else False
+    has_brb = norm_words[0] in ["برب", "brb"] if norm_words else False
 
     replied = False
 
