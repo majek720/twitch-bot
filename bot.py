@@ -11,8 +11,8 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 
 ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
 
-# القنوات المتابعة (تمت إضافة 0rray)
-CHANNELS = ["majek113", "teamiik", "iz0yi", "vul1_", "0rray"]
+# القنوات المتابعة (تمت إزالة 0rray)
+CHANNELS = ["majek113", "teamiik", "iz0yi", "vul1_"]
 
 DHIKR_LIST = [
     "سبحان الله وبحمده، سبحان الله العظيم",
