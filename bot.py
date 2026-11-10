@@ -11,7 +11,7 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 
 ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
 
-# القنوات المتابعة (تمت إزالة 0rray)
+# القنوات المتابعة
 CHANNELS = ["majek113", "teamiik", "iz0yi", "vul1_"]
 
 DHIKR_LIST = [
@@ -104,6 +104,10 @@ class Bot(commands.Bot):
 
   async def event_message(self, message):
     if message.echo or message.author.name.lower() == "majek113":
+      return
+
+    # تجاهل اليوزر المذكور تماماً
+    if message.author.name.lower() == "1s3don":
       return
 
     channel_name = message.channel.name
