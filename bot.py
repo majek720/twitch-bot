@@ -106,7 +106,7 @@ class Bot(commands.Bot):
     if message.echo or message.author.name.lower() == "majek113":
       return
 
-    # تجاهل اليوزر المذكور تماماً
+    # تجاهل اليوزر المذكور تماماً (بغض النظر عن حالة الحروف الكبيرة والصغيرة)
     if message.author.name.lower() == "1s3don":
       return
 
