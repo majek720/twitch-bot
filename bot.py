@@ -11,8 +11,8 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 
 ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
 
-# القنوات المتابعة (تمت إزالة 0rray)
-CHANNELS = ["majek113", "teamiik", "iz0yi", "vul1_"]
+# القنوات المتابعة (تمت إضافة lyorll)
+CHANNELS = ["majek113", "teamiik", "iz0yi", "vul1_", "lyorll"]
 
 DHIKR_LIST = [
     "سبحان الله وبحمده، سبحان الله العظيم",
@@ -33,8 +33,8 @@ SAUDI_PRAYERS = [
     "اللهم انصر قواتنا المرابطة واحفظ حدودنا وجد ليالينا بالأمن والأمان يا رب العالمين",
 ]
 
-# قاموس لتتبع وقت آخر رد بشكل مستقل لكل قناة
-last_reply_time = {}
+# قاموس لتتبع وقت آخر رد لكل مستخدم بشكل مستقل (Cooldown 15 ثانية لكل يوزر)
+user_reply_time = {}
 
 
 async def handle_ping(request):
@@ -63,13 +63,6 @@ class Bot(commands.Bot):
     asyncio.create_task(start_web_server())
     asyncio.create_task(self.periodic_reminders())
 
-  async def is_channel_live(self, channel_name):
-    try:
-      streams = await self.fetch_streams(user_logins=[channel_name])
-      return len(streams) > 0
-    except Exception:
-      return False
-
   def get_random_dhikr(self):
     available = [d for d in DHIKR_LIST if d != self.last_dhikr]
     selected = random.choice(available)
@@ -94,11 +87,9 @@ class Bot(commands.Bot):
         message_text = "اشربوا ماااااااي"
 
       for channel_name in CHANNELS:
-        is_live = await self.is_channel_live(channel_name)
-        if is_live:
-          channel = self.get_channel(channel_name)
-          if channel:
-            await channel.send(message_text)
+        channel = self.get_channel(channel_name)
+        if channel:
+          await channel.send(message_text)
 
       step = (step + 1) % 3
 
@@ -106,17 +97,15 @@ class Bot(commands.Bot):
     if message.echo or message.author.name.lower() == "majek113":
       return
 
-    channel_name = message.channel.name
-    current_time = time.time()
-
-    if (
-        channel_name in last_reply_time
-        and current_time - last_reply_time[channel_name] < 5
-    ):
+    # تجاهل اليوزر 1s3don تماماً (بغض النظر عن حالة الحروف)
+    if message.author.name.lower() == "1s3don":
       return
 
-    is_live = await self.is_channel_live(channel_name)
-    if not is_live:
+    username = message.author.name.lower()
+    current_time = time.time()
+
+    # كول داون 15 ثانية لكل يوزر لحاله
+    if username in user_reply_time and current_time - user_reply_time[username] < 15:
       return
 
     content = message.content.strip().lower()
@@ -165,7 +154,7 @@ class Bot(commands.Bot):
       replied = True
 
     if replied:
-      last_reply_time[channel_name] = current_time
+      user_reply_time[username] = current_time
       await self.handle_commands(message)
 
 
