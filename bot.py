@@ -5,7 +5,9 @@ import json
 import os
 import random
 import re
+import secrets
 import time
+from urllib.parse import urlencode
 
 import aiohttp
 from aiohttp import web
@@ -20,16 +22,30 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 ACCESS_TOKEN = os.environ.get("TWITCH_TOKEN", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")  # اختياري: لحفظ البيانات بشكل دائم
 GIST_ID = os.environ.get("GIST_ID")  # اختياري: معرف الـ Gist
-DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")  # كلمة مرور لوحة التحكم
+DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")  # لوحة الأونر
+
+# موقع الستريمرز (تسجيل دخول بتويتش + تغيير اللعبة)
+CLIENT_ID = os.environ.get("TWITCH_CLIENT_ID", "")
+CLIENT_SECRET = os.environ.get("TWITCH_CLIENT_SECRET", "")
+SITE_URL = (os.environ.get("SITE_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").rstrip("/")
+SECRET = (os.environ.get("SESSION_SECRET") or CLIENT_SECRET or "").encode()
 
 OWNER = "majek113"
-IGNORED_USERS = set()  # يوزرات تتجاهل ردودهم التلقائية (فاضية حالياً)
+IGNORED_USERS = set()
 DEFAULT_CHANNELS = ["majek113", "teamiik", "iz0yi", "vul1_", "lyorll"]
 
 DATA_FILE = "bot_data.json"
-USER_COOLDOWN = 15  # ثواني بين ردود كل يوزر
-COMMAND_COOLDOWN = 5  # ثواني بين استخدام نفس الكوماند في نفس القناة
+USER_COOLDOWN = 15
+COMMAND_COOLDOWN = 5
 LIVE_CACHE_SECONDS = 60
+
+AUTH_URL = "https://id.twitch.tv/oauth2/authorize"
+TOKEN_URL = "https://id.twitch.tv/oauth2/token"
+HELIX = "https://api.twitch.tv/helix/"
+GAME_SCOPE = "channel:manage:broadcast"
+
+# مستويات الصلاحيات: كل مستوى يشمل اللي فوقه
+PERMS = {"everyone": 0, "sub": 1, "vip": 2, "mod": 3, "broadcaster": 4}
 
 # كوماندات البوت الأساسية (ما تنفع كأسماء لكوماندات مخصصة)
 BUILTIN = {
@@ -59,12 +75,106 @@ user_reply_time = {}
 
 
 # ============================================================
+# أدوات مساعدة
+# ============================================================
+def valid_channel(name):
+  return re.fullmatch(r"[a-z0-9_]{3,25}", name) is not None
+
+
+def norm_cmd(v):
+  """يحوّل الكوماند القديم (نص) للشكل الجديد."""
+  if isinstance(v, str):
+    return {"type": "text", "reply": v, "game": "", "perm": "everyone"}
+  v = dict(v)
+  v.setdefault("type", "text")
+  v.setdefault("reply", "")
+  v.setdefault("game", "")
+  if v.get("perm") not in PERMS:
+    v["perm"] = "everyone"
+  return v
+
+
+def build_command(b):
+  """يتحقق من بيانات كوماند جاية من الواجهة ويرجع (الاسم، الكوماند)."""
+  name = str(b.get("name", "")).strip().lstrip("!").lower()
+  if not name or len(name) > 30 or re.search(r"\s", name) or name in BUILTIN:
+    raise ValueError("اسم الكوماند ما ينفع")
+  perm = b.get("perm") if b.get("perm") in PERMS else "everyone"
+  reply = str(b.get("reply", "")).strip()[:450]
+  if b.get("type") == "game":
+    game = str(b.get("game", "")).strip()[:100]
+    if not game:
+      raise ValueError("اكتب اسم اللعبة")
+    return name, {
+        "type": "game", "game": game, "perm": perm,
+        "reply": reply or "تم تغيير اللعبة إلى $(game) 🎮",
+    }
+  if not reply:
+    raise ValueError("اكتب رد الكوماند")
+  return name, {"type": "text", "game": "", "perm": perm, "reply": reply}
+
+
+def user_level(author, is_owner):
+  if is_owner or author.is_broadcaster:
+    return 4
+  if author.is_mod:
+    return 3
+  badges = getattr(author, "badges", None) or {}
+  if getattr(author, "is_vip", False) or "vip" in badges:
+    return 2
+  if getattr(author, "is_subscriber", False) or "subscriber" in badges or "founder" in badges:
+    return 1
+  return 0
+
+
+def format_response(text, user, channel, target, game=""):
+  """المتغيرات المدعومة: $(user) $(touser) $(channel) $(game)"""
+  return (
+      text.replace("$(user)", user)
+      .replace("$(touser)", target or user)
+      .replace("$(channel)", channel)
+      .replace("$(game)", game)
+  )
+
+
+def sign(s):
+  return hmac.new(b"streamer:" + SECRET, s.encode(), hashlib.sha256).hexdigest()
+
+
+def make_session(login):
+  p = f"{login}.{int(time.time()) + 60 * 60 * 24 * 30}"
+  return f"{p}.{sign(p)}"
+
+
+def read_session(tok):
+  if not SECRET or not tok:
+    return None
+  parts = tok.split(".")
+  if len(parts) != 3:
+    return None
+  login, exp, sig = parts
+  if not hmac.compare_digest(sig.encode(), sign(f"{login}.{exp}").encode()):
+    return None
+  try:
+    if int(exp) < time.time():
+      return None
+  except ValueError:
+    return None
+  return login
+
+
+# ============================================================
 # التخزين: Gist (دائم) أو ملف محلي (يتصفر مع كل إعادة تشغيل في Render)
 # ============================================================
 class Store:
 
   def __init__(self):
-    self.data = {"channels": list(DEFAULT_CHANNELS), "commands": {}}
+    self.data = {
+        "channels": list(DEFAULT_CHANNELS),
+        "commands": {},
+        "editors": {},  # قناة -> قائمة مودات مصرّح لهم يعدلون الكوماندات
+        "tokens": {},  # قناة -> ربط تويتش لتغيير اللعبة
+    }
 
   @property
   def use_gist(self):
@@ -93,7 +203,12 @@ class Store:
         return
       if loaded.get("channels"):
         self.data["channels"] = loaded["channels"]
-      self.data["commands"] = loaded.get("commands", {})
+      cmds = loaded.get("commands", {})
+      self.data["commands"] = {
+          ch: {n: norm_cmd(v) for n, v in c.items()} for ch, c in cmds.items()
+      }
+      self.data["editors"] = loaded.get("editors", {})
+      self.data["tokens"] = loaded.get("tokens", {})
     except Exception as e:
       print(f"تعذر تحميل البيانات: {e}")
 
@@ -118,20 +233,144 @@ class Store:
 
 
 # ============================================================
-# لوحة التحكم (واجهة ويب) + خادم Keep-Alive
+# Twitch API (تغيير اللعبة + تسجيل دخول الستريمرز)
 # ============================================================
-DASHBOARD_HTML = r"""<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0e0e12">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<link rel="manifest" href="/manifest.json">
-<link rel="icon" href="/icon.svg">
-<title>لوحة تحكم البوت</title>
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
-<style>
+class TwitchAPI:
+
+  def __init__(self, store):
+    self.store = store
+    self.app_token = None
+    self.app_exp = 0
+    self.user_access = {}  # قناة -> (access_token, وقت الانتهاء)
+    self.user_ids = {}
+    self.lock = asyncio.Lock()
+
+  @property
+  def enabled(self):
+    return bool(CLIENT_ID and CLIENT_SECRET and SITE_URL)
+
+  async def form(self, url, data):
+    try:
+      async with aiohttp.ClientSession() as s:
+        async with s.post(url, data=data) as r:
+          try:
+            body = await r.json()
+          except Exception:
+            body = {}
+          return r.status, body
+    except Exception as e:
+      print(f"خطأ اتصال بتويتش: {e}")
+      return 0, {}
+
+  async def call(self, method, path, token, params=None, body=None):
+    if not token:
+      return 0, {}
+    headers = {"Client-Id": CLIENT_ID, "Authorization": f"Bearer {token}"}
+    try:
+      async with aiohttp.ClientSession() as s:
+        async with s.request(method, HELIX + path, headers=headers,
+                             params=params, json=body) as r:
+          text = await r.text()
+          try:
+            data = json.loads(text) if text else {}
+          except Exception:
+            data = {}
+          return r.status, data
+    except Exception as e:
+      print(f"خطأ Helix: {e}")
+      return 0, {}
+
+  async def get_app_token(self):
+    if self.app_token and time.time() < self.app_exp - 60:
+      return self.app_token
+    st, d = await self.form(TOKEN_URL, {
+        "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET,
+        "grant_type": "client_credentials",
+    })
+    if st != 200 or "access_token" not in d:
+      return None
+    self.app_token = d["access_token"]
+    self.app_exp = time.time() + d.get("expires_in", 3600)
+    return self.app_token
+
+  async def user_token(self, channel):
+    cached = self.user_access.get(channel)
+    if cached and time.time() < cached[1] - 60:
+      return cached[0]
+    info = self.store.data["tokens"].get(channel)
+    if not info:
+      return None
+    async with self.lock:
+      cached = self.user_access.get(channel)
+      if cached and time.time() < cached[1] - 60:
+        return cached[0]
+      st, d = await self.form(TOKEN_URL, {
+          "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET,
+          "grant_type": "refresh_token", "refresh_token": info["refresh"],
+      })
+      if st != 200 or "access_token" not in d:
+        return None
+      self.user_access[channel] = (d["access_token"], time.time() + d.get("expires_in", 3600))
+      if d.get("refresh_token") and d["refresh_token"] != info["refresh"]:
+        info["refresh"] = d["refresh_token"]
+        await self.store.save()
+      return d["access_token"]
+
+  async def user_id(self, login):
+    if login in self.user_ids:
+      return self.user_ids[login]
+    st, d = await self.call("GET", "users", await self.get_app_token(), params={"login": login})
+    if st == 200 and d.get("data"):
+      self.user_ids[login] = d["data"][0]["id"]
+      return self.user_ids[login]
+    return None
+
+  async def current_game(self, login):
+    uid = await self.user_id(login)
+    if not uid:
+      return None
+    st, d = await self.call("GET", "channels", await self.get_app_token(),
+                            params={"broadcaster_id": uid})
+    if st == 200 and d.get("data"):
+      return d["data"][0].get("game_name") or None
+    return None
+
+  async def find_game(self, name):
+    st, d = await self.call("GET", "search/categories", await self.get_app_token(),
+                            params={"query": name, "first": 10})
+    items = d.get("data", []) if st == 200 else []
+    if not items:
+      return None
+    for g in items:
+      if g["name"].lower() == name.lower():
+        return g
+    return items[0]
+
+  async def set_game(self, channel, game_name):
+    """يرجع (نجح؟، اسم اللعبة أو رسالة الخطأ)."""
+    if not self.enabled:
+      return False, "تغيير اللعبة غير مفعّل"
+    info = self.store.data["tokens"].get(channel)
+    if not info:
+      return False, "الستريمر ما ربط تويتش من موقع الستريمر"
+    token = await self.user_token(channel)
+    if not token:
+      return False, "انتهى الربط مع تويتش، الستريمر يعيد الربط من الموقع"
+    game = await self.find_game(game_name)
+    if not game:
+      return False, f"ما لقيت لعبة باسم {game_name}"
+    st, _ = await self.call("PATCH", "channels", token,
+                            params={"broadcaster_id": info["user_id"]},
+                            body={"game_id": game["id"]})
+    if st == 204:
+      return True, game["name"]
+    return False, "تويتش رفض تغيير اللعبة، حاول مرة ثانية"
+
+
+# ============================================================
+# الواجهات (HTML)
+# ============================================================
+COMMON_CSS = r"""
 :root{--bg:#0e0e12;--card:#18181f;--line:#2a2a35;--tx:#f1f1f5;--mut:#9a9aab;--acc:#9146ff;--ok:#2ecc71;--bad:#ff5c6c}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -146,11 +385,15 @@ header .sp{flex:1}
 .tabs button.on{background:var(--acc);color:#fff}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
 h2{font-size:15px;margin:0 0 12px;color:var(--mut);font-weight:500}
+label{display:block;font-size:13px;color:var(--mut);margin:2px 0 6px}
 input,select,textarea{width:100%;background:#0e0e12;border:1px solid var(--line);color:var(--tx);border-radius:10px;padding:11px 12px;font:inherit;margin-bottom:10px}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--acc);border-color:transparent}
 textarea{min-height:90px;resize:vertical}
 .btn{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:11px 18px;font:inherit;font-weight:700;cursor:pointer;width:100%}
+a.btn{display:block;text-align:center;text-decoration:none}
 .btn.ghost{background:none;border:1px solid var(--line);color:var(--mut);width:auto;padding:8px 14px}
+.btn.red{background:var(--bad)}
+.btn.mt{margin-top:8px}
 .row{display:flex;align-items:center;gap:10px;padding:12px 4px;border-bottom:1px solid var(--line)}
 .row:last-child{border:0}
 .row b{flex:1;text-align:right}
@@ -158,6 +401,9 @@ textarea{min-height:90px;resize:vertical}
 .row.col{flex-direction:column;align-items:stretch;gap:6px}
 .row .top{display:flex;align-items:center;justify-content:space-between}
 .row p{margin:0;color:var(--mut);font-size:14px;word-break:break-word}
+.meta{font-size:12px;color:var(--acc)}
+.mut{color:var(--mut);font-size:14px}
+.hint{font-size:12px;color:var(--mut);margin:-4px 0 10px}
 .dot{width:10px;height:10px;border-radius:50%;background:#555}
 .dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
 .ic{background:none;border:0;font-size:18px;cursor:pointer;padding:4px 8px;border-radius:8px}
@@ -169,9 +415,103 @@ textarea{min-height:90px;resize:vertical}
 #toast.show{transform:translate(-50%,0);opacity:1}#toast.bad{background:var(--bad);color:#fff}
 #login{min-height:80vh;display:grid;place-items:center}
 #login .card{width:100%;max-width:360px;text-align:center}
-</style>
+"""
+
+COMMON_JS = r"""
+const $=s=>document.querySelector(s);
+const PERMS={everyone:"الكل",sub:"المشتركين وفوق",vip:"VIP وفوق",mod:"المودات فقط",broadcaster:"الستريمر فقط"};
+let onAuth=()=>{};
+function toast(m,bad){const t=$("#toast");t.textContent=m;t.className="show"+(bad?" bad":"");setTimeout(()=>t.className="",2400)}
+async function api(method,path,body){
+  const r=await fetch(path,{method,headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
+  const d=await r.json().catch(()=>({}));
+  if(r.status===401&&!path.endsWith("/login")){onAuth(d);throw new Error("auth")}
+  if(!r.ok)throw new Error(d.error||"صار خطأ");
+  return d;
+}
+function cmdFormSync(){
+  const g=$("#ctype").value==="game";
+  $("#cgame").hidden=!g;$("#gamehint").hidden=!g;
+  $("#creply").placeholder=g?"رد البوت بعد تغيير اللعبة (اختياري)":"رد البوت";
+}
+function cmdFormInit(){
+  $("#ctype").onchange=()=>{
+    if($("#ctype").value==="game"&&$("#cperm").value==="everyone")$("#cperm").value="mod";
+    cmdFormSync();
+  };
+  $("#chips").onclick=e=>{if(e.target.tagName==="SPAN"){const t=$("#creply");t.value+=e.target.textContent;t.focus()}};
+  cmdFormSync();
+}
+function cmdFormGet(){return{type:$("#ctype").value,name:$("#cname").value,game:$("#cgame").value,reply:$("#creply").value,perm:$("#cperm").value}}
+function cmdFormClear(){
+  $("#ctype").value="text";$("#cperm").value="everyone";
+  $("#cname").value="";$("#cgame").value="";$("#creply").value="";cmdFormSync();
+}
+function cmdFormFill(n,c){
+  $("#ctype").value=c.type||"text";$("#cperm").value=c.perm||"everyone";
+  $("#cname").value=n;$("#cgame").value=c.game||"";$("#creply").value=c.reply||"";
+  cmdFormSync();window.scrollTo({top:0,behavior:"smooth"});
+}
+function renderCmdList(box,cmds,onDel){
+  box.innerHTML="";const names=Object.keys(cmds).sort();
+  if(!names.length){box.innerHTML='<p class="empty">ما فيه كوماندات</p>';return}
+  names.forEach(n=>{
+    const c=cmds[n],d=document.createElement("div");d.className="row col";
+    d.innerHTML='<div class="top"><b dir="ltr"></b><span><button class="ic ed">✏️</button><button class="ic del">🗑</button></span></div><div class="meta"></div><p></p>';
+    d.querySelector("b").textContent="!"+n;
+    d.querySelector(".meta").textContent=(c.type==="game"?"🎮 يغيّر اللعبة إلى: "+c.game:"💬 رد عادي")+" • "+(PERMS[c.perm]||"الكل");
+    d.querySelector("p").textContent=c.reply||"";
+    d.querySelector(".ed").onclick=()=>cmdFormFill(n,c);
+    d.querySelector(".del").onclick=()=>{if(confirm("تحذف !"+n+"؟"))onDel(n)};
+    box.appendChild(d);
+  });
+}
+"""
+
+CMD_FORM = r"""
+<div class="card">
+  <h2>إضافة / تعديل كوماند</h2>
+  {{TOP}}
+  <label>نوع الكوماند</label>
+  <select id="ctype">
+    <option value="text">💬 رد عادي</option>
+    <option value="game">🎮 اختصار لعبة (يغيّر لعبة البث)</option>
+  </select>
+  <input id="cname" dir="ltr" placeholder="اسم الكوماند بدون !  مثل: fortnite">
+  <input id="cgame" dir="ltr" placeholder="اسم اللعبة مثل: Fortnite" hidden>
+  <p class="hint" id="gamehint" hidden>لازم الستريمر يربط تويتش من تبويب الإعدادات في موقع الستريمر عشان تغيير اللعبة يشتغل.</p>
+  <textarea id="creply" placeholder="رد البوت"></textarea>
+  <div class="chips" id="chips"><span>$(user)</span><span>$(touser)</span><span>$(channel)</span><span>$(game)</span></div>
+  <label>مين يقدر يستخدم الكوماند؟</label>
+  <select id="cperm">
+    <option value="everyone">الكل</option>
+    <option value="sub">المشتركين وفوق</option>
+    <option value="vip">VIP وفوق</option>
+    <option value="mod">المودات فقط</option>
+    <option value="broadcaster">الستريمر فقط</option>
+  </select>
+  <button class="btn" id="savecmd">حفظ الكوماند</button>
+</div>
+"""
+
+HEAD = r"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0e0e12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg">
+<title>{{TITLE}}</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>/*COMMON_CSS*/</style>
 </head>
 <body>
+"""
+
+# ---------------- لوحة الأونر ----------------
+OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
 <div class="wrap">
 <div id="login" hidden>
   <div class="card">
@@ -205,14 +545,7 @@ textarea{min-height:90px;resize:vertical}
   </section>
 
   <section id="t-cmd" hidden>
-    <div class="card">
-      <h2>إضافة / تعديل كوماند</h2>
-      <select id="cmdch"></select>
-      <input id="cname" dir="ltr" placeholder="اسم الكوماند بدون !  مثل: discord">
-      <textarea id="creply" placeholder="رد البوت"></textarea>
-      <div class="chips" id="chips"><span>$(user)</span><span>$(touser)</span><span>$(channel)</span></div>
-      <button class="btn" id="savecmd">حفظ الكوماند</button>
-    </div>
+    {{FORM}}
     <div class="card"><h2>كوماندات القناة</h2><div id="cmdlist"></div></div>
   </section>
 
@@ -229,16 +562,9 @@ textarea{min-height:90px;resize:vertical}
 <div id="toast"></div>
 
 <script>
-const $=s=>document.querySelector(s);
+//COMMON_JS
 let S={channels:[],commands:{},bot:""};
-function toast(m,bad){const t=$("#toast");t.textContent=m;t.className="show"+(bad?" bad":"");setTimeout(()=>t.className="",2200)}
-async function api(method,path,body){
-  const r=await fetch(path,{method,headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
-  if(r.status===401&&path!=="/api/login"){show(false);throw new Error("auth")}
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(d.error||"صار خطأ");
-  return d;
-}
+onAuth=()=>show(false);
 function show(on){$("#login").hidden=on;$("#app").hidden=!on}
 async function act(fn,msg){try{await fn();if(msg)toast(msg);await load()}catch(e){if(e.message!=="auth")toast(e.message,1)}}
 async function load(){
@@ -263,19 +589,10 @@ function render(){
   renderCmds();
 }
 function renderCmds(){
-  const ch=$("#cmdch").value,box=$("#cmdlist");box.innerHTML="";
-  const cmds=S.commands[ch]||{},names=Object.keys(cmds).sort();
-  if(!names.length){box.innerHTML='<p class="empty">ما فيه كوماندات في هذي القناة</p>';return}
-  names.forEach(n=>{
-    const d=document.createElement("div");d.className="row col";
-    d.innerHTML='<div class="top"><b dir="ltr"></b><span><button class="ic ed">✏️</button><button class="ic del">🗑</button></span></div><p></p>';
-    d.querySelector("b").textContent="!"+n;
-    d.querySelector("p").textContent=cmds[n];
-    d.querySelector(".ed").onclick=()=>{$("#cname").value=n;$("#creply").value=cmds[n];window.scrollTo({top:0,behavior:"smooth"})};
-    d.querySelector(".del").onclick=()=>{if(confirm("تحذف !"+n+"؟"))act(()=>api("DELETE","/api/commands/"+encodeURIComponent(ch)+"/"+encodeURIComponent(n)),"تم حذف الكوماند")};
-    box.appendChild(d);
-  });
+  const ch=$("#cmdch").value;
+  renderCmdList($("#cmdlist"),S.commands[ch]||{},n=>act(()=>api("DELETE","/api/commands/"+encodeURIComponent(ch)+"/"+encodeURIComponent(n)),"تم حذف الكوماند"));
 }
+cmdFormInit();
 $("#loginBtn").onclick=async()=>{
   try{await api("POST","/api/login",{password:$("#pw").value});$("#pw").value="";await load()}
   catch(e){toast(e.message,1)}
@@ -285,10 +602,9 @@ $("#logout").onclick=async()=>{await api("POST","/api/logout");show(false)};
 $("#addch").onclick=()=>act(async()=>{await api("POST","/api/channels",{name:$("#newch").value});$("#newch").value=""},"تمت إضافة القناة");
 $("#cmdch").onchange=renderCmds;
 $("#savecmd").onclick=()=>act(async()=>{
-  await api("POST","/api/commands",{channel:$("#cmdch").value,name:$("#cname").value,reply:$("#creply").value});
-  $("#cname").value="";$("#creply").value="";
+  await api("POST","/api/commands",Object.assign({channel:$("#cmdch").value},cmdFormGet()));
+  cmdFormClear();
 },"تم حفظ الكوماند");
-$("#chips").onclick=e=>{if(e.target.tagName==="SPAN"){const t=$("#creply");t.value+=e.target.textContent;t.focus()}};
 $("#sendmsg").onclick=()=>act(async()=>{
   await api("POST","/api/send",{channel:$("#msgch").value,text:$("#msgtxt").value});$("#msgtxt").value="";
 },"تم الإرسال");
@@ -302,6 +618,161 @@ load();
 </body>
 </html>
 """
+
+# ---------------- موقع الستريمر ----------------
+STREAMER_HTML = HEAD.replace("{{TITLE}}", "موقع الستريمر") + r"""
+<div class="wrap">
+<div id="login" hidden>
+  <div class="card">
+    <div class="logo" style="margin:0 auto 12px">🎮</div>
+    <h1 style="font-size:20px;margin:0 0 8px">موقع الستريمر</h1>
+    <p class="mut">ادخل بحساب تويتش عشان تتحكم بكوماندات قناتك</p>
+    <a class="btn" id="loginBtn" href="/auth/login">الدخول عن طريق تويتش</a>
+    <p class="mut" id="nolink" hidden>الموقع غير مفعّل بعد من المطوّر.</p>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div class="logo">🎮</div>
+    <div><h1>موقع الستريمر</h1><small id="who" dir="ltr"></small></div>
+    <div class="sp"></div>
+    <button class="btn ghost" id="logout">خروج</button>
+  </header>
+  <select id="chsel" hidden></select>
+  <div class="card" id="nochan" hidden>
+    <p class="mut" style="margin:0">قناتك مو مضافة للبوت. كلم majek113 عشان يضيفها، وبعدها تقدر تدخل من هنا.</p>
+  </div>
+
+  <div id="main" hidden>
+    <div class="card">
+      <div class="row" style="padding:0;border:0">
+        <span class="dot" id="dot"></span><b id="chname" dir="ltr"></b><small id="live"></small>
+      </div>
+      <div class="mut" id="curgame" style="margin-top:8px"></div>
+    </div>
+
+    <div class="tabs">
+      <button class="on" data-t="cmd">الكوماندات</button>
+      <button data-t="set" id="tabset">الإعدادات</button>
+    </div>
+
+    <section id="t-cmd">
+      {{FORM}}
+      <div class="card"><h2>كوماندات القناة</h2><div id="cmdlist"></div></div>
+    </section>
+
+    <section id="t-set" hidden>
+      <div class="card">
+        <h2>ربط تويتش (لكوماندات تغيير اللعبة)</h2>
+        <p class="mut" id="linkstate"></p>
+        <a class="btn" id="connect" href="/auth/connect">ربط تويتش</a>
+        <button class="btn ghost mt" id="unlink" hidden>إلغاء الربط</button>
+      </div>
+      <div class="card">
+        <h2>المودات المصرّح لهم يعدلون الكوماندات</h2>
+        <input id="newed" dir="ltr" placeholder="يوزر المود في تويتش">
+        <button class="btn" id="added">إضافة مود</button>
+        <div id="edlist" style="margin-top:8px"></div>
+        <p class="hint">المود يدخل بحسابه من نفس الموقع ويعدل الكوماندات فقط. ما يقدر يشيل البوت أو يغيّر الإعدادات.</p>
+      </div>
+      <div class="card">
+        <h2>إزالة البوت</h2>
+        <p class="mut">يطلع البوت من قناتك وتتوقف كل الكوماندات والردود. الربط مع تويتش ينحذف.</p>
+        <button class="btn red" id="leave">إزالة البوت من قناتي</button>
+      </div>
+    </section>
+  </div>
+</div>
+</div>
+<div id="toast"></div>
+
+<script>
+//COMMON_JS
+let ME=null,CH=null;
+onAuth=d=>{
+  $("#app").hidden=true;$("#login").hidden=false;
+  if(d&&d.enabled===false){$("#loginBtn").hidden=true;$("#nolink").hidden=false}
+};
+const base=()=>"/s/api/channel/"+encodeURIComponent(CH.name);
+function tab(t){
+  document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x.dataset.t===t));
+  for(const k of ["cmd","set"])$("#t-"+k).hidden=k!==t;
+}
+async function act(fn,msg,reinit){
+  try{await fn();if(msg)toast(msg);reinit?await init():await loadCh()}
+  catch(e){if(e.message!=="auth")toast(e.message,1)}
+}
+async function init(){
+  try{ME=await api("GET","/s/api/me")}catch(e){if(e.message!=="auth")toast(e.message,1);return}
+  $("#login").hidden=true;$("#app").hidden=false;
+  $("#who").textContent=ME.login;
+  const sel=$("#chsel"),prev=sel.value;sel.innerHTML="";
+  ME.channels.forEach(c=>sel.add(new Option(c.name+(c.role==="editor"?" (مود)":""),c.name)));
+  if(ME.channels.some(c=>c.name===prev))sel.value=prev;
+  sel.hidden=ME.channels.length<2;
+  $("#nochan").hidden=ME.channels.length>0;
+  $("#main").hidden=!ME.channels.length;
+  if(ME.channels.length)await loadCh();
+}
+async function loadCh(){
+  try{CH=await api("GET",base2())}catch(e){if(e.message!=="auth")toast(e.message,1);return}
+  render();
+}
+const base2=()=>"/s/api/channel/"+encodeURIComponent($("#chsel").value);
+function render(){
+  const c=CH,own=c.role==="owner";
+  $("#chname").textContent=c.name;
+  $("#dot").className="dot"+(c.live?" on":"");
+  $("#live").textContent=c.live?"لايف":"أوفلاين";
+  $("#curgame").textContent=c.game?"🎮 اللعبة الحالية: "+c.game:"";
+  $("#tabset").hidden=!own;
+  if(!own&&!$("#t-set").hidden)tab("cmd");
+  renderCmdList($("#cmdlist"),c.commands,n=>act(()=>api("DELETE",base()+"/commands/"+encodeURIComponent(n)),"تم حذف الكوماند"));
+  if(!own)return;
+  $("#linkstate").textContent=!c.twitch?"الربط غير مفعّل من المطوّر.":c.linked?"✅ مربوط: كوماندات اختصار اللعبة تقدر تغيّر لعبة بثك.":"غير مربوط: اربط تويتش عشان كوماندات تغيير اللعبة تشتغل.";
+  $("#connect").hidden=!c.twitch;
+  $("#connect").textContent=c.linked?"إعادة الربط":"ربط تويتش";
+  $("#unlink").hidden=!c.linked;
+  const box=$("#edlist");box.innerHTML="";
+  if(!c.editors.length)box.innerHTML='<p class="empty">ما أضفت أحد للحين</p>';
+  c.editors.forEach(n=>{
+    const d=document.createElement("div");d.className="row";
+    d.innerHTML='<b dir="ltr"></b><button class="ic">🗑</button>';
+    d.querySelector("b").textContent=n;
+    d.querySelector("button").onclick=()=>act(()=>api("DELETE",base()+"/editors/"+encodeURIComponent(n)),"تمت الإزالة");
+    box.appendChild(d);
+  });
+}
+cmdFormInit();
+$("#chsel").onchange=loadCh;
+$("#savecmd").onclick=()=>act(async()=>{
+  await api("POST",base()+"/commands",cmdFormGet());cmdFormClear();
+},"تم حفظ الكوماند");
+$("#added").onclick=()=>act(async()=>{
+  await api("POST",base()+"/editors",{name:$("#newed").value});$("#newed").value="";
+},"تمت إضافة المود");
+$("#unlink").onclick=()=>{if(confirm("تلغي الربط مع تويتش؟"))act(()=>api("POST",base()+"/unlink"),"تم إلغاء الربط")};
+$("#leave").onclick=()=>{
+  if(confirm("متأكد تبي تشيل البوت من قناتك؟"))act(()=>api("POST",base()+"/leave"),"تم إزالة البوت",true);
+};
+$("#logout").onclick=async()=>{await api("POST","/s/api/logout");onAuth({enabled:true})};
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>tab(b.dataset.t));
+const qp=new URLSearchParams(location.search);
+if(qp.get("msg")==="linked")toast("تم الربط مع تويتش ✅");
+const ERR={cancel:"تم إلغاء الدخول",fail:"فشل الدخول مع تويتش، حاول مرة ثانية",not_joined:"قناتك مو مضافة للبوت",scope:"ما وافقت على الصلاحية المطلوبة"};
+if(qp.get("err"))toast(ERR[qp.get("err")]||"صار خطأ",1);
+if(location.search)history.replaceState(null,"","/s");
+init();
+</script>
+</body>
+</html>
+"""
+
+OWNER_HTML = (OWNER_HTML.replace("{{FORM}}", CMD_FORM.replace("{{TOP}}", '<select id="cmdch"></select>'))
+              .replace("/*COMMON_CSS*/", COMMON_CSS).replace("//COMMON_JS", COMMON_JS))
+STREAMER_HTML = (STREAMER_HTML.replace("{{FORM}}", CMD_FORM.replace("{{TOP}}", ""))
+                 .replace("/*COMMON_CSS*/", COMMON_CSS).replace("//COMMON_JS", COMMON_JS))
 
 SESSION_TOKEN = (
     hashlib.sha256(("dash:" + DASHBOARD_PASSWORD).encode()).hexdigest()
@@ -326,9 +797,24 @@ def jerr(msg, status=400):
   return web.json_response({"error": msg}, status=status)
 
 
+async def jbody(request):
+  try:
+    data = await request.json()
+    return data if isinstance(data, dict) else {}
+  except Exception:
+    return {}
+
+
+def is_https(request):
+  return request.headers.get("X-Forwarded-Proto") == "https"
+
+
 def make_web_app(bot):
   store = bot.store
+  twitch = bot.twitch
+  redirect_uri = SITE_URL + "/auth/callback"
 
+  # ---------------- لوحة الأونر ----------------
   def authed(request):
     tok = request.cookies.get("session", "")
     return bool(SESSION_TOKEN) and hmac.compare_digest(tok.encode(), SESSION_TOKEN.encode())
@@ -340,7 +826,7 @@ def make_web_app(bot):
     return await handler(request)
 
   async def index(request):
-    return web.Response(text=DASHBOARD_HTML, content_type="text/html")
+    return web.Response(text=OWNER_HTML, content_type="text/html")
 
   async def ping(request):
     return web.Response(text="Bot is alive!")
@@ -354,13 +840,13 @@ def make_web_app(bot):
   async def login(request):
     if not SESSION_TOKEN:
       return jerr("لوحة التحكم مقفلة: ضيف DASHBOARD_PASSWORD في Render", 503)
-    body = await request.json()
+    body = await jbody(request)
     await asyncio.sleep(1)
     if not hmac.compare_digest(str(body.get("password", "")).encode(), DASHBOARD_PASSWORD.encode()):
       return jerr("كلمة المرور غلط", 401)
     resp = web.json_response({"ok": True})
     resp.set_cookie("session", SESSION_TOKEN, max_age=60 * 60 * 24 * 30, httponly=True,
-                    samesite="Lax", secure=request.headers.get("X-Forwarded-Proto") == "https")
+                    samesite="Lax", secure=is_https(request))
     return resp
 
   async def logout(request):
@@ -378,7 +864,7 @@ def make_web_app(bot):
     })
 
   async def add_channel(request):
-    name = str((await request.json()).get("name", "")).strip().lstrip("@#").lower()
+    name = str((await jbody(request)).get("name", "")).strip().lstrip("@#").lower()
     if not valid_channel(name):
       return jerr("اسم القناة غير صحيح")
     if name in store.data["channels"]:
@@ -398,17 +884,15 @@ def make_web_app(bot):
     return web.json_response({"ok": True})
 
   async def save_command(request):
-    b = await request.json()
+    b = await jbody(request)
     ch = str(b.get("channel", "")).lower()
-    name = str(b.get("name", "")).strip().lstrip("!").lower()
-    reply = str(b.get("reply", "")).strip()
     if ch not in store.data["channels"]:
       return jerr("اختر قناة صحيحة")
-    if not name or len(name) > 30 or " " in name or name in BUILTIN:
-      return jerr("اسم الكوماند ما ينفع")
-    if not reply:
-      return jerr("اكتب رد الكوماند")
-    store.data["commands"].setdefault(ch, {})[name] = reply[:450]
+    try:
+      name, entry = build_command(b)
+    except ValueError as e:
+      return jerr(str(e))
+    store.data["commands"].setdefault(ch, {})[name] = entry
     await store.save()
     return web.json_response({"ok": True})
 
@@ -423,7 +907,7 @@ def make_web_app(bot):
     return web.json_response({"ok": True})
 
   async def send_msg(request):
-    b = await request.json()
+    b = await jbody(request)
     channel = bot.get_channel(str(b.get("channel", "")).lower())
     text = str(b.get("text", "")).strip()[:490]
     if not channel or not text:
@@ -431,19 +915,239 @@ def make_web_app(bot):
     await channel.send(text)
     return web.json_response({"ok": True})
 
+  # ---------------- موقع الستريمر ----------------
+  def role_of(login, ch):
+    if ch not in store.data["channels"]:
+      return None
+    if login == ch:
+      return "owner"
+    if login in store.data["editors"].get(ch, []):
+      return "editor"
+    return None
+
+  def channels_for(login):
+    out = []
+    for ch in store.data["channels"]:
+      r = role_of(login, ch)
+      if r:
+        out.append({"name": ch, "role": r})
+    return out
+
+  def access(request, owner_only=False):
+    login = read_session(request.cookies.get("ssess", ""))
+    if not login:
+      return None, web.json_response({"error": "unauthorized", "enabled": twitch.enabled}, status=401)
+    ch = request.match_info["channel"].lower()
+    r = role_of(login, ch)
+    if not r or (owner_only and r != "owner"):
+      return None, jerr("ما عندك صلاحية", 403)
+    return (login, ch, r), None
+
+  async def s_index(request):
+    return web.Response(text=STREAMER_HTML, content_type="text/html")
+
+  async def auth_start(mode):
+    if not twitch.enabled:
+      raise web.HTTPFound("/s")
+    state_val = mode + secrets.token_urlsafe(16)
+    url = AUTH_URL + "?" + urlencode({
+        "client_id": CLIENT_ID, "redirect_uri": redirect_uri,
+        "response_type": "code", "state": state_val,
+        "scope": GAME_SCOPE if mode == "c" else "",
+    })
+    return state_val, url
+
+  async def auth_login(request):
+    state_val, url = await auth_start("l")
+    resp = web.HTTPFound(url)
+    resp.set_cookie("ostate", state_val, max_age=600, httponly=True,
+                    samesite="Lax", secure=is_https(request))
+    raise resp
+
+  async def auth_connect(request):
+    state_val, url = await auth_start("c")
+    resp = web.HTTPFound(url)
+    resp.set_cookie("ostate", state_val, max_age=600, httponly=True,
+                    samesite="Lax", secure=is_https(request))
+    raise resp
+
+  async def auth_callback(request):
+    q = request.query
+    state_val = q.get("state", "")
+    cookie = request.cookies.get("ostate", "")
+    if not state_val or not hmac.compare_digest(state_val.encode(), cookie.encode()):
+      return web.Response(text="انتهت جلسة الدخول، ارجع للموقع وحاول مرة ثانية", status=400)
+    if q.get("error") or not q.get("code"):
+      raise web.HTTPFound("/s?err=cancel")
+    st, tok = await twitch.form(TOKEN_URL, {
+        "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET, "code": q["code"],
+        "grant_type": "authorization_code", "redirect_uri": redirect_uri,
+    })
+    if st != 200 or "access_token" not in tok:
+      raise web.HTTPFound("/s?err=fail")
+    st, data = await twitch.call("GET", "users", tok["access_token"])
+    if st != 200 or not data.get("data"):
+      raise web.HTTPFound("/s?err=fail")
+    user = data["data"][0]
+    login_name = user["login"].lower()
+    dest = "/s"
+    if state_val[0] == "c":
+      if login_name not in store.data["channels"]:
+        dest = "/s?err=not_joined"
+      elif GAME_SCOPE not in (tok.get("scope") or []) or not tok.get("refresh_token"):
+        dest = "/s?err=scope"
+      else:
+        store.data["tokens"][login_name] = {"refresh": tok["refresh_token"], "user_id": user["id"]}
+        twitch.user_access[login_name] = (tok["access_token"], time.time() + tok.get("expires_in", 3600))
+        await store.save()
+        dest = "/s?msg=linked"
+    resp = web.HTTPFound(dest)
+    resp.set_cookie("ssess", make_session(login_name), max_age=60 * 60 * 24 * 30,
+                    httponly=True, samesite="Lax", secure=is_https(request))
+    resp.del_cookie("ostate")
+    raise resp
+
+  async def s_logout(request):
+    resp = web.json_response({"ok": True})
+    resp.del_cookie("ssess")
+    return resp
+
+  async def s_me(request):
+    login_name = read_session(request.cookies.get("ssess", ""))
+    if not login_name:
+      return web.json_response({"error": "unauthorized", "enabled": twitch.enabled}, status=401)
+    return web.json_response({"login": login_name, "channels": channels_for(login_name)})
+
+  async def s_channel(request):
+    a, err = access(request)
+    if err:
+      return err
+    _, ch, role = a
+    game = None
+    if twitch.enabled:
+      try:
+        game = await twitch.current_game(ch)
+      except Exception:
+        game = None
+    return web.json_response({
+        "name": ch, "role": role,
+        "live": await bot.is_channel_live(ch),
+        "game": game,
+        "twitch": twitch.enabled,
+        "linked": ch in store.data["tokens"],
+        "commands": store.data["commands"].get(ch, {}),
+        "editors": store.data["editors"].get(ch, []) if role == "owner" else [],
+    })
+
+  async def s_save_cmd(request):
+    a, err = access(request)
+    if err:
+      return err
+    _, ch, _ = a
+    try:
+      name, entry = build_command(await jbody(request))
+    except ValueError as e:
+      return jerr(str(e))
+    store.data["commands"].setdefault(ch, {})[name] = entry
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_del_cmd(request):
+    a, err = access(request)
+    if err:
+      return err
+    _, ch, _ = a
+    name = request.match_info["name"].lower()
+    cmds = store.data["commands"].get(ch, {})
+    if name not in cmds:
+      return jerr("الكوماند مو موجود", 404)
+    del cmds[name]
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_add_editor(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    name = str((await jbody(request)).get("name", "")).strip().lstrip("@").lower()
+    if not valid_channel(name):
+      return jerr("اليوزر غير صحيح")
+    if name == ch:
+      return jerr("هذا حسابك أنت")
+    eds = store.data["editors"].setdefault(ch, [])
+    if name in eds:
+      return jerr("المود مضاف من قبل")
+    eds.append(name)
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_del_editor(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    name = request.match_info["name"].lower()
+    eds = store.data["editors"].get(ch, [])
+    if name in eds:
+      eds.remove(name)
+      await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_unlink(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    store.data["tokens"].pop(ch, None)
+    twitch.user_access.pop(ch, None)
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_leave(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    if ch in store.data["channels"]:
+      store.data["channels"].remove(ch)
+    store.data["tokens"].pop(ch, None)
+    twitch.user_access.pop(ch, None)
+    await store.save()
+    try:
+      await bot.part_channels([ch])
+    except Exception as e:
+      print(f"تعذر الخروج من {ch}: {e}")
+    return web.json_response({"ok": True})
+
   app = web.Application(middlewares=[auth_mw])
-  app.router.add_get("/", index)
-  app.router.add_get("/ping", ping)
-  app.router.add_get("/manifest.json", manifest)
-  app.router.add_get("/icon.svg", icon)
-  app.router.add_post("/api/login", login)
-  app.router.add_post("/api/logout", logout)
-  app.router.add_get("/api/state", state)
-  app.router.add_post("/api/channels", add_channel)
-  app.router.add_delete("/api/channels/{name}", del_channel)
-  app.router.add_post("/api/commands", save_command)
-  app.router.add_delete("/api/commands/{channel}/{name}", del_command)
-  app.router.add_post("/api/send", send_msg)
+  r = app.router
+  r.add_get("/", index)
+  r.add_get("/ping", ping)
+  r.add_get("/manifest.json", manifest)
+  r.add_get("/icon.svg", icon)
+  r.add_post("/api/login", login)
+  r.add_post("/api/logout", logout)
+  r.add_get("/api/state", state)
+  r.add_post("/api/channels", add_channel)
+  r.add_delete("/api/channels/{name}", del_channel)
+  r.add_post("/api/commands", save_command)
+  r.add_delete("/api/commands/{channel}/{name}", del_command)
+  r.add_post("/api/send", send_msg)
+  # موقع الستريمر
+  r.add_get("/s", s_index)
+  r.add_get("/auth/login", auth_login)
+  r.add_get("/auth/connect", auth_connect)
+  r.add_get("/auth/callback", auth_callback)
+  r.add_post("/s/api/logout", s_logout)
+  r.add_get("/s/api/me", s_me)
+  r.add_get("/s/api/channel/{channel}", s_channel)
+  r.add_post("/s/api/channel/{channel}/commands", s_save_cmd)
+  r.add_delete("/s/api/channel/{channel}/commands/{name}", s_del_cmd)
+  r.add_post("/s/api/channel/{channel}/editors", s_add_editor)
+  r.add_delete("/s/api/channel/{channel}/editors/{name}", s_del_editor)
+  r.add_post("/s/api/channel/{channel}/unlink", s_unlink)
+  r.add_post("/s/api/channel/{channel}/leave", s_leave)
   return app
 
 
@@ -455,24 +1159,15 @@ async def start_web_server(bot):
   await site.start()
 
 
-def format_response(text, user, channel, target):
-  """المتغيرات المدعومة: $(user) $(touser) $(channel)"""
-  return (
-      text.replace("$(user)", user)
-      .replace("$(touser)", target or user)
-      .replace("$(channel)", channel)
-  )
-
-
-def valid_channel(name):
-  return re.fullmatch(r"[a-z0-9_]{3,25}", name) is not None
-
-
+# ============================================================
+# البوت
+# ============================================================
 class Bot(commands.Bot):
 
   def __init__(self):
     super().__init__(token=ACCESS_TOKEN, prefix="!", initial_channels=[OWNER])
     self.store = Store()
+    self.twitch = TwitchAPI(self.store)
     self.last_dhikr = None
     self.last_saudi_prayer = None
     self.live_cache = {}
@@ -545,12 +1240,13 @@ class Bot(commands.Bot):
   # الكوماندات (إدارة + مخصصة)
   # ----------------------------------------------------------
   async def handle_command(self, message, content, username, channel_name,
-                           is_owner, is_mod):
+                           is_owner, level):
     parts = content.split(maxsplit=2)
     cmd = parts[0][1:].lower()
     if not cmd:
       return False
 
+    is_mod = level >= PERMS["mod"]
     send = message.channel.send
     mention = f"@{message.author.name}"
     channel_cmds = self.store.data["commands"].setdefault(channel_name, {})
@@ -558,10 +1254,11 @@ class Bot(commands.Bot):
     # ---------- كوماندات المودرز ----------
     if cmd in ("addcmd", "editcmd", "delcmd", "removecmd", "cmds"):
       if cmd == "cmds":
-        if not channel_cmds:
+        usable = [n for n, c in channel_cmds.items() if level >= PERMS[c["perm"]]]
+        if not usable:
           await send(f"{mention} ما فيه كوماندات مضافة للحين")
         else:
-          names = " ".join(f"!{n}" for n in sorted(channel_cmds))
+          names = " ".join(f"!{n}" for n in sorted(usable))
           await send(f"{mention} الكوماندات: {names}"[:480])
         return True
 
@@ -586,7 +1283,7 @@ class Bot(commands.Bot):
         await send(f"{mention} الصيغة: !{cmd} !اسم_الكوماند الرد")
         return True
       name = parts[1].lstrip("!").lower()
-      reply = parts[2].strip()
+      reply = parts[2].strip()[:450]
       if not name or len(name) > 30 or name in BUILTIN:
         await send(f"{mention} هذا الاسم ما ينفع للكوماند")
         return True
@@ -595,14 +1292,14 @@ class Bot(commands.Bot):
         if name in channel_cmds:
           await send(f"{mention} الكوماند !{name} موجود، استخدم !editcmd للتعديل")
           return True
-        channel_cmds[name] = reply
+        channel_cmds[name] = norm_cmd(reply)
         await self.store.save()
         await send(f"{mention} تمت إضافة الكوماند !{name} ✅")
       else:
         if name not in channel_cmds:
           await send(f"{mention} ما لقيت !{name}، استخدم !addcmd للإضافة")
           return True
-        channel_cmds[name] = reply
+        channel_cmds[name]["reply"] = reply
         await self.store.save()
         await send(f"{mention} تم تعديل الكوماند !{name} ✅")
       return True
@@ -643,22 +1340,41 @@ class Bot(commands.Bot):
       return True
 
     # ---------- كوماند مخصص ----------
-    reply = channel_cmds.get(cmd)
-    if reply is None:
+    entry = channel_cmds.get(cmd)
+    if entry is None:
       return False
 
-    # الكوماندات المخصصة ما ترد إلا إذا القناة لايف
-    if not await self.is_channel_live(channel_name):
+    # الصلاحية: اللي ما يملكها ما يرد عليه البوت
+    if level < PERMS[entry["perm"]]:
       return True
 
     key = (channel_name, cmd)
     now = time.time()
+
+    target = parts[1].lstrip("@") if len(parts) > 1 else ""
+
+    # اختصار لعبة: يشتغل حتى لو القناة أوفلاين
+    if entry["type"] == "game":
+      if now - self.cmd_cooldown.get(key, 0) < COMMAND_COOLDOWN:
+        return True
+      self.cmd_cooldown[key] = now
+      ok, result = await self.twitch.set_game(channel_name, entry["game"])
+      if ok:
+        text = format_response(entry["reply"], message.author.name, channel_name, target, result)
+        await send(text[:490])
+      else:
+        await send(f"{mention} {result}"[:490])
+      return True
+
+    # الكوماندات العادية ما ترد إلا إذا القناة لايف
+    if not await self.is_channel_live(channel_name):
+      return True
+
     if now - self.cmd_cooldown.get(key, 0) < COMMAND_COOLDOWN:
       return True
     self.cmd_cooldown[key] = now
 
-    target = parts[1].lstrip("@") if len(parts) > 1 else ""
-    await send(format_response(reply, message.author.name, channel_name, target)[:490])
+    await send(format_response(entry["reply"], message.author.name, channel_name, target)[:490])
     return True
 
   # ----------------------------------------------------------
@@ -672,12 +1388,12 @@ class Bot(commands.Bot):
     channel_name = message.channel.name.lower()
     content = message.content.strip()
     is_owner = username == OWNER
-    is_mod = is_owner or message.author.is_mod or message.author.is_broadcaster
+    level = user_level(message.author, is_owner)
 
     # الكوماندات تشتغل حتى للأونر
     if content.startswith("!"):
       if await self.handle_command(
-          message, content, username, channel_name, is_owner, is_mod
+          message, content, username, channel_name, is_owner, level
       ):
         return
 
