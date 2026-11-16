@@ -11,7 +11,7 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 
 ACCESS_TOKEN = "oauth:v4iyxh6mfgv2v9zqvnwdkfe125patj"
 
-# القنوات المتابعة (تمت إضافة lyorll)
+# القنوات المتابعة
 CHANNELS = ["majek113", "teamiik", "iz0yi", "vul1_", "lyorll"]
 
 DHIKR_LIST = [
@@ -63,6 +63,13 @@ class Bot(commands.Bot):
     asyncio.create_task(start_web_server())
     asyncio.create_task(self.periodic_reminders())
 
+  async def is_channel_live(self, channel_name):
+    try:
+      streams = await self.fetch_streams(user_logins=[channel_name])
+      return len(streams) > 0
+    except Exception:
+      return False
+
   def get_random_dhikr(self):
     available = [d for d in DHIKR_LIST if d != self.last_dhikr]
     selected = random.choice(available)
@@ -87,9 +94,11 @@ class Bot(commands.Bot):
         message_text = "اشربوا ماااااااي"
 
       for channel_name in CHANNELS:
-        channel = self.get_channel(channel_name)
-        if channel:
-          await channel.send(message_text)
+        # التأكد أن القناة في وضع البث المباشر قبل إرسال التذكير
+        if await self.is_channel_live(channel_name):
+          channel = self.get_channel(channel_name)
+          if channel:
+            await channel.send(message_text)
 
       step = (step + 1) % 3
 
@@ -97,15 +106,20 @@ class Bot(commands.Bot):
     if message.echo or message.author.name.lower() == "majek113":
       return
 
-    # تجاهل اليوزر 1s3don تماماً (بغض النظر عن حالة الحروف)
+    # تجاهل اليوزر 1s3don تماماً
     if message.author.name.lower() == "1s3don":
       return
 
+    channel_name = message.channel.name
     username = message.author.name.lower()
     current_time = time.time()
 
     # كول داون 15 ثانية لكل يوزر لحاله
     if username in user_reply_time and current_time - user_reply_time[username] < 15:
+      return
+
+    # التأكد أن القناة تبث حالياً، وإذا كانت أوفلاين يتجاهل الرسالة
+    if not await self.is_channel_live(channel_name):
       return
 
     content = message.content.strip().lower()
