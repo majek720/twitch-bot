@@ -33,7 +33,7 @@ LIVE_CACHE_SECONDS = 60
 
 # كوماندات البوت الأساسية (ما تنفع كأسماء لكوماندات مخصصة)
 BUILTIN = {
-    "addcom", "editcom", "delcom", "removecom", "commands",
+    "addcmd", "editcmd", "delcmd", "removecmd", "cmds",
     "addchannel", "removechannel", "channels",
 }
 
@@ -556,8 +556,8 @@ class Bot(commands.Bot):
     channel_cmds = self.store.data["commands"].setdefault(channel_name, {})
 
     # ---------- كوماندات المودرز ----------
-    if cmd in ("addcom", "editcom", "delcom", "removecom", "commands"):
-      if cmd == "commands":
+    if cmd in ("addcmd", "editcmd", "delcmd", "removecmd", "cmds"):
+      if cmd == "cmds":
         if not channel_cmds:
           await send(f"{mention} ما فيه كوماندات مضافة للحين")
         else:
@@ -568,9 +568,9 @@ class Bot(commands.Bot):
       if not is_mod:
         return True
 
-      if cmd in ("delcom", "removecom"):
+      if cmd in ("delcmd", "removecmd"):
         if len(parts) < 2:
-          await send(f"{mention} الصيغة: !delcom !اسم_الكوماند")
+          await send(f"{mention} الصيغة: !delcmd !اسم_الكوماند")
           return True
         name = parts[1].lstrip("!").lower()
         if name in channel_cmds:
@@ -581,7 +581,7 @@ class Bot(commands.Bot):
           await send(f"{mention} ما لقيت كوماند باسم !{name}")
         return True
 
-      # addcom / editcom
+      # addcmd / editcmd
       if len(parts) < 3:
         await send(f"{mention} الصيغة: !{cmd} !اسم_الكوماند الرد")
         return True
@@ -591,16 +591,16 @@ class Bot(commands.Bot):
         await send(f"{mention} هذا الاسم ما ينفع للكوماند")
         return True
 
-      if cmd == "addcom":
+      if cmd == "addcmd":
         if name in channel_cmds:
-          await send(f"{mention} الكوماند !{name} موجود، استخدم !editcom للتعديل")
+          await send(f"{mention} الكوماند !{name} موجود، استخدم !editcmd للتعديل")
           return True
         channel_cmds[name] = reply
         await self.store.save()
         await send(f"{mention} تمت إضافة الكوماند !{name} ✅")
       else:
         if name not in channel_cmds:
-          await send(f"{mention} ما لقيت !{name}، استخدم !addcom للإضافة")
+          await send(f"{mention} ما لقيت !{name}، استخدم !addcmd للإضافة")
           return True
         channel_cmds[name] = reply
         await self.store.save()
