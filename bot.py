@@ -1550,37 +1550,43 @@ class Bot(commands.Bot):
           return True
         name = parts[1].lstrip("!").lower()
         if name in channel_cmds:
+          shown = disp_cmd(name, channel_cmds[name])
           del channel_cmds[name]
           await self.store.save()
-          await send(f"{mention} تم حذف الكوماند !{name} ✅")
+          await send(f"{mention} تم حذف الكوماند {shown} ✅")
         else:
-          await send(f"{mention} ما لقيت كوماند باسم !{name}")
+          await send(f"{mention} ما لقيت كوماند باسم {parts[1]}")
         return True
 
       # addcmd / editcmd
       if len(parts) < 3:
-        await send(f"{mention} الصيغة: !{cmd} !اسم_الكوماند الرد")
+        await send(f"{mention} الصيغة: !{cmd} اسم_الكوماند الرد (حط ! قبل الاسم إذا تبيه يشتغل بـ !)")
         return True
+      bang = parts[1].startswith("!")
       name = parts[1].lstrip("!").lower()
       reply = parts[2].strip()[:450]
       if not name or len(name) > 30 or name in BUILTIN:
         await send(f"{mention} هذا الاسم ما ينفع للكوماند")
         return True
+      if not bang and not re.fullmatch(r"\w+", name):
+        await send(f"{mention} الكوماند بدون ! لازم يكون حروف وأرقام بس")
+        return True
 
       if cmd == "addcmd":
         if name in channel_cmds:
-          await send(f"{mention} الكوماند !{name} موجود، استخدم !editcmd للتعديل")
+          await send(f"{mention} الكوماند {disp_cmd(name, channel_cmds[name])} موجود، استخدم !editcmd للتعديل")
           return True
         channel_cmds[name] = norm_cmd(reply)
+        channel_cmds[name]["bang"] = bang
         await self.store.save()
-        await send(f"{mention} تمت إضافة الكوماند !{name} ✅")
+        await send(f"{mention} تمت إضافة الكوماند {disp_cmd(name, channel_cmds[name])} ✅")
       else:
         if name not in channel_cmds:
-          await send(f"{mention} ما لقيت !{name}، استخدم !addcmd للإضافة")
+          await send(f"{mention} ما لقيت {parts[1]}، استخدم !addcmd للإضافة")
           return True
         channel_cmds[name]["reply"] = reply
         await self.store.save()
-        await send(f"{mention} تم تعديل الكوماند !{name} ✅")
+        await send(f"{mention} تم تعديل الكوماند {disp_cmd(name, channel_cmds[name])} ✅")
       return True
 
     # ---------- كوماندات الأونر (إدارة القنوات) ----------
