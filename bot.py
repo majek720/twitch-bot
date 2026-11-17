@@ -50,7 +50,7 @@ PERMS = {"everyone": 0, "sub": 1, "vip": 2, "mod": 3, "broadcaster": 4}
 
 # كوماندات البوت الأساسية (ما تنفع كأسماء لكوماندات مخصصة)
 BUILTIN = {
-    "addcmd", "editcmd", "delcmd", "removecmd", "cmds", "addgame",
+    "addcmd", "editcmd", "delcmd", "removecmd", "cmds", "addgame", "settitle",
     "addchannel", "removechannel", "channels", "commands",
 }
 
@@ -73,6 +73,52 @@ SAUDI_PRAYERS = [
 ]
 
 user_reply_time = {}
+
+# ============================================================
+# رسائل الكوماندات الأساسية: (عربي، إنجليزي) والستريمر يختار من الموقع
+# ============================================================
+MSG = {
+    "no_cmds": ("ما فيه كوماندات مضافة للحين", "No commands have been added yet"),
+    "cmds_list": ("الكوماندات: {n}", "Commands: {n}"),
+    "cmds_link": ("كل كوماندات القناة هنا: {u}", "All channel commands are here: {u}"),
+    "usage_del": ("الصيغة: !delcmd !اسم_الكوماند", "Usage: !delcmd !command_name"),
+    "deleted": ("تم حذف الكوماند {c} بنجاح ✅", "The command {c} has been deleted successfully"),
+    "del_nf": ("ما لقيت كوماند باسم {c}", "I couldn't find a command named {c}"),
+    "usage_add": (
+        "الصيغة: !{cmd} اسم_الكوماند الرد (حط ! قبل الاسم إذا تبيه يشتغل بـ !)",
+        "Usage: !{cmd} command_name reply (put ! before the name to trigger it with !)"),
+    "bad_name": ("هذا الاسم ما ينفع للكوماند", "That command name isn't allowed"),
+    "bad_plain": ("الكوماند بدون ! لازم يكون حروف وأرقام بس",
+                  "A command without ! can only use letters and numbers"),
+    "exists": ("الكوماند {c} موجود، استخدم !editcmd للتعديل",
+               "The command {c} already exists, use !editcmd to edit it"),
+    "added": ("تمت إضافة الكوماند {c} بنجاح ✅", "The command {c} has been added successfully"),
+    "edited": ("تم تعديل الكوماند {c} بنجاح ✅", "The command {c} has been edited successfully"),
+    "edit_nf": ("ما لقيت {c}، استخدم !addcmd للإضافة", "I couldn't find {c}, use !addcmd to add it"),
+    "usage_game": ("الصيغة: !addgame !اسم_الكوماند اسم_اللعبة  مثال: !addgame !f fortnite",
+                   "Usage: !addgame !command_name game_name (e.g. !addgame !f fortnite)"),
+    "game_off": ("تغيير اللعبة غير مفعّل من المطوّر", "Game changing isn't enabled by the developer"),
+    "game_is_text": ("{c} كوماند عادي موجود، احذفه أول بـ !delcmd",
+                     "{c} is an existing text command, delete it first with !delcmd"),
+    "game_nf": ("ما لقيت لعبة أو كاتيقوري باسم {q} في تويتش",
+                "I couldn't find a game or category named {q} on Twitch"),
+    "g_added": ("تمت إضافة اختصار اللعبة {c} ({g}) بنجاح 🎮",
+                "The game command {c} has been added successfully ({g}) 🎮"),
+    "g_edited": ("تم تعديل اختصار اللعبة {c} ({g}) بنجاح 🎮",
+                 "The game command {c} has been edited successfully ({g}) 🎮"),
+    "link_warn": (" ⚠️ الستريمر لازم يربط تويتش من الموقع عشان يشتغل",
+                  " ⚠️ The streamer must link Twitch from the site for this to work"),
+    "title_usage": ("الصيغة: !settitle العنوان الجديد", "Usage: !settitle new title"),
+    "title_ok": ("تم تغيير عنوان البث إلى: {t} ✅", "The stream title has been changed to: {t}"),
+    "e_disabled": ("تغيير اللعبة والعنوان غير مفعّل من المطوّر",
+                   "Changing the game and title isn't enabled by the developer"),
+    "e_not_linked": ("الستريمر ما ربط تويتش من موقع الستريمر",
+                     "The streamer hasn't linked Twitch on the streamer site"),
+    "e_expired": ("انتهى الربط مع تويتش، الستريمر يعيد الربط من الموقع",
+                  "The Twitch link expired, the streamer needs to relink on the site"),
+    "e_not_found": ("ما لقيت لعبة باسم {q}", "I couldn't find a game named {q}"),
+    "e_refused": ("تويتش رفض التغيير، حاول مرة ثانية", "Twitch refused the change, try again"),
+}
 
 
 # ============================================================
@@ -184,6 +230,7 @@ class Store:
         "editors": {},  # قناة -> قائمة مودات مصرّح لهم يعدلون الكوماندات
         "tokens": {},  # قناة -> ربط تويتش لتغيير اللعبة
         "banned": [],  # قنوات محظورة من استخدام البوت
+        "lang": {},  # قناة -> "ar" أو "en" للغة ردود الكوماندات الأساسية
     }
 
   @property
@@ -220,6 +267,7 @@ class Store:
       self.data["editors"] = loaded.get("editors", {})
       self.data["tokens"] = loaded.get("tokens", {})
       self.data["banned"] = loaded.get("banned", [])
+      self.data["lang"] = loaded.get("lang", {})
       self.data["channels"] = [c for c in self.data["channels"] if c not in self.data["banned"]]
     except Exception as e:
       print(f"تعذر تحميل البيانات: {e}")
@@ -337,15 +385,17 @@ class TwitchAPI:
       return self.user_ids[login]
     return None
 
-  async def current_game(self, login):
+  async def channel_info(self, login):
+    """يرجع (اللعبة الحالية، عنوان البث)."""
     uid = await self.user_id(login)
     if not uid:
-      return None
+      return None, None
     st, d = await self.call("GET", "channels", await self.get_app_token(),
                             params={"broadcaster_id": uid})
     if st == 200 and d.get("data"):
-      return d["data"][0].get("game_name") or None
-    return None
+      x = d["data"][0]
+      return (x.get("game_name") or None), (x.get("title") or None)
+    return None, None
 
   async def find_game(self, name):
     st, d = await self.call("GET", "search/categories", await self.get_app_token(),
@@ -358,25 +408,41 @@ class TwitchAPI:
         return g
     return items[0]
 
-  async def set_game(self, channel, game_name):
-    """يرجع (نجح؟، اسم اللعبة أو رسالة الخطأ)."""
+  async def _patch_channel(self, channel, body):
+    """يرجع (نجح؟، كود الخطأ): disabled / not_linked / expired / refused"""
     if not self.enabled:
-      return False, "تغيير اللعبة غير مفعّل"
+      return False, "disabled"
     info = self.store.data["tokens"].get(channel)
     if not info:
-      return False, "الستريمر ما ربط تويتش من موقع الستريمر"
+      return False, "not_linked"
     token = await self.user_token(channel)
     if not token:
-      return False, "انتهى الربط مع تويتش، الستريمر يعيد الربط من الموقع"
+      return False, "expired"
+    st, _ = await self.call("PATCH", "channels", token,
+                            params={"broadcaster_id": info["user_id"]}, body=body)
+    if st == 204:
+      return True, ""
+    if st in (401, 403):
+      return False, "expired"
+    return False, "refused"
+
+  async def set_game(self, channel, game_name):
+    """يرجع (نجح؟، اسم اللعبة أو كود الخطأ)."""
+    if not self.enabled:
+      return False, "disabled"
+    if channel not in self.store.data["tokens"]:
+      return False, "not_linked"
     game = await self.find_game(game_name)
     if not game:
-      return False, f"ما لقيت لعبة باسم {game_name}"
-    st, _ = await self.call("PATCH", "channels", token,
-                            params={"broadcaster_id": info["user_id"]},
-                            body={"game_id": game["id"]})
-    if st == 204:
-      return True, game["name"]
-    return False, "تويتش رفض تغيير اللعبة، حاول مرة ثانية"
+      return False, "not_found"
+    ok, err = await self._patch_channel(channel, {"game_id": game["id"]})
+    return (True, game["name"]) if ok else (False, err)
+
+  async def set_title(self, channel, title):
+    """يرجع (نجح؟، العنوان الجديد أو كود الخطأ)."""
+    title = title.strip()[:140]
+    ok, err = await self._patch_channel(channel, {"title": title})
+    return (True, title) if ok else (False, err)
 
 
 # ============================================================
@@ -423,6 +489,11 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
 .chips span{background:var(--line);color:var(--mut);font-size:12px;padding:5px 10px;border-radius:20px;cursor:pointer;direction:ltr}
 .empty{color:var(--mut);text-align:center;margin:12px 0}
+.bd{font-size:11px;padding:3px 10px;border-radius:20px;background:#1c2438;color:var(--mut);white-space:nowrap}
+.bc{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 0;border-bottom:1px solid var(--line)}
+.bc:last-child{border:0}
+.bc code{color:#c4a1ff;background:#1a1530;padding:5px 10px;border-radius:8px;font-size:13px;direction:ltr;unicode-bidi:plaintext;word-break:break-word;max-width:100%}
+.bc .d{flex:1;color:var(--mut);font-size:13px;min-width:140px}
 #toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,80px);background:var(--ok);color:#000;padding:11px 20px;border-radius:12px;font-weight:700;transition:.25s;opacity:0}
 #toast.show{transform:translate(-50%,0);opacity:1}#toast.bad{background:var(--bad);color:#fff}
 #login{min-height:80vh;display:grid;place-items:center}
@@ -432,6 +503,30 @@ a.btn{display:block;text-align:center;text-decoration:none}
 COMMON_JS = r"""
 const $=s=>document.querySelector(s);
 const PERMS={everyone:"الكل",sub:"المشتركين وفوق",vip:"VIP وفوق",mod:"المودات فقط",broadcaster:"الستريمر فقط"};
+const BASIC=[
+ {c:"!addcmd !hi أهلاً $(user)",ce:"!addcmd !hi Hello $(user)",ar:"إضافة كوماند رد",en:"Add a text command",p:"mod"},
+ {c:"!editcmd !hi مرحباً $(user)",ce:"!editcmd !hi Welcome $(user)",ar:"تعديل رد كوماند موجود",en:"Edit an existing command's reply",p:"mod"},
+ {c:"!delcmd !hi",ce:"!delcmd !hi",ar:"حذف كوماند",en:"Delete a command",p:"mod"},
+ {c:"!addgame !f fortnite",ce:"!addgame !f fortnite",ar:"إنشاء اختصار يغيّر لعبة البث",en:"Create a shortcut that changes the stream's game",p:"mod"},
+ {c:"!settitle عنوان البث الجديد",ce:"!settitle New stream title",ar:"تغيير عنوان البث",en:"Change the stream title",p:"mod"},
+ {c:"!commands",ce:"!commands",ar:"رابط صفحة كل الكوماندات",en:"Link to the page with all commands",p:"everyone"}
+];
+function copyText(s){
+  try{navigator.clipboard.writeText(s).then(()=>toast("تم النسخ"),()=>{})}catch(e){}
+}
+function renderBasic(box){
+  if(!box)return;
+  box.innerHTML="";
+  BASIC.forEach(b=>{
+    const en=LANG==="en",txt=en?b.ce:b.c,d=document.createElement("div");d.className="bc";
+    d.innerHTML='<code data-nt></code><span class="d" data-nt></span><span class="bd" data-nt></span><button class="ic" data-nt>📋</button>';
+    d.querySelector("code").textContent=txt;
+    d.querySelector(".d").textContent=en?b.en:b.ar;
+    d.querySelector(".bd").textContent=t(PERMS[b.p]);
+    const btn=d.querySelector("button");btn.title=t("نسخ");btn.onclick=()=>copyText(txt);
+    box.appendChild(d);
+  });
+}
 const EN={
 "لوحة تحكم البوت":"Bot Control Panel","موقع الستريمر":"Streamer Site",
 "كلمة المرور":"Password","دخول":"Log in","خروج":"Log out",
@@ -453,7 +548,7 @@ const EN={
 "أنا مود: دخول فقط":"I'm a mod: log in only",
 "الموقع غير مفعّل بعد من المطوّر.":"The site hasn't been enabled by the developer yet.",
 "ما عندك قنوات هنا. إذا أنت ستريمر اضغط \"أنا ستريمر\" عشان تفعّل البوت في قناتك، وإذا أنت مود خلّ الستريمر يضيفك.":"You have no channels here. If you're a streamer, press \"I'm a streamer\" to activate the bot on your channel. If you're a mod, ask the streamer to add you.",
-"الإعدادات":"Settings","ربط تويتش (لكوماندات تغيير اللعبة)":"Twitch link (for game-changing commands)",
+"الإعدادات":"Settings","ربط تويتش (لتغيير اللعبة والعنوان)":"Twitch link (to change the game and title)",
 "ربط تويتش":"Link Twitch","إعادة الربط":"Relink","إلغاء الربط":"Unlink",
 "المودات المصرّح لهم يعدلون الكوماندات":"Mods allowed to edit commands",
 "يوزر المود في تويتش":"Mod's Twitch username","إضافة مود":"Add mod",
@@ -498,7 +593,21 @@ const EN={
 "بدون ! أو معها (مثل: discord)":"With or without ! (e.g. discord)",
 "الكوماند بدون ! لازم يكون حروف وأرقام بس":"A command without ! can only use letters and numbers",
 "تحذف القناة {n}؟":"Delete channel {n}?","تحذف !{n}؟":"Delete !{n}?",
-"تلغي الربط مع تويتش؟":"Unlink Twitch?","متأكد تبي تشيل البوت من قناتك؟":"Are you sure you want to remove the bot from your channel?"
+"تلغي الربط مع تويتش؟":"Unlink Twitch?","متأكد تبي تشيل البوت من قناتك؟":"Are you sure you want to remove the bot from your channel?",
+"تم النسخ":"Copied","نسخ":"Copy","اضغط للنسخ":"Click to copy","كوماند":"commands",
+"الأساسية":"Basics","كوماندات البوت الأساسية":"Core bot commands","كوماندات الشات الأساسية":"Core chat commands",
+"للستريمر والمودات. اضغط 📋 للنسخ":"For the streamer and mods. Press 📋 to copy",
+"كل الأنواع":"All types","ردود":"Replies","ألعاب":"Games","بحث في الكوماندات":"Search commands",
+"ما فيه كوماندات تطابق بحثك":"No commands match your search",
+"عنوان البث":"Stream title","العنوان الجديد":"New title","تغيير العنوان":"Change title",
+"📝 العنوان الحالي:":"📝 Current title:","تم تغيير عنوان البث":"Stream title changed","اكتب العنوان":"Enter the title",
+"يحتاج ربط تويتش من الإعدادات عشان يشتغل":"Needs a Twitch link from Settings to work",
+"لغة ردود البوت":"Bot reply language","تم تغيير لغة ردود البوت":"Bot reply language changed",
+"تتحكم في لغة رسائل الكوماندات الأساسية (إضافة، تعديل، حذف، اللعبة، العنوان)":"Controls the language of the core command messages (add, edit, delete, game, title)",
+"تغيير اللعبة والعنوان غير مفعّل من المطوّر":"Changing the game and title isn't enabled by the developer",
+"الستريمر ما ربط تويتش من موقع الستريمر":"The streamer hasn't linked Twitch on the streamer site",
+"انتهى الربط مع تويتش، الستريمر يعيد الربط من الموقع":"The Twitch link expired, the streamer needs to relink on the site",
+"تويتش رفض التغيير، حاول مرة ثانية":"Twitch refused the change, try again"
 };
 const AR={};for(const k in EN)AR[EN[k]]=k;
 let LANG="ar";
@@ -656,6 +765,7 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
     <button class="on" data-t="ch">القنوات</button>
     <button data-t="cmd">الكوماندات</button>
     <button data-t="msg">إرسال رسالة</button>
+    <button data-t="basic">الأساسية</button>
   </div>
 
   <section id="t-ch">
@@ -676,6 +786,14 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
   <section id="t-cmd" hidden>
     {{FORM}}
     <div class="card"><h2>كوماندات القناة</h2><div id="cmdlist"></div></div>
+  </section>
+
+  <section id="t-basic" hidden>
+    <div class="card">
+      <h2>كوماندات البوت الأساسية</h2>
+      <p class="hint">للستريمر والمودات. اضغط 📋 للنسخ</p>
+      <div id="basiclist"></div>
+    </div>
   </section>
 
   <section id="t-msg" hidden>
@@ -727,6 +845,7 @@ function render(){
     if(S.channels.some(c=>c.name===v))s.value=v;
   }
   renderCmds();
+  renderBasic($("#basiclist"));
 }
 function renderCmds(){
   const ch=$("#cmdch").value;
@@ -751,7 +870,7 @@ $("#sendmsg").onclick=()=>act(async()=>{
 },"تم الإرسال");
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{
   document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x===b));
-  for(const t of ["ch","cmd","msg"])$("#t-"+t).hidden=t!==b.dataset.t;
+  for(const t of ["ch","cmd","msg","basic"])$("#t-"+t).hidden=t!==b.dataset.t;
 });
 setInterval(()=>{if(!$("#app").hidden)load()},60000);
 initLang();
@@ -817,8 +936,8 @@ main{flex:1;min-width:0}
 .tool{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .tool input{flex:1;min-width:160px;margin:0}
 .tool .btn{width:auto}
-.chip{background:#111827;border:1px solid #1c2438;color:var(--mut);padding:8px 14px;border-radius:20px;font:inherit;cursor:pointer;font-size:13px}
-.chip.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.chip,.lchip{background:#111827;border:1px solid #1c2438;color:var(--mut);padding:8px 14px;border-radius:20px;font:inherit;cursor:pointer;font-size:13px}
+.chip.on,.lchip.on{background:var(--acc);border-color:var(--acc);color:#fff}
 .cmd{display:flex;gap:12px;padding:14px;margin-bottom:10px;align-items:flex-start}
 .cbody{flex:1;min-width:0}
 .chead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
@@ -894,6 +1013,15 @@ main{flex:1;min-width:0}
               <a class="btn line" id="pubbtn" target="_blank">فتح صفحة الكوماندات العامة</a>
             </div>
           </div>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>عنوان البث</h3>
+            <p class="mut" id="curtitle" data-nt style="margin:6px 0 0"></p>
+            <div class="tool" style="margin:12px 0 0">
+              <input id="newtitle" placeholder="العنوان الجديد" maxlength="140">
+              <button class="btn" id="savetitle">تغيير العنوان</button>
+            </div>
+            <p class="hint" id="titlehint" style="margin:8px 0 0" hidden>يحتاج ربط تويتش من الإعدادات عشان يشتغل</p>
+          </div>
           <div class="grid4">
             <div class="stat"><small>كوماندات عادية</small><b id="s-text">0</b></div>
             <div class="stat"><small>اختصارات الألعاب</small><b id="s-game">0</b></div>
@@ -917,12 +1045,10 @@ main{flex:1;min-width:0}
               <div class="bubble" id="simout" data-nt></div>
             </div>
           </div>
-          <div class="panel guide">
-            <h3>كوماندات الشات السريعة</h3>
-            <p><code>!addcmd !hi أهلاً $(user)</code>إضافة كوماند رد</p>
-            <p><code>!addgame !f fortnite</code>إضافة اختصار لعبة</p>
-            <p><code>!delcmd !hi</code>حذف كوماند</p>
-            <p><code>!commands</code>رابط الكوماندات للجميع</p>
+          <div class="panel">
+            <h3>كوماندات الشات الأساسية</h3>
+            <p class="hint" style="margin:0 0 6px">للستريمر والمودات. اضغط 📋 للنسخ</p>
+            <div id="basiclist"></div>
           </div>
         </section>
 
@@ -951,7 +1077,16 @@ main{flex:1;min-width:0}
 
         <section class="pg own" id="p-set" hidden>
           <div class="panel" style="margin-bottom:14px">
-            <h3>ربط تويتش (لكوماندات تغيير اللعبة)</h3>
+            <h3>لغة ردود البوت</h3>
+            <p class="mut">تتحكم في لغة رسائل الكوماندات الأساسية (إضافة، تعديل، حذف، اللعبة، العنوان)</p>
+            <div class="tool" style="margin:12px 0 10px">
+              <button class="lchip" data-bl="ar">العربية</button>
+              <button class="lchip" data-bl="en">English</button>
+            </div>
+            <div class="bubble" id="langprev" data-nt></div>
+          </div>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>ربط تويتش (لتغيير اللعبة والعنوان)</h3>
             <p class="mut" id="linkstate"></p>
             <a class="btn" id="connect" href="/auth/connect">ربط تويتش</a>
             <button class="btn ghost mt" id="unlink" hidden>إلغاء الربط</button>
@@ -1047,6 +1182,12 @@ function render(){
   $("#livepill").textContent=t(c.live?"لايف":"أوفلاين");
   $("#curgame").textContent=c.game?t("🎮 اللعبة الحالية:")+" "+c.game:"";
   $("#pubbtn").href="/c/"+encodeURIComponent(c.name);
+  $("#curtitle").textContent=c.title?t("📝 العنوان الحالي:")+" "+c.title:"";
+  $("#curtitle").hidden=!c.title;
+  $("#titlehint").hidden=!!c.linked;
+  document.querySelectorAll(".lchip").forEach(x=>x.classList.toggle("on",x.dataset.bl===(c.lang==="en"?"en":"ar")));
+  $("#langprev").textContent=c.lang==="en"?"@viewer -> The command !hi has been added successfully":"@viewer تمت إضافة الكوماند !hi بنجاح ✅";
+  renderBasic($("#basiclist"));
   $("#role").textContent=t(own?"ستريمر":"مود");
   $("#s-text").textContent=names.length-games;$("#s-game").textContent=games;
   $("#s-mods").textContent=own?c.editors.length:"—";
@@ -1132,6 +1273,10 @@ $("#simcmd").onchange=runSim;$("#simuser").oninput=runSim;$("#simarg").oninput=r
 const newCmd=()=>{cmdFormClear();openModal()};
 $("#newcmd").onclick=newCmd;
 $("#ovnew").onclick=()=>{go("cmd");newCmd()};
+$("#savetitle").onclick=()=>act(async()=>{
+  await api("POST",base()+"/title",{title:$("#newtitle").value});$("#newtitle").value="";
+},"تم تغيير عنوان البث");
+document.querySelectorAll(".lchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/lang",{lang:b.dataset.bl}),"تم تغيير لغة ردود البوت"));
 $("#cancelcmd").onclick=closeModal;
 $("#modal").onclick=e=>{if(e.target.id==="modal")closeModal()};
 $("#savecmd").onclick=()=>act(async()=>{
@@ -1158,39 +1303,97 @@ init();
 """
 
 PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
+<style>
+.wrap{max-width:900px}
+.hero{display:flex;align-items:center;gap:16px;padding:20px;border:1px solid var(--line);border-radius:18px;margin-bottom:16px;background:radial-gradient(circle at 100% 0,rgba(145,70,255,.28),transparent 60%),var(--card)}
+.av{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#9146ff,#5b21b6);display:grid;place-items:center;font-size:28px;font-weight:700;flex-shrink:0;box-shadow:0 0 0 4px rgba(145,70,255,.22)}
+.info{flex:1;min-width:0}
+.info h1{margin:0 0 6px;font-size:22px;word-break:break-all}
+.sub{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pill{display:inline-block;font-size:12px;padding:4px 12px;border-radius:20px;background:#1c2438;color:var(--mut);font-weight:700}
+.pill.live{background:rgba(46,204,113,.15);color:#2ecc71}
+.tool{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.tool input{flex:1;min-width:180px;margin:0}
+.chip{background:var(--card);border:1px solid var(--line);color:var(--mut);padding:8px 14px;border-radius:20px;font:inherit;cursor:pointer;font-size:13px}
+.chip.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.cc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.cc .h{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cc b{font-size:16px;color:#e9ddff;cursor:pointer;word-break:break-all}
+.cc b:hover{color:#fff}
+.cc p{margin:0;color:var(--mut);font-size:14px;word-break:break-word}
+.bd.p-sub{background:rgba(59,130,246,.18);color:#7db4ff}
+.bd.p-vip{background:rgba(236,72,153,.18);color:#f59ac8}
+.bd.p-mod{background:rgba(46,204,113,.15);color:#2ecc71}
+.bd.p-broadcaster{background:rgba(245,166,35,.18);color:#f5a623}
+.sec{margin-top:22px}
+@media(max-width:560px){.hero{padding:16px}.av{width:52px;height:52px;font-size:22px}}
+</style>
 <div class="wrap">
-  <header>
-    <div class="logo">🤖</div>
-    <div><h1 id="chname" dir="ltr" data-nt></h1><small>كوماندات البوت</small></div>
-    <div class="sp"></div>
+  <div class="hero">
+    <div class="av" id="av"></div>
+    <div class="info">
+      <h1 id="chname" dir="ltr" data-nt></h1>
+      <div class="sub"><span class="pill" id="live" hidden></span><span class="mut" id="cnt" data-nt></span></div>
+    </div>
     <button class="btn ghost langbtn">EN</button>
-  </header>
+  </div>
   <div class="card" id="nf" hidden><p class="mut" style="margin:0">القناة غير موجودة أو البوت غير مفعّل فيها</p></div>
-  <div class="card" id="box"><h2>كوماندات القناة</h2><div id="list"></div></div>
-  <p class="hint" style="text-align:center"><a href="/s" style="color:var(--acc)">أنت الستريمر أو مود؟ ادخل لوحة التحكم</a></p>
+  <div id="box">
+    <div class="tool">
+      <input id="q" placeholder="بحث في الكوماندات">
+      <button class="chip on" data-f="all">كل الأنواع</button>
+      <button class="chip" data-f="text">ردود</button>
+      <button class="chip" data-f="game">ألعاب</button>
+    </div>
+    <div class="grid" id="list"></div>
+    <div class="card sec">
+      <h2>كوماندات الشات الأساسية</h2>
+      <p class="hint">للستريمر والمودات. اضغط 📋 للنسخ</p>
+      <div id="basiclist"></div>
+    </div>
+  </div>
+  <p class="hint" style="text-align:center;margin-top:18px"><a href="/s" style="color:var(--acc)">أنت الستريمر أو مود؟ ادخل لوحة التحكم</a></p>
 </div>
 <div id="toast"></div>
 <script>
 //COMMON_JS
 const CHN=decodeURIComponent(location.pathname.split("/").pop()).toLowerCase();
-let D=null,BAD=false;
+let D=null,BAD=false,FILT="all",Q="";
 function render(){
-  $("#chname").textContent=CHN;
+  $("#chname").textContent=CHN;$("#av").textContent=CHN.charAt(0).toUpperCase();
   $("#nf").hidden=!BAD;$("#box").hidden=BAD;
-  if(!D)return;
+  if(BAD||!D)return;
+  const lp=$("#live");lp.hidden=false;lp.className="pill"+(D.live?" live":"");lp.textContent=t(D.live?"لايف":"أوفلاين");
+  const all=Object.keys(D.commands).sort(),q=Q.toLowerCase();
+  $("#cnt").textContent=all.length+" "+t("كوماند");
   const box=$("#list");box.innerHTML="";
-  const names=Object.keys(D.commands).sort();
-  if(!names.length){box.innerHTML='<p class="empty">'+t("ما فيه كوماندات")+'</p>';return}
+  const names=all.filter(n=>{
+    const c=D.commands[n];
+    if(FILT!=="all"&&c.type!==FILT)return false;
+    return !q||n.includes(q)||(c.reply||"").toLowerCase().includes(q)||(c.game||"").toLowerCase().includes(q);
+  });
+  if(!names.length){
+    box.innerHTML='<p class="empty" style="grid-column:1/-1">'+t(all.length?"ما فيه كوماندات تطابق بحثك":"ما فيه كوماندات")+'</p>';
+  }
   names.forEach(n=>{
-    const c=D.commands[n],d=document.createElement("div");d.className="row col";
-    d.innerHTML='<div class="top"><b dir="ltr" data-nt></b></div><div class="meta" data-nt></div><p data-nt></p>';
-    d.querySelector("b").textContent=(c.bang===false?"":"!")+n;
-    d.querySelector(".meta").textContent=(c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:t("💬 رد عادي"))+" • "+t(PERMS[c.perm]||"الكل");
+    const c=D.commands[n],d=document.createElement("div");d.className="cc";
+    d.innerHTML='<div class="h"><b dir="ltr" data-nt></b><span class="bd" data-nt></span></div><div class="meta" data-nt></div><p data-nt></p>';
+    const nm=(c.bang===false?"":"!")+n,b=d.querySelector("b");
+    b.textContent=nm;b.title=t("اضغط للنسخ");b.onclick=()=>copyText(nm);
+    const bd=d.querySelector(".bd");bd.textContent=t(PERMS[c.perm]||"الكل");
+    if(c.perm&&c.perm!=="everyone")bd.classList.add("p-"+c.perm);
+    d.querySelector(".meta").textContent=c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:t("💬 رد عادي");
     d.querySelector("p").textContent=c.type==="game"?"":(c.reply||"");
     box.appendChild(d);
   });
+  renderBasic($("#basiclist"));
 }
 onLang=render;
+$("#q").oninput=e=>{Q=e.target.value.trim();render()};
+document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{
+  FILT=b.dataset.f;document.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x===b));render();
+});
 initLang();
 fetch("/pub/"+encodeURIComponent(CHN)).then(r=>r.ok?r.json():Promise.reject()).then(d=>{D=d;render()}).catch(()=>{BAD=true;render()});
 </script>
@@ -1488,7 +1691,11 @@ def make_web_app(bot):
     ch = request.match_info["channel"].lower()
     if ch not in store.data["channels"]:
       return jerr("القناة غير موجودة", 404)
-    return web.json_response({"name": ch, "commands": store.data["commands"].get(ch, {})})
+    return web.json_response({
+        "name": ch,
+        "live": await bot.is_channel_live(ch),
+        "commands": store.data["commands"].get(ch, {}),
+    })
 
   async def s_logout(request):
     resp = web.json_response({"ok": True})
@@ -1508,21 +1715,23 @@ def make_web_app(bot):
     if err:
       return err
     _, ch, role = a
-    game = None
+    game = title = None
     if twitch.enabled:
       try:
-        game = await twitch.current_game(ch)
+        game, title = await twitch.channel_info(ch)
       except Exception:
-        game = None
+        game = title = None
     return web.json_response({
         "name": ch, "role": role,
         "live": await bot.is_channel_live(ch),
         "game": game,
+        "title": title,
         "twitch": twitch.enabled,
         "linked": ch in store.data["tokens"],
         "commands": store.data["commands"].get(ch, {}),
         "editors": store.data["editors"].get(ch, []) if role == "owner" else [],
         "usage": bot.usage.get(ch, {}),
+        "lang": store.data["lang"].get(ch, "ar"),
     })
 
   async def s_save_cmd(request):
@@ -1606,6 +1815,31 @@ def make_web_app(bot):
       print(f"تعذر الخروج من {ch}: {e}")
     return web.json_response({"ok": True})
 
+  async def s_lang(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    lang = (await jbody(request)).get("lang")
+    if lang not in ("ar", "en"):
+      return jerr("صار خطأ")
+    store.data["lang"][ch] = lang
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_title(request):
+    a, err = access(request)
+    if err:
+      return err
+    _, ch, _ = a
+    title = str((await jbody(request)).get("title", "")).strip()[:140]
+    if not title:
+      return jerr("اكتب العنوان")
+    ok, result = await twitch.set_title(ch, title)
+    if not ok:
+      return jerr(MSG["e_" + result][0].format(q=""))
+    return web.json_response({"ok": True})
+
   app = web.Application(middlewares=[auth_mw])
   r = app.router
   r.add_get("/", index)
@@ -1639,6 +1873,8 @@ def make_web_app(bot):
   r.add_delete("/s/api/channel/{channel}/editors/{name}", s_del_editor)
   r.add_post("/s/api/channel/{channel}/unlink", s_unlink)
   r.add_post("/s/api/channel/{channel}/leave", s_leave)
+  r.add_post("/s/api/channel/{channel}/lang", s_lang)
+  r.add_post("/s/api/channel/{channel}/title", s_title)
   return app
 
 
@@ -1731,6 +1967,28 @@ class Bot(commands.Bot):
   # ----------------------------------------------------------
   # الكوماندات (إدارة + مخصصة)
   # ----------------------------------------------------------
+  def lang_of(self, ch):
+    return "en" if self.store.data["lang"].get(ch) == "en" else "ar"
+
+  def tr(self, ch, key, **kw):
+    ar, en = MSG[key]
+    return (en if self.lang_of(ch) == "en" else ar).format(**kw)
+
+  async def say(self, message, ch, key, extra="", **kw):
+    """يرد على المستخدم بلغة القناة: عربي «@user نص» أو إنجليزي «@user -> text»."""
+    sep = " -> " if self.lang_of(ch) == "en" else " "
+    text = self.tr(ch, key, **kw) + (self.tr(ch, extra) if extra else "")
+    await message.channel.send(f"@{message.author.name}{sep}{text}"[:490])
+
+  async def send_cmd_list(self, message, ch, level):
+    cmds = self.store.data["commands"].get(ch, {})
+    usable = [n for n, c in cmds.items() if level >= PERMS[c["perm"]]]
+    if not usable:
+      await self.say(message, ch, "no_cmds")
+    else:
+      names = " ".join(disp_cmd(n, cmds[n]) for n in sorted(usable))
+      await self.say(message, ch, "cmds_list", n=names)
+
   async def handle_command(self, message, content, username, channel_name,
                            is_owner, level):
     parts = content.split(maxsplit=2)
@@ -1743,6 +2001,9 @@ class Bot(commands.Bot):
     mention = f"@{message.author.name}"
     channel_cmds = self.store.data["commands"].setdefault(channel_name, {})
 
+    async def say(key, extra="", **kw):
+      await self.say(message, channel_name, key, extra, **kw)
+
     # ---------- !commands: رابط صفحة الكوماندات للجميع ----------
     if cmd == "commands":
       ckey = (channel_name, "!commands")
@@ -1751,22 +2012,15 @@ class Bot(commands.Bot):
         return True
       self.cmd_cooldown[ckey] = now
       if SITE_URL:
-        await send(f"{mention} كل كوماندات القناة هنا: {SITE_URL}/c/{channel_name}")
+        await say("cmds_link", u=f"{SITE_URL}/c/{channel_name}")
       else:
-        usable = [n for n, c in channel_cmds.items() if level >= PERMS[c["perm"]]]
-        names = " ".join(disp_cmd(n, channel_cmds[n]) for n in sorted(usable)) or "ما فيه كوماندات مضافة للحين"
-        await send(f"{mention} الكوماندات: {names}"[:480])
+        await self.send_cmd_list(message, channel_name, level)
       return True
 
     # ---------- كوماندات المودرز ----------
     if cmd in ("addcmd", "editcmd", "delcmd", "removecmd", "cmds"):
       if cmd == "cmds":
-        usable = [n for n, c in channel_cmds.items() if level >= PERMS[c["perm"]]]
-        if not usable:
-          await send(f"{mention} ما فيه كوماندات مضافة للحين")
-        else:
-          names = " ".join(disp_cmd(n, channel_cmds[n]) for n in sorted(usable))
-          await send(f"{mention} الكوماندات: {names}"[:480])
+        await self.send_cmd_list(message, channel_name, level)
         return True
 
       if not is_mod:
@@ -1774,47 +2028,47 @@ class Bot(commands.Bot):
 
       if cmd in ("delcmd", "removecmd"):
         if len(parts) < 2:
-          await send(f"{mention} الصيغة: !delcmd !اسم_الكوماند")
+          await say("usage_del")
           return True
         name = parts[1].lstrip("!").lower()
         if name in channel_cmds:
           shown = disp_cmd(name, channel_cmds[name])
           del channel_cmds[name]
           await self.store.save()
-          await send(f"{mention} -> The command {shown} has been deleted successfully")
+          await say("deleted", c=shown)
         else:
-          await send(f"{mention} ما لقيت كوماند باسم {parts[1]}")
+          await say("del_nf", c=parts[1])
         return True
 
       # addcmd / editcmd
       if len(parts) < 3:
-        await send(f"{mention} الصيغة: !{cmd} اسم_الكوماند الرد (حط ! قبل الاسم إذا تبيه يشتغل بـ !)")
+        await say("usage_add", cmd=cmd)
         return True
       bang = parts[1].startswith("!")
       name = parts[1].lstrip("!").lower()
       reply = parts[2].strip()[:450]
       if not name or len(name) > 30 or name in BUILTIN:
-        await send(f"{mention} هذا الاسم ما ينفع للكوماند")
+        await say("bad_name")
         return True
       if not bang and not re.fullmatch(r"\w+", name):
-        await send(f"{mention} الكوماند بدون ! لازم يكون حروف وأرقام بس")
+        await say("bad_plain")
         return True
 
       if cmd == "addcmd":
         if name in channel_cmds:
-          await send(f"{mention} الكوماند {disp_cmd(name, channel_cmds[name])} موجود، استخدم !editcmd للتعديل")
+          await say("exists", c=disp_cmd(name, channel_cmds[name]))
           return True
         channel_cmds[name] = norm_cmd(reply)
         channel_cmds[name]["bang"] = bang
         await self.store.save()
-        await send(f"{mention} -> The command {disp_cmd(name, channel_cmds[name])} has been added successfully")
+        await say("added", c=disp_cmd(name, channel_cmds[name]))
       else:
         if name not in channel_cmds:
-          await send(f"{mention} ما لقيت {parts[1]}، استخدم !addcmd للإضافة")
+          await say("edit_nf", c=parts[1])
           return True
         channel_cmds[name]["reply"] = reply
         await self.store.save()
-        await send(f"{mention} -> The command {disp_cmd(name, channel_cmds[name])} has been edited successfully")
+        await say("edited", c=disp_cmd(name, channel_cmds[name]))
       return True
 
     # ---------- !addgame: اختصار يغيّر كاتيقوري البث ----------
@@ -1824,30 +2078,30 @@ class Bot(commands.Bot):
       if not is_mod:
         return True
       if len(parts) < 3:
-        await send(f"{mention} الصيغة: !addgame !اسم_الكوماند اسم_اللعبة  مثال: !addgame !f fortnite")
+        await say("usage_game")
         return True
       if not self.twitch.enabled:
-        await send(f"{mention} تغيير اللعبة غير مفعّل من المطوّر")
+        await say("game_off")
         return True
       raw_name = parts[1]
       bang = raw_name.startswith("!")
       key_name = raw_name.lstrip("!").lower()
       existing = channel_cmds.get(key_name)
       if existing and existing.get("type") != "game":
-        await send(f"{mention} {disp_cmd(key_name, existing)} كوماند عادي موجود، احذفه أول بـ !delcmd")
+        await say("game_is_text", c=disp_cmd(key_name, existing))
         return True
       query = parts[2].strip()
       game = await self.twitch.find_game(query)
       if not game:
-        await send(f"{mention} ما لقيت لعبة أو كاتيقوري باسم {query} في تويتش")
+        await say("game_nf", q=query)
         return True
       try:
         name, entry = build_command({
             "type": "game", "name": raw_name, "bang": bang,
             "game": game["name"], "perm": "mod",
         })
-      except ValueError as e:
-        await send(f"{mention} {e}")
+      except ValueError:
+        await say("bad_name")
         return True
       updated = existing is not None
       if updated:
@@ -1855,11 +2109,30 @@ class Bot(commands.Bot):
         entry["reply"] = existing.get("reply") or entry["reply"]
       channel_cmds[name] = entry
       await self.store.save()
-      verb = "edited" if updated else "added"
-      text = f"{mention} -> The game command {disp_cmd(name, entry)} has been {verb} successfully ({game['name']}) 🎮"
-      if channel_name not in self.store.data["tokens"]:
-        text += " ⚠️ الستريمر لازم يربط تويتش من الموقع عشان يشتغل"
-      await send(text[:490])
+      warn = "" if channel_name in self.store.data["tokens"] else "link_warn"
+      await say("g_edited" if updated else "g_added", warn,
+                c=disp_cmd(name, entry), g=game["name"])
+      return True
+
+    # ---------- !settitle: تغيير عنوان البث ----------
+    if cmd == "settitle":
+      if not is_mod:
+        return True
+      args = content.split(maxsplit=1)
+      title = args[1].strip() if len(args) > 1 else ""
+      if not title:
+        await say("title_usage")
+        return True
+      tkey = (channel_name, "!settitle")
+      now = time.time()
+      if now - self.cmd_cooldown.get(tkey, 0) < COMMAND_COOLDOWN:
+        return True
+      self.cmd_cooldown[tkey] = now
+      ok, result = await self.twitch.set_title(channel_name, title)
+      if ok:
+        await say("title_ok", t=result)
+      else:
+        await say("e_" + result, q="")
       return True
 
     # ---------- كوماندات الأونر (إدارة القنوات) ----------
@@ -1948,7 +2221,7 @@ class Bot(commands.Bot):
         text = format_response(entry["reply"], message.author.name, channel_name, target, result)
         await send(text[:490])
       else:
-        await send(f"{mention} {result}"[:490])
+        await self.say(message, channel_name, "e_" + result, q=entry["game"])
       return True
 
     # الكوماندات العادية ما ترد إلا إذا القناة لايف
