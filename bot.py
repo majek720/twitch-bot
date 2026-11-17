@@ -708,6 +708,11 @@ COMMON_JS = r"""
 const $=s=>document.querySelector(s);
 const PERMS={everyone:"الكل",sub:"المشتركين وفوق",vip:"VIP وفوق",mod:"المودات فقط",broadcaster:"الستريمر فقط"};
 const BASIC=[
+ {c:"السلام عليكم / سلام",ce:"Salam / Hello",ar:"رد تلقائي عند كتابة السلام",en:"Auto reply when typing salam",p:"everyone"},
+ {c:"مساء الخير",ce:"Good evening",ar:"رد تلقائي عند قول مساء الخير",en:"Auto reply for evening greeting",p:"everyone"},
+ {c:"باك",ce:"Back",ar:"رد تلقائي عند العودة (باك)",en:"Auto reply when returning",p:"everyone"},
+ {c:"برب / brb",ce:"BRB",ar:"رد تلقائي عند الذهاب مؤقتاً",en:"Auto reply when going away",p:"everyone"},
+ {c:"!reminders on/off",ce:"!reminders on/off",ar:"تشغيل أو إيقاف الأذكار والأدعية والماء",en:"Toggle automatic reminders",p:"mod"},
  {c:"!addcmd !hi أهلاً $(user)",ce:"!addcmd !hi Hello $(user)",ar:"إضافة كوماند رد",en:"Add a text command",p:"mod"},
  {c:"!editcmd !hi مرحباً $(user)",ce:"!editcmd !hi Welcome $(user)",ar:"تعديل رد كوماند موجود",en:"Edit an existing command's reply",p:"mod"},
  {c:"!delcmd !hi",ce:"!delcmd !hi",ar:"حذف كوماند",en:"Delete a command",p:"mod"},
@@ -819,7 +824,7 @@ try{if(localStorage.getItem("lang")==="en")LANG="en"}catch(e){}
 const nz=s=>s.replace(/\s+/g," ").trim();
 const t=s=>LANG==="en"&&EN[s]?EN[s]:s;
 const ask=(s,v)=>confirm(t(s).replace("{n}",v));
-let onAuth=()=>{},onLang=()=>{};
+let onAuth=(),onLang=();
 function walk(n){
   const map=LANG==="en"?EN:AR;
   if(n.nodeType===3){
@@ -2193,7 +2198,7 @@ def make_web_app(bot):
         "lang": store.data["lang"].get(ch, "ar"),
         "reminders": bool(store.data["reminders"].get(ch, False)),
         "reminder_cfg": store.get_reminder_cfg(ch) if role == "owner" else {},
-        "custom_timers": store.get_custom_timers(ch) if role == "owner" else [],
+        "custom_timers": store.get_custom_timers(ch) if role == "owner" else {},
         "auto_replies": store.get_auto_replies(ch) if role == "owner" else {},
         "custom_bot": cb.get("login") if isinstance(cb, dict) else None,
         "default_bot": BOT_LOGIN,
