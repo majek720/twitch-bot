@@ -1633,7 +1633,7 @@ def make_web_app(bot):
     user = data["data"][0]
     login_name = user["login"].lower()
 
-    if state_val[0] == "x":
+    if state_val.startswith("x"):
       target_ch = request.cookies.get("cbot_ch", "").lower()
       sess_login = read_session(request.cookies.get("ssess", ""))
       store.data.setdefault("custom_bots", {})[target_ch] = {"login": login_name, "user_id": str(user["id"])}
@@ -1680,18 +1680,54 @@ def make_web_app(bot):
 
   app = web.Application()
   r = app.router
+
+  # Fix for lambda routing issues: Defined using standard async functions instead of inline lambdas with tuples
+  async def handle_streamer_auth(req):
+    sv = secrets.token_urlsafe(16)
+    target_url = AUTH_URL + "?" + urlencode({"client_id": CLIENT_ID, "redirect_uri": redirect_uri, "response_type": "code", "state": sv, "scope": SCOPES["s"]})
+    resp = web.HTTPFound(target_url)
+    resp.set_cookie("ostate", sv, max_age=600, httponly=True)
+    return resp
+
+  async def handle_connect_auth(req):
+    sv = secrets.token_urlsafe(16)
+    target_url = AUTH_URL + "?" + urlencode({"client_id": CLIENT_ID, "redirect_uri": redirect_uri, "response_type": "code", "state": sv, "scope": SCOPES["c"]})
+    resp = web.HTTPFound(target_url)
+    resp.set_cookie("ostate", sv, max_age=600, httponly=True)
+    return resp
+
+  async def handle_custom_bot_auth(req):
+    sv = "x" + secrets.token_urlsafe(16)
+    target_url = AUTH_URL + "?" + urlencode({"client_id": CLIENT_ID, "redirect_uri": redirect_uri, "response_type": "code", "state": sv, "scope": SCOPES["cb"], "force_verify": "true"})
+    resp = web.HTTPFound(target_url)
+    resp.set_cookie("ostate", sv, max_age=600, httponly=True)
+    resp.set_cookie("cbot_ch", req.query.get("ch", "").lower(), max_age=600, httponly=True)
+    return resp
+
+  async def handle_logout(req):
+    resp = web.json_response({"ok": True})
+    resp.del_cookie("ssess")
+    return resp
+
+  async def handle_me(req):
+    login = read_session(req.cookies.get("ssess", "")) or "user"
+    channels = [{"name": c, "role": role_of(login, c)} for c in store.data["channels"] if role_of(login, c)]
+    return web.json_response({"login": login, "channels": channels})
+
   r.add_get("/s", lambda req: web.Response(text=STREAMER_HTML, content_type="text/html"))
   r.add_get("/c/{channel}", lambda req: web.Response(text=PUBLIC_HTML, content_type="text/html"))
   r.add_get("/pub/{channel}", lambda req: web.json_response({"name": req.match_info["channel"], "live": False, "commands": store.data["commands"].get(req.match_info["channel"].lower(), {})}))
   r.add_get("/manifest.json", lambda req: web.json_response(MANIFEST))
   r.add_get("/icon.svg", lambda req: web.Response(text=ICON_SVG, content_type="image/svg+xml"))
   r.add_post("/eventsub", eventsub_hook)
-  r.add_get("/auth/streamer", lambda req: (lambda sv=secrets.token_urlsafe(16), resp=web.HTTPFound(AUTH_URL + "?" + urlencode({"client_id": CLIENT_ID, "redirect_uri": redirect_uri, "response_type": "code", "state": sv, "scope": SCOPES["s"]})): (resp.set_cookie("ostate", sv, max_age=600, httponly=True), resp)()))
-  r.add_get("/auth/connect", lambda req: (lambda sv=secrets.token_urlsafe(16), resp=web.HTTPFound(AUTH_URL + "?" + urlencode({"client_id": CLIENT_ID, "redirect_uri": redirect_uri, "response_type": "code", "state": sv, "scope": SCOPES["c"]})): (resp.set_cookie("ostate", sv, max_age=600, httponly=True), resp)()))
-  r.add_get("/auth/custom_bot", lambda req: (lambda sv="x"+secrets.token_urlsafe(16), resp=web.HTTPFound(AUTH_URL + "?" + urlencode({"client_id": CLIENT_ID, "redirect_uri": redirect_uri, "response_type": "code", "state": sv, "scope": SCOPES["cb"], "force_verify": "true"})): (resp.set_cookie("ostate", sv, max_age=600, httponly=True), resp.set_cookie("cbot_ch", req.query.get("ch","").lower(), max_age=600, httponly=True), resp)()))
+  
+  r.add_get("/auth/streamer", handle_streamer_auth)
+  r.add_get("/auth/connect", handle_connect_auth)
+  r.add_get("/auth/custom_bot", handle_custom_bot_auth)
   r.add_get("/auth/callback", auth_callback)
-  r.add_post("/s/api/logout", lambda req: (resp := web.json_response({"ok": True}), resp.del_cookie("ssess"), resp)[2])
-  r.add_get("/s/api/me", lambda req: web.json_response({"login": read_session(req.cookies.get("ssess", "")) or "user", "channels": [{"name": c, "role": role_of(read_session(req.cookies.get("ssess", "")), c)} for c in store.data["channels"] if role_of(read_session(req.cookies.get("ssess", "")), c)]}))
+  
+  r.add_post("/s/api/logout", handle_logout)
+  r.add_get("/s/api/me", handle_me)
   
   async def s_channel(req):
     a, err = access(req)
