@@ -51,7 +51,7 @@ PERMS = {"everyone": 0, "sub": 1, "vip": 2, "mod": 3, "broadcaster": 4}
 # كوماندات البوت الأساسية (ما تنفع كأسماء لكوماندات مخصصة)
 BUILTIN = {
     "addcmd", "editcmd", "delcmd", "removecmd", "cmds",
-    "addchannel", "removechannel", "channels",
+    "addchannel", "removechannel", "channels", "commands",
 }
 
 DHIKR_LIST = [
@@ -175,6 +175,7 @@ class Store:
         "commands": {},
         "editors": {},  # قناة -> قائمة مودات مصرّح لهم يعدلون الكوماندات
         "tokens": {},  # قناة -> ربط تويتش لتغيير اللعبة
+        "banned": [],  # قنوات محظورة من استخدام البوت
     }
 
   @property
@@ -210,6 +211,8 @@ class Store:
       }
       self.data["editors"] = loaded.get("editors", {})
       self.data["tokens"] = loaded.get("tokens", {})
+      self.data["banned"] = loaded.get("banned", [])
+      self.data["channels"] = [c for c in self.data["channels"] if c not in self.data["banned"]]
     except Exception as e:
       print(f"تعذر تحميل البيانات: {e}")
 
@@ -397,7 +400,7 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .btn.mt{margin-top:8px}
 .row{display:flex;align-items:center;gap:10px;padding:12px 4px;border-bottom:1px solid var(--line)}
 .row:last-child{border:0}
-.row b{flex:1;text-align:right}
+.row b{flex:1;text-align:start}
 .row small{color:var(--mut)}
 .row.col{flex-direction:column;align-items:stretch;gap:6px}
 .row .top{display:flex;align-items:center;justify-content:space-between}
@@ -421,8 +424,108 @@ a.btn{display:block;text-align:center;text-decoration:none}
 COMMON_JS = r"""
 const $=s=>document.querySelector(s);
 const PERMS={everyone:"الكل",sub:"المشتركين وفوق",vip:"VIP وفوق",mod:"المودات فقط",broadcaster:"الستريمر فقط"};
-let onAuth=()=>{};
-function toast(m,bad){const t=$("#toast");t.textContent=m;t.className="show"+(bad?" bad":"");setTimeout(()=>t.className="",2400)}
+const EN={
+"لوحة تحكم البوت":"Bot Control Panel","موقع الستريمر":"Streamer Site",
+"كلمة المرور":"Password","دخول":"Log in","خروج":"Log out",
+"القنوات":"Channels","الكوماندات":"Commands","إرسال رسالة":"Send message",
+"إضافة قناة":"Add a channel","اسم القناة مثل: majek113":"Channel name, e.g. majek113",
+"إضافة القناة":"Add channel","القنوات الحالية":"Current channels",
+"إضافة / تعديل كوماند":"Add / edit command","نوع الكوماند":"Command type",
+"💬 رد عادي":"💬 Text reply","🎮 اختصار لعبة (يغيّر لعبة البث)":"🎮 Game shortcut (changes the stream's game)",
+"اسم الكوماند بدون ! مثل: fortnite":"Command name without !, e.g. fortnite",
+"اسم اللعبة مثل: Fortnite":"Game name, e.g. Fortnite",
+"لازم الستريمر يربط تويتش من تبويب الإعدادات في موقع الستريمر عشان تغيير اللعبة يشتغل.":"The streamer must link Twitch from the Settings tab on the streamer site for game changing to work.",
+"رد البوت":"Bot reply","رد البوت بعد تغيير اللعبة (اختياري)":"Bot reply after changing the game (optional)",
+"مين يقدر يستخدم الكوماند؟":"Who can use this command?",
+"الكل":"Everyone","المشتركين وفوق":"Subscribers and above","VIP وفوق":"VIPs and above","المودات فقط":"Mods only","الستريمر فقط":"Streamer only",
+"حفظ الكوماند":"Save command","كوماندات القناة":"Channel commands",
+"إرسال رسالة كأنك البوت":"Send a message as the bot","نص الرسالة":"Message text","إرسال":"Send",
+"ضغطة وحدة وتتفعّل الأمور: البوت يدخل قناتك ويرتبط تغيير اللعبة":"One click does it all: the bot joins your channel and game changing gets linked",
+"أنا ستريمر: تفعيل البوت في قناتي":"I'm a streamer: activate the bot on my channel",
+"أنا مود: دخول فقط":"I'm a mod: log in only",
+"الموقع غير مفعّل بعد من المطوّر.":"The site hasn't been enabled by the developer yet.",
+"ما عندك قنوات هنا. إذا أنت ستريمر اضغط \"أنا ستريمر\" عشان تفعّل البوت في قناتك، وإذا أنت مود خلّ الستريمر يضيفك.":"You have no channels here. If you're a streamer, press \"I'm a streamer\" to activate the bot on your channel. If you're a mod, ask the streamer to add you.",
+"الإعدادات":"Settings","ربط تويتش (لكوماندات تغيير اللعبة)":"Twitch link (for game-changing commands)",
+"ربط تويتش":"Link Twitch","إعادة الربط":"Relink","إلغاء الربط":"Unlink",
+"المودات المصرّح لهم يعدلون الكوماندات":"Mods allowed to edit commands",
+"يوزر المود في تويتش":"Mod's Twitch username","إضافة مود":"Add mod",
+"المود يدخل بحسابه من نفس الموقع ويعدل الكوماندات فقط. ما يقدر يشيل البوت أو يغيّر الإعدادات.":"Mods log in with their own account on this site and can only edit commands. They can't remove the bot or change settings.",
+"إزالة البوت":"Remove the bot",
+"يطلع البوت من قناتك وتتوقف كل الكوماندات والردود. الربط مع تويتش ينحذف.":"The bot leaves your channel and all commands and replies stop. The Twitch link is deleted.",
+"إزالة البوت من قناتي":"Remove the bot from my channel",
+"البوت:":"Bot:","ما فيه قنوات":"No channels","لايف":"Live","أوفلاين":"Offline",
+"ما فيه كوماندات":"No commands","🎮 يغيّر اللعبة إلى:":"🎮 Changes the game to:",
+"🎮 اللعبة الحالية:":"🎮 Current game:","(مود)":"(mod)",
+"الربط غير مفعّل من المطوّر.":"Linking isn't enabled by the developer.",
+"✅ مربوط: كوماندات اختصار اللعبة تقدر تغيّر لعبة بثك.":"✅ Linked: game shortcut commands can change your stream's game.",
+"غير مربوط: اربط تويتش عشان كوماندات تغيير اللعبة تشتغل.":"Not linked: link Twitch so game-changing commands work.",
+"ما أضفت أحد للحين":"You haven't added anyone yet",
+"تم حذف القناة":"Channel deleted","تمت إضافة القناة":"Channel added","تم حذف الكوماند":"Command deleted",
+"تم حفظ الكوماند":"Command saved","تم الإرسال":"Sent","تم إلغاء الربط":"Unlinked",
+"تم إزالة البوت":"Bot removed","تمت الإزالة":"Removed","تمت إضافة المود":"Mod added",
+"تم تفعيل البوت وربط تويتش ✅":"Bot activated and Twitch linked ✅",
+"تم إلغاء الدخول":"Login cancelled","فشل الدخول مع تويتش، حاول مرة ثانية":"Twitch login failed, try again",
+"التفعيل الذاتي مقفل، كلم المطوّر":"Self-activation is disabled, contact the developer",
+"ما وافقت على الصلاحية المطلوبة":"You didn't grant the required permission","صار خطأ":"Something went wrong",
+"لوحة التحكم مقفلة: ضيف DASHBOARD_PASSWORD في Render":"The panel is locked: add DASHBOARD_PASSWORD in Render",
+"كلمة المرور غلط":"Wrong password","اسم القناة غير صحيح":"Invalid channel name",
+"القناة مضافة من قبل":"Channel already added","القناة مو موجودة":"Channel not found",
+"اختر قناة صحيحة":"Pick a valid channel","اسم الكوماند ما ينفع":"Invalid command name",
+"اكتب اسم اللعبة":"Enter the game name","اكتب رد الكوماند":"Enter the command reply",
+"الكوماند مو موجود":"Command not found","اختر قناة واكتب الرسالة":"Pick a channel and write a message",
+"ما عندك صلاحية":"You don't have permission","اليوزر غير صحيح":"Invalid username",
+"هذا حسابك أنت":"That's your own account","المود مضاف من قبل":"Mod already added",
+"حظر قناة":"Ban a channel","اسم القناة اللي تبي تحظرها":"Channel to ban","حظر القناة":"Ban channel",
+"القنوات المحظورة":"Banned channels","ما فيه قنوات محظورة":"No banned channels","رفع الحظر":"Unban",
+"تم حظر القناة":"Channel banned","تم رفع الحظر":"Ban lifted",
+"تحظر القناة {n} من استخدام البوت؟":"Ban channel {n} from using the bot?",
+"القناة محظورة من قبل":"Channel already banned","ما تقدر تحظر قناتك":"You can't ban your own channel",
+"القناة محظورة، ارفع الحظر أولاً":"Channel is banned, lift the ban first",
+"🚫 قناتك محظورة":"🚫 Your channel is banned",
+"تم حظر قناتك من استخدام البوت. إذا تعتقد أن هذا خطأ تواصل مع المطوّر.":"Your channel has been banned from using the bot. If you think this is a mistake, contact the developer.",
+"كوماندات البوت":"Bot commands","القناة غير موجودة أو البوت غير مفعّل فيها":"Channel not found or the bot isn't active there",
+"أنت الستريمر أو مود؟ ادخل لوحة التحكم":"Are you the streamer or a mod? Open the control panel",
+"القناة غير موجودة":"Channel doesn't exist",
+"تحذف القناة {n}؟":"Delete channel {n}?","تحذف !{n}؟":"Delete !{n}?",
+"تلغي الربط مع تويتش؟":"Unlink Twitch?","متأكد تبي تشيل البوت من قناتك؟":"Are you sure you want to remove the bot from your channel?"
+};
+const AR={};for(const k in EN)AR[EN[k]]=k;
+let LANG="ar";
+try{if(localStorage.getItem("lang")==="en")LANG="en"}catch(e){}
+const nz=s=>s.replace(/\s+/g," ").trim();
+const t=s=>LANG==="en"&&EN[s]?EN[s]:s;
+const ask=(s,v)=>confirm(t(s).replace("{n}",v));
+let onAuth=()=>{},onLang=()=>{};
+function walk(n){
+  const map=LANG==="en"?EN:AR;
+  if(n.nodeType===3){
+    const raw=n.nodeValue,k=nz(raw),m=k&&map[k];
+    if(m)n.nodeValue=raw.replace(raw.trim(),()=>m);
+    return;
+  }
+  if(n.nodeType!==1||n.tagName==="SCRIPT"||n.tagName==="STYLE"||n.hasAttribute("data-nt"))return;
+  for(const a of ["placeholder","title"]){
+    if(n.hasAttribute(a)){const m=map[nz(n.getAttribute(a))];if(m)n.setAttribute(a,m)}
+  }
+  n.childNodes.forEach(walk);
+}
+function applyLang(){
+  document.documentElement.lang=LANG;
+  document.documentElement.dir=LANG==="en"?"ltr":"rtl";
+  const m=(LANG==="en"?EN:AR)[nz(document.title)];if(m)document.title=m;
+  walk(document.body);
+  document.querySelectorAll(".langbtn").forEach(b=>b.textContent=LANG==="en"?"عربي":"EN");
+  onLang();
+}
+function initLang(){
+  document.querySelectorAll(".langbtn").forEach(b=>b.onclick=()=>{
+    LANG=LANG==="en"?"ar":"en";
+    try{localStorage.setItem("lang",LANG)}catch(e){}
+    applyLang();
+  });
+  applyLang();
+}
+function toast(m,bad){m=t(m);const x=$("#toast");x.textContent=m;x.className="show"+(bad?" bad":"");setTimeout(()=>x.className="",2400)}
 async function api(method,path,body){
   const r=await fetch(path,{method,headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
   const d=await r.json().catch(()=>({}));
@@ -433,14 +536,14 @@ async function api(method,path,body){
 function cmdFormSync(){
   const g=$("#ctype").value==="game";
   $("#cgame").hidden=!g;$("#gamehint").hidden=!g;
-  $("#creply").placeholder=g?"رد البوت بعد تغيير اللعبة (اختياري)":"رد البوت";
+  $("#creply").placeholder=t(g?"رد البوت بعد تغيير اللعبة (اختياري)":"رد البوت");
 }
 function cmdFormInit(){
   $("#ctype").onchange=()=>{
     if($("#ctype").value==="game"&&$("#cperm").value==="everyone")$("#cperm").value="mod";
     cmdFormSync();
   };
-  $("#chips").onclick=e=>{if(e.target.tagName==="SPAN"){const t=$("#creply");t.value+=e.target.textContent;t.focus()}};
+  $("#chips").onclick=e=>{if(e.target.tagName==="SPAN"){const ta=$("#creply");ta.value+=e.target.textContent;ta.focus()}};
   cmdFormSync();
 }
 function cmdFormGet(){return{type:$("#ctype").value,name:$("#cname").value,game:$("#cgame").value,reply:$("#creply").value,perm:$("#cperm").value}}
@@ -455,15 +558,15 @@ function cmdFormFill(n,c){
 }
 function renderCmdList(box,cmds,onDel){
   box.innerHTML="";const names=Object.keys(cmds).sort();
-  if(!names.length){box.innerHTML='<p class="empty">ما فيه كوماندات</p>';return}
+  if(!names.length){box.innerHTML='<p class="empty">'+t("ما فيه كوماندات")+'</p>';return}
   names.forEach(n=>{
     const c=cmds[n],d=document.createElement("div");d.className="row col";
-    d.innerHTML='<div class="top"><b dir="ltr"></b><span><button class="ic ed">✏️</button><button class="ic del">🗑</button></span></div><div class="meta"></div><p></p>';
+    d.innerHTML='<div class="top"><b dir="ltr" data-nt></b><span><button class="ic ed">✏️</button><button class="ic del">🗑</button></span></div><div class="meta" data-nt></div><p data-nt></p>';
     d.querySelector("b").textContent="!"+n;
-    d.querySelector(".meta").textContent=(c.type==="game"?"🎮 يغيّر اللعبة إلى: "+c.game:"💬 رد عادي")+" • "+(PERMS[c.perm]||"الكل");
+    d.querySelector(".meta").textContent=(c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:t("💬 رد عادي"))+" • "+t(PERMS[c.perm]||"الكل");
     d.querySelector("p").textContent=c.reply||"";
     d.querySelector(".ed").onclick=()=>cmdFormFill(n,c);
-    d.querySelector(".del").onclick=()=>{if(confirm("تحذف !"+n+"؟"))onDel(n)};
+    d.querySelector(".del").onclick=()=>{if(ask("تحذف !{n}؟",n))onDel(n)};
     box.appendChild(d);
   });
 }
@@ -478,7 +581,7 @@ CMD_FORM = r"""
     <option value="text">💬 رد عادي</option>
     <option value="game">🎮 اختصار لعبة (يغيّر لعبة البث)</option>
   </select>
-  <input id="cname" dir="ltr" placeholder="اسم الكوماند بدون !  مثل: fortnite">
+  <input id="cname" dir="ltr" placeholder="اسم الكوماند بدون ! مثل: fortnite">
   <input id="cgame" dir="ltr" placeholder="اسم اللعبة مثل: Fortnite" hidden>
   <p class="hint" id="gamehint" hidden>لازم الستريمر يربط تويتش من تبويب الإعدادات في موقع الستريمر عشان تغيير اللعبة يشتغل.</p>
   <textarea id="creply" placeholder="رد البوت"></textarea>
@@ -504,6 +607,7 @@ HEAD = r"""<!DOCTYPE html>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg">
+<script>try{if(localStorage.getItem("lang")==="en"){document.documentElement.dir="ltr";document.documentElement.lang="en"}}catch(e){}</script>
 <title>{{TITLE}}</title>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
 <style>/*COMMON_CSS*/</style>
@@ -520,6 +624,7 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
     <h1 style="font-size:20px;margin:0 0 16px">لوحة تحكم البوت</h1>
     <input id="pw" type="password" placeholder="كلمة المرور" autocomplete="current-password">
     <button class="btn" id="loginBtn">دخول</button>
+    <button class="btn ghost langbtn" style="margin-top:10px">EN</button>
   </div>
 </div>
 
@@ -528,6 +633,7 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
     <div class="logo">🤖</div>
     <div><h1>لوحة تحكم البوت</h1><small id="botname"></small></div>
     <div class="sp"></div>
+    <button class="btn ghost langbtn">EN</button>
     <button class="btn ghost" id="logout">خروج</button>
   </header>
   <div class="tabs">
@@ -543,6 +649,12 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
       <button class="btn" id="addch">إضافة القناة</button>
     </div>
     <div class="card"><h2>القنوات الحالية</h2><div id="chlist"></div></div>
+    <div class="card">
+      <h2>حظر قناة</h2>
+      <input id="banch" dir="ltr" placeholder="اسم القناة اللي تبي تحظرها">
+      <button class="btn red" id="banbtn">حظر القناة</button>
+    </div>
+    <div class="card"><h2>القنوات المحظورة</h2><div id="banlist"></div></div>
   </section>
 
   <section id="t-cmd" hidden>
@@ -564,23 +676,34 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
 
 <script>
 //COMMON_JS
-let S={channels:[],commands:{},bot:""};
+let S={channels:[],commands:{},bot:"",banned:[]};
 onAuth=()=>show(false);
+onLang=()=>{if(!$("#app").hidden)render()};
 function show(on){$("#login").hidden=on;$("#app").hidden=!on}
 async function act(fn,msg){try{await fn();if(msg)toast(msg);await load()}catch(e){if(e.message!=="auth")toast(e.message,1)}}
 async function load(){
   try{S=await api("GET","/api/state");show(true);render()}catch(e){if(e.message!=="auth")toast(e.message,1)}
 }
 function render(){
-  $("#botname").textContent=S.bot?"البوت: "+S.bot:"";
+  $("#botname").textContent=S.bot?t("البوت:")+" "+S.bot:"";
   const list=$("#chlist");list.innerHTML="";
-  if(!S.channels.length)list.innerHTML='<p class="empty">ما فيه قنوات</p>';
+  if(!S.channels.length)list.innerHTML='<p class="empty">'+t("ما فيه قنوات")+'</p>';
   S.channels.forEach(c=>{
     const d=document.createElement("div");d.className="row";
-    d.innerHTML='<span class="dot'+(c.live?" on":"")+'"></span><b dir="ltr"></b><small>'+(c.live?"لايف":"أوفلاين")+'</small><button class="ic">🗑</button>';
+    d.innerHTML='<span class="dot'+(c.live?" on":"")+'"></span><b dir="ltr" data-nt></b><small>'+t(c.live?"لايف":"أوفلاين")+'</small><button class="ic ban">🚫</button><button class="ic del">🗑</button>';
     d.querySelector("b").textContent=c.name;
-    d.querySelector("button").onclick=()=>{if(confirm("تحذف القناة "+c.name+"؟"))act(()=>api("DELETE","/api/channels/"+encodeURIComponent(c.name)),"تم حذف القناة")};
+    d.querySelector(".ban").onclick=()=>{if(ask("تحظر القناة {n} من استخدام البوت؟",c.name))act(()=>api("POST","/api/ban",{name:c.name}),"تم حظر القناة")};
+    d.querySelector(".del").onclick=()=>{if(ask("تحذف القناة {n}؟",c.name))act(()=>api("DELETE","/api/channels/"+encodeURIComponent(c.name)),"تم حذف القناة")};
     list.appendChild(d);
+  });
+  const bl=$("#banlist");bl.innerHTML="";
+  if(!S.banned.length)bl.innerHTML='<p class="empty">'+t("ما فيه قنوات محظورة")+'</p>';
+  S.banned.forEach(n=>{
+    const d=document.createElement("div");d.className="row";
+    d.innerHTML='<b dir="ltr" data-nt></b><button class="btn ghost">'+t("رفع الحظر")+'</button>';
+    d.querySelector("b").textContent=n;
+    d.querySelector("button").onclick=()=>act(()=>api("DELETE","/api/ban/"+encodeURIComponent(n)),"تم رفع الحظر");
+    bl.appendChild(d);
   });
   for(const id of ["#cmdch","#msgch"]){
     const s=$(id),v=s.value;s.innerHTML="";
@@ -601,6 +724,7 @@ $("#loginBtn").onclick=async()=>{
 $("#pw").onkeydown=e=>{if(e.key==="Enter")$("#loginBtn").click()};
 $("#logout").onclick=async()=>{await api("POST","/api/logout");show(false)};
 $("#addch").onclick=()=>act(async()=>{await api("POST","/api/channels",{name:$("#newch").value});$("#newch").value=""},"تمت إضافة القناة");
+$("#banbtn").onclick=()=>act(async()=>{await api("POST","/api/ban",{name:$("#banch").value});$("#banch").value=""},"تم حظر القناة");
 $("#cmdch").onchange=renderCmds;
 $("#savecmd").onclick=()=>act(async()=>{
   await api("POST","/api/commands",Object.assign({channel:$("#cmdch").value},cmdFormGet()));
@@ -614,6 +738,7 @@ document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{
   for(const t of ["ch","cmd","msg"])$("#t-"+t).hidden=t!==b.dataset.t;
 });
 setInterval(()=>{if(!$("#app").hidden)load()},60000);
+initLang();
 load();
 </script>
 </body>
@@ -633,6 +758,7 @@ STREAMER_HTML = HEAD.replace("{{TITLE}}", "موقع الستريمر") + r"""
       <a class="btn ghost mt" style="display:block;width:100%;text-align:center" href="/auth/login">أنا مود: دخول فقط</a>
     </div>
     <p class="mut" id="nolink" hidden>الموقع غير مفعّل بعد من المطوّر.</p>
+    <button class="btn ghost langbtn" style="margin-top:10px">EN</button>
   </div>
 </div>
 
@@ -641,6 +767,7 @@ STREAMER_HTML = HEAD.replace("{{TITLE}}", "موقع الستريمر") + r"""
     <div class="logo">🎮</div>
     <div><h1>موقع الستريمر</h1><small id="who" dir="ltr"></small></div>
     <div class="sp"></div>
+    <button class="btn ghost langbtn">EN</button>
     <button class="btn ghost" id="logout">خروج</button>
   </header>
   <select id="chsel" hidden></select>
@@ -648,6 +775,10 @@ STREAMER_HTML = HEAD.replace("{{TITLE}}", "موقع الستريمر") + r"""
     <p class="mut" style="margin:0">ما عندك قنوات هنا. إذا أنت ستريمر اضغط "أنا ستريمر" عشان تفعّل البوت في قناتك، وإذا أنت مود خلّ الستريمر يضيفك.</p>
   </div>
 
+  <div class="card" id="banned" hidden>
+    <h2>🚫 قناتك محظورة</h2>
+    <p class="mut" style="margin:0">تم حظر قناتك من استخدام البوت. إذا تعتقد أن هذا خطأ تواصل مع المطوّر.</p>
+  </div>
   <div id="main" hidden>
     <div class="card">
       <div class="row" style="padding:0;border:0">
@@ -698,6 +829,12 @@ onAuth=d=>{
   $("#app").hidden=true;$("#login").hidden=false;
   if(d&&d.enabled===false){$("#loginbtns").hidden=true;$("#nolink").hidden=false}
 };
+function fillSel(){
+  const sel=$("#chsel"),prev=sel.value;sel.innerHTML="";
+  ME.channels.forEach(c=>sel.add(new Option(c.name+(c.role==="editor"?" "+t("(مود)"):""),c.name)));
+  if(ME.channels.some(c=>c.name===prev))sel.value=prev;
+}
+onLang=()=>{if(ME)fillSel();if(CH)render();cmdFormSync()};
 const base=()=>"/s/api/channel/"+encodeURIComponent(CH.name);
 function tab(t){
   document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x.dataset.t===t));
@@ -711,10 +848,10 @@ async function init(){
   try{ME=await api("GET","/s/api/me")}catch(e){if(e.message!=="auth")toast(e.message,1);return}
   $("#login").hidden=true;$("#app").hidden=false;
   $("#who").textContent=ME.login;
-  const sel=$("#chsel"),prev=sel.value;sel.innerHTML="";
-  ME.channels.forEach(c=>sel.add(new Option(c.name+(c.role==="editor"?" (مود)":""),c.name)));
-  if(ME.channels.some(c=>c.name===prev))sel.value=prev;
-  sel.hidden=ME.channels.length<2;
+  $("#banned").hidden=!ME.banned;
+  if(ME.banned){$("#nochan").hidden=true;$("#main").hidden=true;$("#chsel").hidden=true;return}
+  fillSel();
+  $("#chsel").hidden=ME.channels.length<2;
   $("#nochan").hidden=ME.channels.length>0;
   $("#main").hidden=!ME.channels.length;
   if(ME.channels.length)await loadCh();
@@ -728,21 +865,21 @@ function render(){
   const c=CH,own=c.role==="owner";
   $("#chname").textContent=c.name;
   $("#dot").className="dot"+(c.live?" on":"");
-  $("#live").textContent=c.live?"لايف":"أوفلاين";
-  $("#curgame").textContent=c.game?"🎮 اللعبة الحالية: "+c.game:"";
+  $("#live").textContent=t(c.live?"لايف":"أوفلاين");
+  $("#curgame").textContent=c.game?t("🎮 اللعبة الحالية:")+" "+c.game:"";
   $("#tabset").hidden=!own;
   if(!own&&!$("#t-set").hidden)tab("cmd");
   renderCmdList($("#cmdlist"),c.commands,n=>act(()=>api("DELETE",base()+"/commands/"+encodeURIComponent(n)),"تم حذف الكوماند"));
   if(!own)return;
-  $("#linkstate").textContent=!c.twitch?"الربط غير مفعّل من المطوّر.":c.linked?"✅ مربوط: كوماندات اختصار اللعبة تقدر تغيّر لعبة بثك.":"غير مربوط: اربط تويتش عشان كوماندات تغيير اللعبة تشتغل.";
+  $("#linkstate").textContent=t(!c.twitch?"الربط غير مفعّل من المطوّر.":c.linked?"✅ مربوط: كوماندات اختصار اللعبة تقدر تغيّر لعبة بثك.":"غير مربوط: اربط تويتش عشان كوماندات تغيير اللعبة تشتغل.");
   $("#connect").hidden=!c.twitch;
-  $("#connect").textContent=c.linked?"إعادة الربط":"ربط تويتش";
+  $("#connect").textContent=t(c.linked?"إعادة الربط":"ربط تويتش");
   $("#unlink").hidden=!c.linked;
   const box=$("#edlist");box.innerHTML="";
-  if(!c.editors.length)box.innerHTML='<p class="empty">ما أضفت أحد للحين</p>';
+  if(!c.editors.length)box.innerHTML='<p class="empty">'+t("ما أضفت أحد للحين")+'</p>';
   c.editors.forEach(n=>{
     const d=document.createElement("div");d.className="row";
-    d.innerHTML='<b dir="ltr"></b><button class="ic">🗑</button>';
+    d.innerHTML='<b dir="ltr" data-nt></b><button class="ic">🗑</button>';
     d.querySelector("b").textContent=n;
     d.querySelector("button").onclick=()=>act(()=>api("DELETE",base()+"/editors/"+encodeURIComponent(n)),"تمت الإزالة");
     box.appendChild(d);
@@ -756,9 +893,9 @@ $("#savecmd").onclick=()=>act(async()=>{
 $("#added").onclick=()=>act(async()=>{
   await api("POST",base()+"/editors",{name:$("#newed").value});$("#newed").value="";
 },"تمت إضافة المود");
-$("#unlink").onclick=()=>{if(confirm("تلغي الربط مع تويتش؟"))act(()=>api("POST",base()+"/unlink"),"تم إلغاء الربط")};
+$("#unlink").onclick=()=>{if(ask("تلغي الربط مع تويتش؟"))act(()=>api("POST",base()+"/unlink"),"تم إلغاء الربط")};
 $("#leave").onclick=()=>{
-  if(confirm("متأكد تبي تشيل البوت من قناتك؟"))act(()=>api("POST",base()+"/leave"),"تم إزالة البوت",true);
+  if(ask("متأكد تبي تشيل البوت من قناتك؟"))act(()=>api("POST",base()+"/leave"),"تم إزالة البوت",true);
 };
 $("#logout").onclick=async()=>{await api("POST","/s/api/logout");onAuth({enabled:true})};
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>tab(b.dataset.t));
@@ -767,7 +904,49 @@ if(qp.get("msg")==="ready")toast("تم تفعيل البوت وربط تويتش
 const ERR={cancel:"تم إلغاء الدخول",fail:"فشل الدخول مع تويتش، حاول مرة ثانية",not_joined:"التفعيل الذاتي مقفل، كلم المطوّر",scope:"ما وافقت على الصلاحية المطلوبة"};
 if(qp.get("err"))toast(ERR[qp.get("err")]||"صار خطأ",1);
 if(location.search)history.replaceState(null,"","/s");
+initLang();
 init();
+</script>
+</body>
+</html>
+"""
+
+PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
+<div class="wrap">
+  <header>
+    <div class="logo">🤖</div>
+    <div><h1 id="chname" dir="ltr" data-nt></h1><small>كوماندات البوت</small></div>
+    <div class="sp"></div>
+    <button class="btn ghost langbtn">EN</button>
+  </header>
+  <div class="card" id="nf" hidden><p class="mut" style="margin:0">القناة غير موجودة أو البوت غير مفعّل فيها</p></div>
+  <div class="card" id="box"><h2>كوماندات القناة</h2><div id="list"></div></div>
+  <p class="hint" style="text-align:center"><a href="/s" style="color:var(--acc)">أنت الستريمر أو مود؟ ادخل لوحة التحكم</a></p>
+</div>
+<div id="toast"></div>
+<script>
+//COMMON_JS
+const CHN=decodeURIComponent(location.pathname.split("/").pop()).toLowerCase();
+let D=null,BAD=false;
+function render(){
+  $("#chname").textContent=CHN;
+  $("#nf").hidden=!BAD;$("#box").hidden=BAD;
+  if(!D)return;
+  const box=$("#list");box.innerHTML="";
+  const names=Object.keys(D.commands).sort();
+  if(!names.length){box.innerHTML='<p class="empty">'+t("ما فيه كوماندات")+'</p>';return}
+  names.forEach(n=>{
+    const c=D.commands[n],d=document.createElement("div");d.className="row col";
+    d.innerHTML='<div class="top"><b dir="ltr" data-nt></b></div><div class="meta" data-nt></div><p data-nt></p>';
+    d.querySelector("b").textContent="!"+n;
+    d.querySelector(".meta").textContent=(c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:t("💬 رد عادي"))+" • "+t(PERMS[c.perm]||"الكل");
+    d.querySelector("p").textContent=c.type==="game"?"":(c.reply||"");
+    box.appendChild(d);
+  });
+}
+onLang=render;
+initLang();
+fetch("/pub/"+encodeURIComponent(CHN)).then(r=>r.ok?r.json():Promise.reject()).then(d=>{D=d;render()}).catch(()=>{BAD=true;render()});
 </script>
 </body>
 </html>
@@ -777,6 +956,7 @@ OWNER_HTML = (OWNER_HTML.replace("{{FORM}}", CMD_FORM.replace("{{TOP}}", '<selec
               .replace("/*COMMON_CSS*/", COMMON_CSS).replace("//COMMON_JS", COMMON_JS))
 STREAMER_HTML = (STREAMER_HTML.replace("{{FORM}}", CMD_FORM.replace("{{TOP}}", ""))
                  .replace("/*COMMON_CSS*/", COMMON_CSS).replace("//COMMON_JS", COMMON_JS))
+PUBLIC_HTML = PUBLIC_HTML.replace("/*COMMON_CSS*/", COMMON_CSS).replace("//COMMON_JS", COMMON_JS)
 
 SESSION_TOKEN = (
     hashlib.sha256(("dash:" + DASHBOARD_PASSWORD).encode()).hexdigest()
@@ -865,17 +1045,47 @@ def make_web_app(bot):
         "bot": bot.nick,
         "channels": [{"name": n, "live": l} for n, l in zip(names, lives)],
         "commands": store.data["commands"],
+        "banned": store.data["banned"],
     })
 
   async def add_channel(request):
     name = str((await jbody(request)).get("name", "")).strip().lstrip("@#").lower()
     if not valid_channel(name):
       return jerr("اسم القناة غير صحيح")
+    if name in store.data["banned"]:
+      return jerr("القناة محظورة، ارفع الحظر أولاً")
     if name in store.data["channels"]:
       return jerr("القناة مضافة من قبل")
     store.data["channels"].append(name)
     await store.save()
     await bot.join_channels([name])
+    return web.json_response({"ok": True})
+
+  async def ban_channel(request):
+    name = str((await jbody(request)).get("name", "")).strip().lstrip("@#").lower()
+    if not valid_channel(name):
+      return jerr("اسم القناة غير صحيح")
+    if name == OWNER:
+      return jerr("ما تقدر تحظر قناتك")
+    if name in store.data["banned"]:
+      return jerr("القناة محظورة من قبل")
+    store.data["banned"].append(name)
+    if name in store.data["channels"]:
+      store.data["channels"].remove(name)
+    store.data["tokens"].pop(name, None)
+    twitch.user_access.pop(name, None)
+    await store.save()
+    try:
+      await bot.part_channels([name])
+    except Exception as e:
+      print(f"تعذر الخروج من {name}: {e}")
+    return web.json_response({"ok": True})
+
+  async def unban_channel(request):
+    name = request.match_info["name"].lower()
+    if name in store.data["banned"]:
+      store.data["banned"].remove(name)
+      await store.save()
     return web.json_response({"ok": True})
 
   async def del_channel(request):
@@ -1002,7 +1212,7 @@ def make_web_app(bot):
     user = data["data"][0]
     login_name = user["login"].lower()
     dest = "/s"
-    if state_val[0] in ("c", "s"):
+    if state_val[0] in ("c", "s") and login_name not in store.data["banned"]:
       if login_name not in store.data["channels"] and SELF_JOIN and valid_channel(login_name):
         store.data["channels"].append(login_name)
         await store.save()
@@ -1025,6 +1235,19 @@ def make_web_app(bot):
     resp.del_cookie("ostate")
     raise resp
 
+  async def c_page(request):
+    login_name = read_session(request.cookies.get("ssess", ""))
+    ch = request.match_info["channel"].lower()
+    if login_name and role_of(login_name, ch):
+      raise web.HTTPFound("/s")  # الستريمر والمودات يروحون للوحة التحكم
+    return web.Response(text=PUBLIC_HTML, content_type="text/html")
+
+  async def pub(request):
+    ch = request.match_info["channel"].lower()
+    if ch not in store.data["channels"]:
+      return jerr("القناة غير موجودة", 404)
+    return web.json_response({"name": ch, "commands": store.data["commands"].get(ch, {})})
+
   async def s_logout(request):
     resp = web.json_response({"ok": True})
     resp.del_cookie("ssess")
@@ -1034,6 +1257,8 @@ def make_web_app(bot):
     login_name = read_session(request.cookies.get("ssess", ""))
     if not login_name:
       return web.json_response({"error": "unauthorized", "enabled": twitch.enabled}, status=401)
+    if login_name in store.data["banned"]:
+      return web.json_response({"login": login_name, "banned": True, "channels": []})
     return web.json_response({"login": login_name, "channels": channels_for(login_name)})
 
   async def s_channel(request):
@@ -1149,12 +1374,16 @@ def make_web_app(bot):
   r.add_get("/api/state", state)
   r.add_post("/api/channels", add_channel)
   r.add_delete("/api/channels/{name}", del_channel)
+  r.add_post("/api/ban", ban_channel)
+  r.add_delete("/api/ban/{name}", unban_channel)
   r.add_post("/api/commands", save_command)
   r.add_delete("/api/commands/{channel}/{name}", del_command)
   r.add_post("/api/send", send_msg)
   # موقع الستريمر
   r.add_get("/s", s_index)
   r.add_get("/auth/login", auth_login)
+  r.add_get("/c/{channel}", c_page)
+  r.add_get("/pub/{channel}", pub)
   r.add_get("/auth/streamer", auth_streamer)
   r.add_get("/auth/connect", auth_connect)
   r.add_get("/auth/callback", auth_callback)
@@ -1199,7 +1428,7 @@ class Bot(commands.Bot):
       return
     self._started = True
     await self.store.load()
-    to_join = [c for c in self.store.data["channels"] if c != OWNER]
+    to_join = [c for c in self.store.data["channels"] if c != OWNER and c not in self.store.data["banned"]]
     if to_join:
       await self.join_channels(to_join)
     asyncio.create_task(start_web_server(self))
@@ -1269,6 +1498,21 @@ class Bot(commands.Bot):
     send = message.channel.send
     mention = f"@{message.author.name}"
     channel_cmds = self.store.data["commands"].setdefault(channel_name, {})
+
+    # ---------- !commands: رابط صفحة الكوماندات للجميع ----------
+    if cmd == "commands":
+      ckey = (channel_name, "!commands")
+      now = time.time()
+      if now - self.cmd_cooldown.get(ckey, 0) < 10:
+        return True
+      self.cmd_cooldown[ckey] = now
+      if SITE_URL:
+        await send(f"{mention} كل كوماندات القناة هنا: {SITE_URL}/c/{channel_name}")
+      else:
+        usable = [n for n, c in channel_cmds.items() if level >= PERMS[c["perm"]]]
+        names = " ".join(f"!{n}" for n in sorted(usable)) or "ما فيه كوماندات مضافة للحين"
+        await send(f"{mention} الكوماندات: {names}"[:480])
+      return True
 
     # ---------- كوماندات المودرز ----------
     if cmd in ("addcmd", "editcmd", "delcmd", "removecmd", "cmds"):
@@ -1341,6 +1585,9 @@ class Bot(commands.Bot):
         return True
 
       if cmd == "addchannel":
+        if target in self.store.data["banned"]:
+          await send(f"{mention} القناة {target} محظورة، ارفع الحظر من اللوحة")
+          return True
         if target in self.store.data["channels"]:
           await send(f"{mention} القناة {target} مضافة من قبل")
           return True
@@ -1406,6 +1653,8 @@ class Bot(commands.Bot):
     username = message.author.name.lower()
     channel_name = message.channel.name.lower()
     content = message.content.strip()
+    if channel_name in self.store.data["banned"]:
+      return
     is_owner = username == OWNER
     level = user_level(message.author, is_owner)
 
