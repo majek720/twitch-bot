@@ -75,6 +75,7 @@ SCOPES = {
     "s": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE}",
     "c": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE}",
     "b": "user:bot user:read:chat user:write:chat",
+    "cb": "user:bot user:read:chat user:write:chat",  # حساب بوت مخصص للستريمر
 }
 
 PERMS = {"everyone": 0, "sub": 1, "vip": 2, "mod": 3, "broadcaster": 4}
@@ -102,7 +103,6 @@ SAUDI_PRAYERS = [
     "اللهم انصر قواتنا المرابطة واحفظ حدودنا وجد ليالينا بالأمن والأمان يا رب العالمين",
 ]
 
-# الردود التلقائية الافتراضية القابلة للتعديل والحذف/التعطيل من موقع الستريمر
 DEFAULT_AUTO_REPLIES = {
     "salam_evening": {
         "enabled": True,
@@ -127,7 +127,7 @@ DEFAULT_AUTO_REPLIES = {
 }
 
 DEFAULT_REMINDER_CFG = {
-    "interval": 30,  # بالدقائق
+    "interval": 30,
     "saudi": True,
     "dhikr": True,
     "water": True,
@@ -291,12 +291,13 @@ class Store:
         "commands": {},
         "editors": {},
         "tokens": {},
+        "custom_bots": {},      # قناة -> {"login": str, "user_id": str}
         "banned": [],
         "lang": {},
         "reminders": {c: True for c in DEFAULT_CHANNELS},
-        "reminder_cfg": {},     # قناة -> {interval, saudi, dhikr, water, water_text}
-        "custom_timers": {},    # قناة -> [{id, name, text, interval, enabled}]
-        "auto_replies": {},     # قناة -> {salam_evening: {enabled, text}, ...}
+        "reminder_cfg": {},
+        "custom_timers": {},
+        "auto_replies": {},
     }
 
   @property
@@ -367,6 +368,7 @@ class Store:
       }
       self.data["editors"] = loaded.get("editors", {})
       self.data["tokens"] = loaded.get("tokens", {})
+      self.data["custom_bots"] = loaded.get("custom_bots", {})
       self.data["banned"] = loaded.get("banned", [])
       self.data["lang"] = loaded.get("lang", {})
       self.data["reminder_cfg"] = loaded.get("reminder_cfg", {})
@@ -555,12 +557,21 @@ class TwitchAPI:
                             params={"user_login": login})
     return st == 200 and bool(d.get("data"))
 
+  def bot_for(self, channel):
+    """يرجع (bot_login, bot_user_id) الخاص بالقناة (المخصص إن وجد أو الافتراضي)."""
+    cb = self.store.data.get("custom_bots", {}).get(channel)
+    if isinstance(cb, dict) and cb.get("login") and cb.get("user_id"):
+      return cb["login"].lower(), str(cb["user_id"])
+    return BOT_LOGIN, None
+
   async def chat_send(self, channel, text):
     if not self.enabled:
       return False, "disabled"
     token = await self.get_app_token()
     bid = await self.user_id(channel)
-    sid = await self.user_id(BOT_LOGIN)
+    bot_login, sid = self.bot_for(channel)
+    if not sid:
+      sid = await self.user_id(bot_login)
     if not (token and bid and sid):
       return False, "ids"
     st, d = await self.call("POST", "chat/messages", token, body={
@@ -579,7 +590,9 @@ class TwitchAPI:
       return False, "disabled"
     token = await self.get_app_token()
     bid = await self.user_id(channel)
-    sid = await self.user_id(BOT_LOGIN)
+    bot_login, sid = self.bot_for(channel)
+    if not sid:
+      sid = await self.user_id(bot_login)
     if not (token and bid and sid):
       return False, "ids"
     st, d = await self.call("POST", "eventsub/subscriptions", token, body={
@@ -1317,6 +1330,14 @@ main{flex:1;min-width:0}
           </div>
 
           <div class="panel" style="margin-bottom:14px">
+            <h3>حساب بوت مخصص للقناة (تغيير اسم البوت)</h3>
+            <p class="mut" id="cbotstate"></p>
+            <p class="hint" style="margin:6px 0 10px">افتح نافذة خاصة (Incognito)، سجّل دخول في تويتش بحساب البوت الجديد بالاسم اللي تبيه، ثم اضغط الزر بالأسفل.</p>
+            <a class="btn" id="cbotbtn" href="#">ربط حساب بوت مخصص لقناتي</a>
+            <button class="btn ghost mt" id="cbotdel" hidden>إلغاء البوت المخصص (العودة للافتراضي)</button>
+          </div>
+
+          <div class="panel" style="margin-bottom:14px">
             <h3>لغة ردود البوت</h3>
             <p class="mut">تتحكم في لغة رسائل الكوماندات الأساسية (إضافة، تعديل، حذف، اللعبة، العنوان)</p>
             <div class="tool" style="margin:12px 0 10px">
@@ -1538,7 +1559,15 @@ function renderOwn(){
     tBox.appendChild(d);
   });
 
-  // 4. ربط تويتش والمودات
+  // 4. حساب البوت المخصص
+  $("#cbotstate").textContent=c.custom_bot
+    ? "✅ البوت الحالي في قناتك هو: "+c.custom_bot
+    : "البوت الحالي في قناتك هو البوت الافتراضي ("+(c.default_bot||"majek_bot")+")";
+  $("#cbotbtn").href="/auth/custom_bot?ch="+encodeURIComponent(c.name);
+  $("#cbotbtn").textContent=c.custom_bot?"تغيير حساب البوت المخصص":"ربط حساب بوت مخصص لقناتي";
+  $("#cbotdel").hidden=!c.custom_bot;
+
+  // 5. ربط تويتش والمودات
   $("#linkstate").textContent=t(!c.twitch?"الربط غير مفعّل من المطوّر.":c.linked?"✅ مربوط: كوماندات اختصار اللعبة تقدر تغيّر لعبة بثك.":"غير مربوط: اربط تويتش عشان كوماندات تغيير اللعبة تشتغل.");
   $("#connect").hidden=!c.twitch;
   $("#connect").textContent=t(c.linked?"إعادة الربط":"ربط تويتش");
@@ -1602,6 +1631,10 @@ $("#addtimer").onclick=()=>act(async()=>{
   EDIT_TM_ID=null;
   $("#tmname").value="";$("#tminterval").value="5";$("#tmtext").value="";
 },"تم حفظ المؤقت");
+$("#cbotdel").onclick=()=>{
+  if(confirm("تلغي البوت المخصص وترجع للبوت الافتراضي؟"))
+    act(()=>api("POST",base()+"/custom_bot/remove"),"تمت العودة للبوت الافتراضي");
+};
 $("#cancelcmd").onclick=closeModal;
 $("#modal").onclick=e=>{if(e.target.id==="modal")closeModal()};
 $("#savecmd").onclick=()=>act(async()=>{
@@ -1617,6 +1650,7 @@ $("#leave").onclick=()=>{
 $("#logout").onclick=async()=>{await api("POST","/s/api/logout");onAuth({enabled:true})};
 const qp=new URLSearchParams(location.search);
 if(qp.get("msg")==="ready")toast("تم تفعيل البوت وربط تويتش ✅");
+if(qp.get("msg")==="cbot")toast("تم ربط حساب البوت المخصص لقناتك بنجاح ✅");
 const ERR={cancel:"تم إلغاء الدخول",fail:"فشل الدخول مع تويتش، حاول مرة ثانية",not_joined:"التفعيل الذاتي مقفل، كلم المطوّر",scope:"ما وافقت على الصلاحية المطلوبة"};
 if(qp.get("err"))toast(ERR[qp.get("err")]||"صار خطأ",1);
 if(location.search)history.replaceState(null,"","/s");
@@ -1846,6 +1880,7 @@ def make_web_app(bot):
     if name in store.data["channels"]:
       store.data["channels"].remove(name)
     store.data["tokens"].pop(name, None)
+    store.data.get("custom_bots", {}).pop(name, None)
     twitch.user_access.pop(name, None)
     await store.save()
     try:
@@ -1866,6 +1901,7 @@ def make_web_app(bot):
     if name not in store.data["channels"]:
       return jerr("القناة مو موجودة", 404)
     store.data["channels"].remove(name)
+    store.data.get("custom_bots", {}).pop(name, None)
     await store.save()
     await bot.part_channels([name])
     return web.json_response({"ok": True})
@@ -1972,6 +2008,27 @@ def make_web_app(bot):
                     samesite="Lax", secure=is_https(request))
     raise resp
 
+  async def auth_custom_bot(request):
+    login = read_session(request.cookies.get("ssess", ""))
+    ch = request.query.get("ch", "").lower()
+    if not login or role_of(login, ch) != "owner":
+      raise web.HTTPFound("/s")
+    if not twitch.enabled:
+      raise web.HTTPFound("/s")
+    state_val = "x" + secrets.token_urlsafe(16)
+    url = AUTH_URL + "?" + urlencode({
+        "client_id": CLIENT_ID, "redirect_uri": redirect_uri,
+        "response_type": "code", "state": state_val,
+        "scope": SCOPES["cb"],
+        "force_verify": "true",
+    })
+    resp = web.HTTPFound(url)
+    resp.set_cookie("ostate", state_val, max_age=600, httponly=True,
+                    samesite="Lax", secure=is_https(request))
+    resp.set_cookie("cbot_ch", ch, max_age=600, httponly=True,
+                    samesite="Lax", secure=is_https(request))
+    raise resp
+
   async def eventsub_hook(request):
     raw = await request.read()
     h = request.headers
@@ -2014,6 +2071,8 @@ def make_web_app(bot):
       raise web.HTTPFound("/s?err=fail")
     user = data["data"][0]
     login_name = user["login"].lower()
+
+    # 1. ربط حساب البوت الأساسي
     if state_val[0] == "b":
       if login_name != BOT_LOGIN:
         resp = web.Response(
@@ -2023,6 +2082,41 @@ def make_web_app(bot):
       resp = web.Response(text="تم ربط حساب البوت بنجاح ✅ تقدر تقفل الصفحة")
       resp.del_cookie("ostate")
       return resp
+
+    # 2. ربط حساب بوت مخصص للستريمر
+    if state_val[0] == "x":
+      target_ch = request.cookies.get("cbot_ch", "").lower()
+      sess_login = read_session(request.cookies.get("ssess", ""))
+      if not target_ch or not sess_login or role_of(sess_login, target_ch) != "owner":
+        resp = web.HTTPFound("/s?err=fail")
+        resp.del_cookie("ostate")
+        resp.del_cookie("cbot_ch")
+        raise resp
+      if login_name == target_ch:
+        resp = web.Response(
+            text="لازم تسجل دخول بحساب البوت المخصص مو بحساب قناتك الشخصية! افتح نافذة خاصة وسجل بحساب البوت ثم أعد المحاولة.",
+            status=400)
+        resp.del_cookie("ostate")
+        resp.del_cookie("cbot_ch")
+        return resp
+      store.data.setdefault("custom_bots", {})[target_ch] = {
+          "login": login_name,
+          "user_id": str(user["id"]),
+      }
+      twitch.user_ids[login_name] = str(user["id"])
+      await store.save()
+      try:
+        await twitch.unsubscribe_chat(target_ch)
+        await twitch.make_bot_mod(target_ch, login_name)
+        await bot.join_channels([target_ch])
+      except Exception as e:
+        print(f"تعذر ربط البوت المخصص {login_name} لقناة {target_ch}: {e}")
+      resp = web.HTTPFound("/s?msg=cbot")
+      resp.del_cookie("ostate")
+      resp.del_cookie("cbot_ch")
+      raise resp
+
+    # 3. دخول الستريمر / المود
     dest = "/s"
     if state_val[0] in ("c", "s") and login_name not in store.data["banned"]:
       if login_name not in store.data["channels"] and SELF_JOIN and valid_channel(login_name):
@@ -2041,7 +2135,8 @@ def make_web_app(bot):
         twitch.user_access[login_name] = (tok["access_token"], time.time() + tok.get("expires_in", 3600))
         await store.save()
         try:
-          await twitch.make_bot_mod(login_name, bot.nick)
+          active_bot, _ = twitch.bot_for(login_name)
+          await twitch.make_bot_mod(login_name, active_bot)
           await bot.join_channels([login_name])
         except Exception as e:
           print(f"تعذر تجهيز القناة {login_name}: {e}")
@@ -2089,6 +2184,7 @@ def make_web_app(bot):
         game, title = await twitch.channel_info(ch)
       except Exception:
         game = title = None
+    cb = store.data.get("custom_bots", {}).get(ch)
     return web.json_response({
         "name": ch, "role": role,
         "live": await bot.is_channel_live(ch),
@@ -2104,7 +2200,25 @@ def make_web_app(bot):
         "reminder_cfg": store.get_reminder_cfg(ch) if role == "owner" else {},
         "custom_timers": store.get_custom_timers(ch) if role == "owner" else [],
         "auto_replies": store.get_auto_replies(ch) if role == "owner" else {},
+        "custom_bot": cb.get("login") if isinstance(cb, dict) else None,
+        "default_bot": BOT_LOGIN,
     })
+
+  async def s_remove_custom_bot(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    if ch in store.data.get("custom_bots", {}):
+      store.data["custom_bots"].pop(ch, None)
+      await store.save()
+      try:
+        await twitch.unsubscribe_chat(ch)
+        await twitch.make_bot_mod(ch, BOT_LOGIN)
+        await bot.join_channels([ch])
+      except Exception as e:
+        print(f"تعذر استعادة البوت الافتراضي في {ch}: {e}")
+    return web.json_response({"ok": True})
 
   async def s_save_cmd(request):
     a, err = access(request)
@@ -2179,6 +2293,7 @@ def make_web_app(bot):
     if ch in store.data["channels"]:
       store.data["channels"].remove(ch)
     store.data["tokens"].pop(ch, None)
+    store.data.get("custom_bots", {}).pop(ch, None)
     twitch.user_access.pop(ch, None)
     await store.save()
     try:
@@ -2340,6 +2455,7 @@ def make_web_app(bot):
   r.add_get("/auth/streamer", auth_streamer)
   r.add_get("/auth/connect", auth_connect)
   r.add_get("/auth/bot", auth_bot)
+  r.add_get("/auth/custom_bot", auth_custom_bot)
   r.add_get("/auth/callback", auth_callback)
   r.add_post("/s/api/logout", s_logout)
   r.add_get("/s/api/me", s_me)
@@ -2356,6 +2472,7 @@ def make_web_app(bot):
   r.add_post("/s/api/channel/{channel}/timers", s_save_timer)
   r.add_delete("/s/api/channel/{channel}/timers/{id}", s_del_timer)
   r.add_post("/s/api/channel/{channel}/auto_replies", s_auto_replies)
+  r.add_post("/s/api/channel/{channel}/custom_bot/remove", s_remove_custom_bot)
   r.add_post("/s/api/channel/{channel}/title", s_title)
   return app
 
@@ -2521,9 +2638,8 @@ class Bot:
     self.paused = set()
     self.irc = IRCClient(self, IRC_TOKEN) if IRC_TOKEN else None
     self.irc_channels = set()
-    # تتبع أوقات الإرسال للرسائل الدورية والمؤقتات المخصصة لكل قناة
-    self.rem_state = {}    # ch -> {"last": float, "step": int}
-    self.timer_last = {}   # (ch, timer_id) -> float
+    self.rem_state = {}
+    self.timer_last = {}
 
   def run(self):
     loop = asyncio.get_event_loop()
@@ -2666,7 +2782,9 @@ class Bot:
         return
       self.seen[mid] = now
       who = (ev.get("chatter_user_login") or "").lower()
-      if who == self.nick or who in KNOWN_BOTS:
+      chan = (ev.get("broadcaster_user_login") or "").lower()
+      ch_bot, _ = self.twitch.bot_for(chan)
+      if who == self.nick or who == ch_bot or who in KNOWN_BOTS:
         return
       await self.event_message(ChatMessage(self, ev))
     except Exception as e:
@@ -2697,7 +2815,6 @@ class Bot:
     return selected
 
   async def periodic_reminders(self):
-    # يفحص كل 30 ثانية لتنفيذ الرسائل الدورية الافتراضية والمؤقتات المخصصة بدقة حسب مدة كل قناة
     while True:
       await asyncio.sleep(30)
       now = time.time()
@@ -2718,7 +2835,6 @@ class Bot:
         if not channel:
           continue
 
-        # 1. الرسائل الدورية الافتراضية حسب المدة المحددة للستريمر
         if rem_on:
           cfg = self.store.get_reminder_cfg(channel_name)
           pool = []
@@ -2740,7 +2856,6 @@ class Bot:
               except Exception as e:
                 print(f"تعذر إرسال التذكير في {channel_name}: {e}")
 
-        # 2. المؤقتات المخصصة (كل مؤقت بمدته الخاصة)
         for tm in timers:
           tid = tm.get("id")
           if not tid:
@@ -3111,7 +3226,6 @@ class Bot:
       return
 
     raw_text = cfg["text"]
-    # إذا الستريمر ما حط $(user) في النص نمنشن المستخدم تلقائياً في البداية
     if "$(user)" in raw_text:
       reply_msg = format_response(raw_text, author_mention, channel_name, author_mention)
     else:
