@@ -85,11 +85,12 @@ def valid_channel(name):
 def norm_cmd(v):
   """يحوّل الكوماند القديم (نص) للشكل الجديد."""
   if isinstance(v, str):
-    return {"type": "text", "reply": v, "game": "", "perm": "everyone"}
+    return {"type": "text", "reply": v, "game": "", "perm": "everyone", "bang": True}
   v = dict(v)
   v.setdefault("type", "text")
   v.setdefault("reply", "")
   v.setdefault("game", "")
+  v.setdefault("bang", True)
   if v.get("perm") not in PERMS:
     v["perm"] = "everyone"
   return v
@@ -100,6 +101,9 @@ def build_command(b):
   name = str(b.get("name", "")).strip().lstrip("!").lower()
   if not name or len(name) > 30 or re.search(r"\s", name) or name in BUILTIN:
     raise ValueError("اسم الكوماند ما ينفع")
+  bang = b.get("bang") is not False
+  if not bang and not re.fullmatch(r"\w+", name):
+    raise ValueError("الكوماند بدون ! لازم يكون حروف وأرقام بس")
   perm = b.get("perm") if b.get("perm") in PERMS else "everyone"
   reply = str(b.get("reply", "")).strip()[:450]
   if b.get("type") == "game":
@@ -107,12 +111,16 @@ def build_command(b):
     if not game:
       raise ValueError("اكتب اسم اللعبة")
     return name, {
-        "type": "game", "game": game, "perm": perm,
+        "type": "game", "game": game, "perm": perm, "bang": bang,
         "reply": reply or "تم تغيير اللعبة إلى $(game) 🎮",
     }
   if not reply:
     raise ValueError("اكتب رد الكوماند")
-  return name, {"type": "text", "game": "", "perm": perm, "reply": reply}
+  return name, {"type": "text", "game": "", "perm": perm, "reply": reply, "bang": bang}
+
+
+def disp_cmd(name, c):
+  return ("!" if c.get("bang", True) else "") + name
 
 
 def user_level(author, is_owner):
@@ -486,6 +494,9 @@ const EN={
 "كوماندات البوت":"Bot commands","القناة غير موجودة أو البوت غير مفعّل فيها":"Channel not found or the bot isn't active there",
 "أنت الستريمر أو مود؟ ادخل لوحة التحكم":"Are you the streamer or a mod? Open the control panel",
 "القناة غير موجودة":"Channel doesn't exist",
+"طريقة التفعيل":"How it's triggered","يبدأ بـ ! (مثل: !discord)":"Starts with ! (e.g. !discord)",
+"بدون ! أو معها (مثل: discord)":"With or without ! (e.g. discord)",
+"الكوماند بدون ! لازم يكون حروف وأرقام بس":"A command without ! can only use letters and numbers",
 "تحذف القناة {n}؟":"Delete channel {n}?","تحذف !{n}؟":"Delete !{n}?",
 "تلغي الربط مع تويتش؟":"Unlink Twitch?","متأكد تبي تشيل البوت من قناتك؟":"Are you sure you want to remove the bot from your channel?"
 };
@@ -546,13 +557,13 @@ function cmdFormInit(){
   $("#chips").onclick=e=>{if(e.target.tagName==="SPAN"){const ta=$("#creply");ta.value+=e.target.textContent;ta.focus()}};
   cmdFormSync();
 }
-function cmdFormGet(){return{type:$("#ctype").value,name:$("#cname").value,game:$("#cgame").value,reply:$("#creply").value,perm:$("#cperm").value}}
+function cmdFormGet(){return{type:$("#ctype").value,bang:$("#cbang").value!=="no",name:$("#cname").value,game:$("#cgame").value,reply:$("#creply").value,perm:$("#cperm").value}}
 function cmdFormClear(){
-  $("#ctype").value="text";$("#cperm").value="everyone";
+  $("#ctype").value="text";$("#cperm").value="everyone";$("#cbang").value="yes";
   $("#cname").value="";$("#cgame").value="";$("#creply").value="";cmdFormSync();
 }
 function cmdFormFill(n,c){
-  $("#ctype").value=c.type||"text";$("#cperm").value=c.perm||"everyone";
+  $("#ctype").value=c.type||"text";$("#cperm").value=c.perm||"everyone";$("#cbang").value=c.bang===false?"no":"yes";
   $("#cname").value=n;$("#cgame").value=c.game||"";$("#creply").value=c.reply||"";
   cmdFormSync();window.scrollTo({top:0,behavior:"smooth"});
 }
@@ -562,7 +573,7 @@ function renderCmdList(box,cmds,onDel){
   names.forEach(n=>{
     const c=cmds[n],d=document.createElement("div");d.className="row col";
     d.innerHTML='<div class="top"><b dir="ltr" data-nt></b><span><button class="ic ed">✏️</button><button class="ic del">🗑</button></span></div><div class="meta" data-nt></div><p data-nt></p>';
-    d.querySelector("b").textContent="!"+n;
+    d.querySelector("b").textContent=(c.bang===false?"":"!")+n;
     d.querySelector(".meta").textContent=(c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:t("💬 رد عادي"))+" • "+t(PERMS[c.perm]||"الكل");
     d.querySelector("p").textContent=c.reply||"";
     d.querySelector(".ed").onclick=()=>cmdFormFill(n,c);
@@ -582,6 +593,11 @@ CMD_FORM = r"""
     <option value="game">🎮 اختصار لعبة (يغيّر لعبة البث)</option>
   </select>
   <input id="cname" dir="ltr" placeholder="اسم الكوماند بدون ! مثل: fortnite">
+  <label>طريقة التفعيل</label>
+  <select id="cbang">
+    <option value="yes">يبدأ بـ ! (مثل: !discord)</option>
+    <option value="no">بدون ! أو معها (مثل: discord)</option>
+  </select>
   <input id="cgame" dir="ltr" placeholder="اسم اللعبة مثل: Fortnite" hidden>
   <p class="hint" id="gamehint" hidden>لازم الستريمر يربط تويتش من تبويب الإعدادات في موقع الستريمر عشان تغيير اللعبة يشتغل.</p>
   <textarea id="creply" placeholder="رد البوت"></textarea>
@@ -938,7 +954,7 @@ function render(){
   names.forEach(n=>{
     const c=D.commands[n],d=document.createElement("div");d.className="row col";
     d.innerHTML='<div class="top"><b dir="ltr" data-nt></b></div><div class="meta" data-nt></div><p data-nt></p>';
-    d.querySelector("b").textContent="!"+n;
+    d.querySelector("b").textContent=(c.bang===false?"":"!")+n;
     d.querySelector(".meta").textContent=(c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:t("💬 رد عادي"))+" • "+t(PERMS[c.perm]||"الكل");
     d.querySelector("p").textContent=c.type==="game"?"":(c.reply||"");
     box.appendChild(d);
@@ -1510,7 +1526,7 @@ class Bot(commands.Bot):
         await send(f"{mention} كل كوماندات القناة هنا: {SITE_URL}/c/{channel_name}")
       else:
         usable = [n for n, c in channel_cmds.items() if level >= PERMS[c["perm"]]]
-        names = " ".join(f"!{n}" for n in sorted(usable)) or "ما فيه كوماندات مضافة للحين"
+        names = " ".join(disp_cmd(n, channel_cmds[n]) for n in sorted(usable)) or "ما فيه كوماندات مضافة للحين"
         await send(f"{mention} الكوماندات: {names}"[:480])
       return True
 
@@ -1521,7 +1537,7 @@ class Bot(commands.Bot):
         if not usable:
           await send(f"{mention} ما فيه كوماندات مضافة للحين")
         else:
-          names = " ".join(f"!{n}" for n in sorted(usable))
+          names = " ".join(disp_cmd(n, channel_cmds[n]) for n in sorted(usable))
           await send(f"{mention} الكوماندات: {names}"[:480])
         return True
 
@@ -1609,6 +1625,25 @@ class Bot(commands.Bot):
     entry = channel_cmds.get(cmd)
     if entry is None:
       return False
+    return await self.run_custom(message, cmd, entry, parts, channel_name, level)
+
+  async def handle_plain(self, message, content, channel_name, level):
+    """كوماندات بدون !: أول كلمة في الرسالة تطابق اسم الكوماند."""
+    parts = content.split(maxsplit=2)
+    if not parts:
+      return False
+    word = re.sub(r"^\W+|\W+$", "", parts[0].lower())
+    if not word:
+      return False
+    entry = self.store.data["commands"].get(channel_name, {}).get(word)
+    if entry is None or entry.get("bang", True):
+      return False
+    parts[0] = word
+    return await self.run_custom(message, word, entry, parts, channel_name, level)
+
+  async def run_custom(self, message, cmd, entry, parts, channel_name, level):
+    send = message.channel.send
+    mention = f"@{message.author.name}"
 
     # الصلاحية: اللي ما يملكها ما يرد عليه البوت
     if level < PERMS[entry["perm"]]:
@@ -1664,6 +1699,8 @@ class Bot(commands.Bot):
           message, content, username, channel_name, is_owner, level
       ):
         return
+    elif await self.handle_plain(message, content, channel_name, level):
+      return
 
     # الردود التلقائية: تجاهل الأونر والمستخدمين المتجاهلين
     if is_owner or username in IGNORED_USERS:
