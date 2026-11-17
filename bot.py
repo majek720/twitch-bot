@@ -634,6 +634,8 @@ class TwitchAPI:
         await self.drop_sub(s["id"])
 
   async def make_bot_mod(self, channel, bot_login):
+    if channel == bot_login:
+      return True
     info = self.store.data["tokens"].get(channel)
     if not info:
       return False
@@ -1332,7 +1334,7 @@ main{flex:1;min-width:0}
           <div class="panel" style="margin-bottom:14px">
             <h3>حساب بوت مخصص للقناة (تغيير اسم البوت)</h3>
             <p class="mut" id="cbotstate"></p>
-            <p class="hint" style="margin:6px 0 10px">افتح نافذة خاصة (Incognito)، سجّل دخول في تويتش بحساب البوت الجديد بالاسم اللي تبيه، ثم اضغط الزر بالأسفل.</p>
+            <p class="hint" style="margin:6px 0 10px">تقدر تربط حسابك الشخصي نفسه أو أي حساب بوت ثاني بالاسم اللي تبيه، وبتطلع ردود البوت في قناتك باسم وصورة الحساب اللي تختاره.</p>
             <a class="btn" id="cbotbtn" href="#">ربط حساب بوت مخصص لقناتي</a>
             <button class="btn ghost mt" id="cbotdel" hidden>إلغاء البوت المخصص (العودة للافتراضي)</button>
           </div>
@@ -2083,7 +2085,7 @@ def make_web_app(bot):
       resp.del_cookie("ostate")
       return resp
 
-    # 2. ربط حساب بوت مخصص للستريمر
+    # 2. ربط حساب بوت مخصص للستريمر (يقبل حساب البوت الجديد أو حساب الستريمر نفسه)
     if state_val[0] == "x":
       target_ch = request.cookies.get("cbot_ch", "").lower()
       sess_login = read_session(request.cookies.get("ssess", ""))
@@ -2092,13 +2094,6 @@ def make_web_app(bot):
         resp.del_cookie("ostate")
         resp.del_cookie("cbot_ch")
         raise resp
-      if login_name == target_ch:
-        resp = web.Response(
-            text="لازم تسجل دخول بحساب البوت المخصص مو بحساب قناتك الشخصية! افتح نافذة خاصة وسجل بحساب البوت ثم أعد المحاولة.",
-            status=400)
-        resp.del_cookie("ostate")
-        resp.del_cookie("cbot_ch")
-        return resp
       store.data.setdefault("custom_bots", {})[target_ch] = {
           "login": login_name,
           "user_id": str(user["id"]),
@@ -2634,6 +2629,7 @@ class Bot:
     self.cmd_cooldown = {}
     self.usage = {}
     self.seen = {}
+    self.recent_sent = []
     self.queues = {}
     self.paused = set()
     self.irc = IRCClient(self, IRC_TOKEN) if IRC_TOKEN else None
@@ -2759,7 +2755,10 @@ class Bot:
         await asyncio.sleep(wait)
       if ch in self.store.data["banned"] or ch not in self.store.data["channels"]:
         continue
-      times.append(time.time())
+      now_send = time.time()
+      times.append(now_send)
+      self.recent_sent = [x for x in self.recent_sent if now_send - x[2] < 20]
+      self.recent_sent.append((ch, text[:490].strip(), now_send))
       try:
         if ch in self.irc_channels and self.irc:
           ok = await self.irc.say(ch, text)
@@ -2783,8 +2782,14 @@ class Bot:
       self.seen[mid] = now
       who = (ev.get("chatter_user_login") or "").lower()
       chan = (ev.get("broadcaster_user_login") or "").lower()
+      msg_txt = ((ev.get("message") or {}).get("text") or "").strip()
       ch_bot, _ = self.twitch.bot_for(chan)
-      if who == self.nick or who == ch_bot or who in KNOWN_BOTS:
+      if who == self.nick or who in KNOWN_BOTS:
+        return
+      if who == ch_bot and who != chan:
+        return
+      # تجاهل الرسائل اللي أرسلها البوت نفسه قبل ثوانٍ (مهم إذا الستريمر ربط حسابه نفسه كبوت)
+      if any(c == chan and t == msg_txt and now - ts < 15 for c, t, ts in self.recent_sent):
         return
       await self.event_message(ChatMessage(self, ev))
     except Exception as e:
