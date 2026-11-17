@@ -29,16 +29,18 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")  # اختياري: لحفظ الب
 GIST_ID = os.environ.get("GIST_ID")  # اختياري: معرف الـ Gist
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")  # لوحة الأونر
 
+# موقع الستريمرز (تسجيل دخول بتويتش + تغيير اللعبة) + EventSub (كلها مطلوبة الحين)
 CLIENT_ID = os.environ.get("TWITCH_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("TWITCH_CLIENT_SECRET", "")
 SITE_URL = (os.environ.get("SITE_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").rstrip("/")
-SELF_JOIN = os.environ.get("SELF_JOIN", "1") != "0"
+SELF_JOIN = os.environ.get("SELF_JOIN", "1") != "0"  # الستريمر يفعّل البوت بنفسه (ضع 0 لإيقافه)
 SECRET = (os.environ.get("SESSION_SECRET") or CLIENT_SECRET or "").encode()
 
 OWNER = "majek113"
 IGNORED_USERS = set()
 DEFAULT_CHANNELS = ["majek113", "teamiik", "iz0yi", "vul1_", "lyorll"]
 
+# بوتات معروفة: البوت ما يرد عليها أبداً (يمنع حلقات الردود بين البوتات)
 KNOWN_BOTS = {
     "nightbot", "streamelements", "streamlabs", "moobot", "fossabot", "wizebot",
     "soundalerts", "pretzelrocks", "commanderroot", "anotherttvviewer",
@@ -50,12 +52,14 @@ USER_COOLDOWN = 15
 COMMAND_COOLDOWN = 5
 LIVE_CACHE_SECONDS = 60
 
-SEND_MIN_GAP = 1.2
+# حدود الإرسال (تويتش: 20 رسالة كل 30 ثانية لكل قناة، نبقى تحتها بمسافة أمان)
+SEND_MIN_GAP = 1.2  # أقل فاصل بين رسالتين في نفس القناة (ثواني)
 SEND_WINDOW = 30
 SEND_MAX_PER_WINDOW = 15
-SEND_QUEUE_MAX = 15
-SEND_STALE = 45
+SEND_QUEUE_MAX = 15  # لو تكدست أكثر من كذا، الرسائل الجديدة تنتجاهل
+SEND_STALE = 45  # رسالة علقت في الطابور أكثر من كذا ما تنرسل (قديمة)
 
+# احتياطي IRC: للقنوات اللي ما أعطت البوت صلاحية (بدون شارة بوت). اختياري: ضع TWITCH_TOKEN في Render
 IRC_TOKEN = (os.environ.get("TWITCH_TOKEN") or "").strip()
 IRC_HOST = "irc.chat.twitch.tv"
 IRC_PORT = 6697
@@ -71,14 +75,17 @@ MOD_SCOPE = "channel:manage:moderators"
 CHANNEL_BOT_SCOPE = "channel:bot"
 EVENTSUB_SECRET = hashlib.sha256(b"eventsub:" + SECRET).hexdigest()
 
+# الصلاحيات حسب نوع الدخول: s/c = ستريمر، b = حساب البوت نفسه
 SCOPES = {
     "s": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE}",
     "c": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE}",
     "b": "user:bot user:read:chat user:write:chat",
 }
 
+# مستويات الصلاحيات: كل مستوى يشمل اللي فوقه
 PERMS = {"everyone": 0, "sub": 1, "vip": 2, "mod": 3, "broadcaster": 4}
 
+# كوماندات البوت الأساسية (ما تنفع كأسماء لكوماندات مخصصة)
 BUILTIN = {
     "addcmd", "editcmd", "delcmd", "removecmd", "cmds", "addgame", "settitle",
     "addchannel", "removechannel", "channels", "commands", "reminders",
@@ -102,40 +109,11 @@ SAUDI_PRAYERS = [
     "اللهم انصر قواتنا المرابطة واحفظ حدودنا وجد ليالينا بالأمن والأمان يا رب العالمين",
 ]
 
-# الردود التلقائية الافتراضية القابلة للتعديل والحذف/التعطيل من موقع الستريمر
-DEFAULT_AUTO_REPLIES = {
-    "salam_evening": {
-        "enabled": True,
-        "text": "$(user) وعليكم السلام ورحمة الله وبركاته، ومساء النور نورت البث",
-    },
-    "salam": {
-        "enabled": True,
-        "text": "$(user) وعليكم السلام ورحمة الله وبركاته، نورت البث",
-    },
-    "evening": {
-        "enabled": True,
-        "text": "$(user) مساء النور",
-    },
-    "back": {
-        "enabled": True,
-        "text": "$(user) ولكم باك",
-    },
-    "brb": {
-        "enabled": True,
-        "text": "$(user) خذ راحتك بس لا تطول علينا",
-    },
-}
-
-DEFAULT_REMINDER_CFG = {
-    "interval": 30,  # بالدقائق
-    "saudi": True,
-    "dhikr": True,
-    "water": True,
-    "water_text": "اشربوا ماااااااي",
-}
-
 user_reply_time = {}
 
+# ============================================================
+# رسائل الكوماندات الأساسية: (عربي، إنجليزي) والستريمر يختار من الموقع
+# ============================================================
 MSG = {
     "no_cmds": ("ما فيه كوماندات مضافة للحين", "No commands have been added yet"),
     "cmds_list": ("الكوماندات: {n}", "Commands: {n}"),
@@ -194,6 +172,7 @@ def valid_channel(name):
 
 
 def norm_cmd(v):
+  """يحوّل الكوماند القديم (نص) للشكل الجديد."""
   if isinstance(v, str):
     return {"type": "text", "reply": v, "game": "", "perm": "everyone", "bang": True}
   v = dict(v)
@@ -207,6 +186,7 @@ def norm_cmd(v):
 
 
 def build_command(b):
+  """يتحقق من بيانات كوماند جاية من الواجهة ويرجع (الاسم، الكوماند)."""
   name = str(b.get("name", "")).strip().lstrip("!").lower()
   if not name or len(name) > 30 or re.search(r"\s", name) or name in BUILTIN:
     raise ValueError("اسم الكوماند ما ينفع")
@@ -246,6 +226,7 @@ def user_level(author, is_owner):
 
 
 def format_response(text, user, channel, target, game=""):
+  """المتغيرات المدعومة: $(user) $(touser) $(channel) $(game)"""
   return (
       text.replace("$(user)", user)
       .replace("$(touser)", target or user)
@@ -281,7 +262,7 @@ def read_session(tok):
 
 
 # ============================================================
-# التخزين
+# التخزين: Gist (دائم) أو ملف محلي (يتصفر مع كل إعادة تشغيل في Render)
 # ============================================================
 class Store:
 
@@ -289,14 +270,11 @@ class Store:
     self.data = {
         "channels": list(DEFAULT_CHANNELS),
         "commands": {},
-        "editors": {},
-        "tokens": {},
-        "banned": [],
-        "lang": {},
-        "reminders": {c: True for c in DEFAULT_CHANNELS},
-        "reminder_cfg": {},     # قناة -> {interval, saudi, dhikr, water, water_text}
-        "custom_timers": {},    # قناة -> [{id, name, text, interval, enabled}]
-        "auto_replies": {},     # قناة -> {salam_evening: {enabled, text}, ...}
+        "editors": {},  # قناة -> قائمة مودات مصرّح لهم يعدلون الكوماندات
+        "tokens": {},  # قناة -> ربط تويتش لتغيير اللعبة
+        "banned": [],  # قنوات محظورة من استخدام البوت
+        "lang": {},  # قناة -> "ar" أو "en" للغة ردود الكوماندات الأساسية
+        "reminders": {c: True for c in DEFAULT_CHANNELS},  # قناة -> الرسائل الدورية شغالة؟
     }
 
   @property
@@ -309,41 +287,6 @@ class Store:
         "Accept": "application/vnd.github+json",
         "User-Agent": "twitch-bot",
     }
-
-  def get_auto_replies(self, ch):
-    saved = self.data.setdefault("auto_replies", {}).get(ch, {})
-    out = {}
-    for k, default_val in DEFAULT_AUTO_REPLIES.items():
-      item = saved.get(k)
-      if isinstance(item, dict):
-        out[k] = {
-            "enabled": bool(item.get("enabled", default_val["enabled"])),
-            "text": str(item.get("text") or default_val["text"])[:450],
-        }
-      else:
-        out[k] = dict(default_val)
-    return out
-
-  def get_reminder_cfg(self, ch):
-    saved = self.data.setdefault("reminder_cfg", {}).get(ch, {})
-    cfg = dict(DEFAULT_REMINDER_CFG)
-    if isinstance(saved, dict):
-      try:
-        iv = int(saved.get("interval", 30))
-        cfg["interval"] = max(1, min(180, iv))
-      except Exception:
-        pass
-      cfg["saudi"] = bool(saved.get("saudi", True))
-      cfg["dhikr"] = bool(saved.get("dhikr", True))
-      cfg["water"] = bool(saved.get("water", True))
-      wt = str(saved.get("water_text", "")).strip()
-      if wt:
-        cfg["water_text"] = wt[:450]
-    return cfg
-
-  def get_custom_timers(self, ch):
-    timers = self.data.setdefault("custom_timers", {}).get(ch, [])
-    return timers if isinstance(timers, list) else []
 
   async def load(self):
     try:
@@ -369,12 +312,10 @@ class Store:
       self.data["tokens"] = loaded.get("tokens", {})
       self.data["banned"] = loaded.get("banned", [])
       self.data["lang"] = loaded.get("lang", {})
-      self.data["reminder_cfg"] = loaded.get("reminder_cfg", {})
-      self.data["custom_timers"] = loaded.get("custom_timers", {})
-      self.data["auto_replies"] = loaded.get("auto_replies", {})
       if "reminders" in loaded:
         self.data["reminders"] = loaded["reminders"]
       else:
+        # أول تشغيل بعد الترقية: القنوات الحالية تبقى على وضعها (شغالة)، والجديدة تبدأ متوقفة
         self.data["reminders"] = {c: True for c in self.data["channels"]}
       self.data["channels"] = [c for c in self.data["channels"] if c not in self.data["banned"]]
     except Exception as e:
@@ -401,7 +342,7 @@ class Store:
 
 
 # ============================================================
-# Twitch API
+# Twitch API (تغيير اللعبة + تسجيل دخول الستريمرز + الشات عبر EventSub)
 # ============================================================
 class TwitchAPI:
 
@@ -409,7 +350,7 @@ class TwitchAPI:
     self.store = store
     self.app_token = None
     self.app_exp = 0
-    self.user_access = {}
+    self.user_access = {}  # قناة -> (access_token, وقت الانتهاء)
     self.user_ids = {}
     self.lock = asyncio.Lock()
 
@@ -494,6 +435,7 @@ class TwitchAPI:
     return None
 
   async def channel_info(self, login):
+    """يرجع (اللعبة الحالية، عنوان البث)."""
     uid = await self.user_id(login)
     if not uid:
       return None, None
@@ -516,6 +458,7 @@ class TwitchAPI:
     return items[0]
 
   async def _patch_channel(self, channel, body):
+    """يرجع (نجح؟، كود الخطأ): disabled / not_linked / expired / refused"""
     if not self.enabled:
       return False, "disabled"
     info = self.store.data["tokens"].get(channel)
@@ -533,6 +476,7 @@ class TwitchAPI:
     return False, "refused"
 
   async def set_game(self, channel, game_name):
+    """يرجع (نجح؟، اسم اللعبة أو كود الخطأ)."""
     if not self.enabled:
       return False, "disabled"
     if channel not in self.store.data["tokens"]:
@@ -544,10 +488,12 @@ class TwitchAPI:
     return (True, game["name"]) if ok else (False, err)
 
   async def set_title(self, channel, title):
+    """يرجع (نجح؟، العنوان الجديد أو كود الخطأ)."""
     title = title.strip()[:140]
     ok, err = await self._patch_channel(channel, {"title": title})
     return (True, title) if ok else (False, err)
 
+  # ---------- الشات عبر EventSub + Send Chat Message API ----------
   async def is_live(self, login):
     if not self.enabled:
       return False
@@ -556,6 +502,7 @@ class TwitchAPI:
     return st == 200 and bool(d.get("data"))
 
   async def chat_send(self, channel, text):
+    """يرسل رسالة بالـ API (بتوكن التطبيق) عشان تظهر شارة البوت."""
     if not self.enabled:
       return False, "disabled"
     token = await self.get_app_token()
@@ -575,6 +522,7 @@ class TwitchAPI:
     return False, f"{st} {d.get('message') or drop or d.get('data')}"
 
   async def subscribe_chat(self, channel):
+    """يشترك في رسائل شات القناة (EventSub) باسم البوت."""
     if not self.enabled:
       return False, "disabled"
     token = await self.get_app_token()
@@ -621,6 +569,7 @@ class TwitchAPI:
         await self.drop_sub(s["id"])
 
   async def make_bot_mod(self, channel, bot_login):
+    """يخلي البوت مود في القناة (400 = مود أو VIP من قبل)."""
     info = self.store.data["tokens"].get(channel)
     if not info:
       return False
@@ -683,7 +632,7 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .bc:last-child{border:0}
 .bc code{color:#c4a1ff;background:#1a1530;padding:5px 10px;border-radius:8px;font-size:13px;direction:ltr;unicode-bidi:plaintext;word-break:break-word;max-width:100%}
 .bc .d{flex:1;color:var(--mut);font-size:13px;min-width:140px}
-#toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,80px);background:var(--ok);color:#000;padding:11px 20px;border-radius:12px;font-weight:700;transition:.25s;opacity:0;z-index:99}
+#toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,80px);background:var(--ok);color:#000;padding:11px 20px;border-radius:12px;font-weight:700;transition:.25s;opacity:0}
 #toast.show{transform:translate(-50%,0);opacity:1}#toast.bad{background:var(--bad);color:#fff}
 #login{min-height:80vh;display:grid;place-items:center}
 #login .card{width:100%;max-width:360px;text-align:center}
@@ -1119,6 +1068,9 @@ main{flex:1;min-width:0}
 .bubble{background:#0a0e17;border:1px solid #1c2438;border-radius:12px;padding:12px 14px;min-height:56px;white-space:pre-wrap;word-break:break-word;font-size:14px}
 .bubble:before{content:"🤖 ";}
 .simrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.guide p{margin:0;padding:9px 0;border-bottom:1px solid #1c2438;font-size:14px;color:var(--mut)}
+.guide p:last-child{border:0}
+.guide code{color:#c4a1ff;background:#1a1530;padding:2px 8px;border-radius:6px;font-size:13px;margin-inline-end:8px;direction:ltr;display:inline-block}
 .tool{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .tool input{flex:1;min-width:160px;margin:0}
 .tool .btn{width:auto}
@@ -1134,23 +1086,12 @@ main{flex:1;min-width:0}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:grid;place-items:center;z-index:50;padding:16px}
 .sheet{background:#111827;border:1px solid #1c2438;border-radius:18px;padding:20px;width:100%;max-width:520px;max-height:92vh;overflow:auto}
 .sheet .card{background:none;border:0;padding:0;margin:0}
-.ar-item{background:#0a0e17;border:1px solid #1c2438;border-radius:12px;padding:12px;margin-bottom:10px}
-.ar-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
-.ar-head b{font-size:14px;color:#e9ddff}
-.ar-item input{margin-bottom:0;background:#111827}
-.chkrow{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0}
-.chkrow label{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--tx);margin:0}
-.chkrow input[type=checkbox]{width:auto;margin:0;accent-color:var(--acc)}
-.timer-form{display:grid;grid-template-columns:1fr 110px;gap:8px;margin-top:10px}
-.timer-form input{margin:0}
-.timer-form textarea{grid-column:1/-1;margin:0;min-height:66px}
-.timer-form .btn{grid-column:1/-1}
 #bd{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:30}
 @media(max-width:860px){
  aside{display:none}
  aside.open{display:flex;position:fixed;inset-block:0;inset-inline-start:0;z-index:40;width:270px}
  .burger{display:block}
- .grid2,.simrow,.timer-form{grid-template-columns:1fr}
+ .grid2,.simrow{grid-template-columns:1fr}
  .content{padding:16px}.top{padding:12px 16px}
 }
 </style>
@@ -1274,49 +1215,6 @@ main{flex:1;min-width:0}
 
         <section class="pg own" id="p-set" hidden>
           <div class="panel" style="margin-bottom:14px">
-            <h3>الردود التلقائية للبوت (الافتراضية)</h3>
-            <p class="mut">عدّل نص الرد أو عطّل أي رد تلقائي ما تبيه يشتغل في قناتك. استخدم <code dir="ltr">$(user)</code> لاسم المشاهد.</p>
-            <div id="arlist" style="margin-top:12px"></div>
-            <div style="display:flex;gap:10px;margin-top:10px">
-              <button class="btn" id="savear">حفظ الردود التلقائية</button>
-              <button class="btn ghost" id="resetar">استعادة الافتراضي</button>
-            </div>
-          </div>
-
-          <div class="panel" style="margin-bottom:14px">
-            <h3>الرسائل الدورية الافتراضية (الأذكار، الأدعية، الماء)</h3>
-            <p class="mut">تُرسل تلقائياً أثناء البث المباشر فقط حسب المدة اللي تحددها</p>
-            <div class="tool" style="margin:12px 0 6px">
-              <button class="rchip" data-rm="on">مفعّلة</button>
-              <button class="rchip" data-rm="off">متوقفة</button>
-            </div>
-            <div id="remcfgbox" style="margin-top:12px">
-              <label>المدة بين كل رسالة والأخرى (بالدقائق)</label>
-              <input id="reminterval" type="number" min="1" max="180" value="30">
-              <div class="chkrow">
-                <label><input type="checkbox" id="remsaudi"> أدعية المملكة</label>
-                <label><input type="checkbox" id="remdhikr"> أذكار</label>
-                <label><input type="checkbox" id="remwater"> تذكير شرب الماء</label>
-              </div>
-              <label>نص تذكير الماء</label>
-              <input id="remwatertxt" placeholder="اشربوا ماااااااي">
-              <button class="btn" id="saveremcfg">حفظ إعدادات الرسائل الدورية</button>
-            </div>
-          </div>
-
-          <div class="panel" style="margin-bottom:14px">
-            <h3>رسائل دورية مخصصة (مؤقتات)</h3>
-            <p class="mut">أضف أي رسالة أو دعاء وحدد كل كم دقيقة ينكتب تلقائياً في الشات أثناء البث (مثلاً كل 5 دقائق)</p>
-            <div class="timer-form">
-              <input id="tmname" placeholder="اسم المؤقت (مثلاً: دعاء أو حساباتي)">
-              <input id="tminterval" type="number" min="1" max="180" value="5" placeholder="المدة (دقائق)">
-              <textarea id="tmtext" placeholder="نص الرسالة اللي بتتكرر تلقائياً..."></textarea>
-              <button class="btn" id="addtimer">إضافة / حفظ المؤقت</button>
-            </div>
-            <div id="timerlist" style="margin-top:14px"></div>
-          </div>
-
-          <div class="panel" style="margin-bottom:14px">
             <h3>لغة ردود البوت</h3>
             <p class="mut">تتحكم في لغة رسائل الكوماندات الأساسية (إضافة، تعديل، حذف، اللعبة، العنوان)</p>
             <div class="tool" style="margin:12px 0 10px">
@@ -1325,7 +1223,14 @@ main{flex:1;min-width:0}
             </div>
             <div class="bubble" id="langprev" data-nt></div>
           </div>
-
+          <div class="panel" style="margin-bottom:14px">
+            <h3>الرسائل الدورية</h3>
+            <p class="mut">أذكار وتذكير بشرب الماء كل نصف ساعة أثناء البث فقط</p>
+            <div class="tool" style="margin:12px 0 0">
+              <button class="rchip" data-rm="on">مفعّلة</button>
+              <button class="rchip" data-rm="off">متوقفة</button>
+            </div>
+          </div>
           <div class="panel" style="margin-bottom:14px">
             <h3>ربط تويتش (لتغيير اللعبة والعنوان)</h3>
             <p class="mut" id="linkstate"></p>
@@ -1362,20 +1267,17 @@ Object.assign(EN,{
 "جرّب الكوماند قبل ما ينشر. يستخدم نفس المتغيرات":"Try a command before going live. Uses the same variables",
 "اسم المشاهد":"Viewer name","كلمة بعد الكوماند (اختياري)":"Word after the command (optional)",
 "🎮 سيتغيّر كاتيقوري البث إلى:":"🎮 The stream category will change to:",
+"كوماندات الشات السريعة":"Quick chat commands","إضافة كوماند رد":"Add a text command",
+"إضافة اختصار لعبة":"Add a game shortcut","حذف كوماند":"Delete a command",
 "رابط الكوماندات للجميع":"Public commands link","فتح صفحة الكوماندات العامة":"Open public commands page",
 "إلغاء":"Cancel","ستريمر":"Streamer","مود":"Mod","ما فيه كوماندات تطابق بحثك":"No commands match your search",
+"الرسائل الدورية":"Periodic messages",
+"أذكار وتذكير بشرب الماء كل نصف ساعة أثناء البث فقط":"Adhkar and a water reminder every 30 minutes, only while live",
 "مفعّلة":"On","متوقفة":"Off","تم الحفظ":"Saved"
 });
 for(const k in EN)AR[EN[k]]=k;
-let ME=null,CH=null,PG="ov",FILT="all",Q="",EDIT_TM_ID=null;
+let ME=null,CH=null,PG="ov",FILT="all",Q="";
 const TITLES={ov:"الرئيسية",cmd:"الكوماندات",mods:"المودات",set:"الإعدادات"};
-const AR_LABELS={
-  salam:"رد السلام (السلام عليكم / سلام)",
-  salam_evening:"رد السلام + مساء الخير معاً",
-  evening:"رد مساء الخير",
-  back:"رد باك",
-  brb:"رد برب / brb"
-};
 const dn=(n,c)=>((c&&c.bang===false)?"":"!")+n;
 const base=()=>"/s/api/channel/"+encodeURIComponent(CH.name);
 const base2=()=>"/s/api/channel/"+encodeURIComponent($("#chsel").value);
@@ -1494,51 +1396,6 @@ function renderCmds(){
 }
 function renderOwn(){
   const c=CH;
-  // 1. الردود التلقائية الافتراضية
-  const arBox=$("#arlist");arBox.innerHTML="";
-  const ars=c.auto_replies||{};
-  Object.keys(AR_LABELS).forEach(k=>{
-    const item=ars[k]||{enabled:true,text:""};
-    const d=document.createElement("div");d.className="ar-item";
-    d.innerHTML='<div class="ar-head"><b data-nt></b><label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;color:var(--tx)"><input type="checkbox" style="width:auto;margin:0;accent-color:var(--acc)"> <span>مفعّل</span></label></div><input type="text" maxlength="450" data-nt>';
-    d.querySelector("b").textContent=AR_LABELS[k];
-    const chk=d.querySelector("input[type=checkbox]");chk.checked=!!item.enabled;chk.dataset.key=k;
-    const inp=d.querySelector("input[type=text]");inp.value=item.text||"";inp.dataset.key=k;
-    arBox.appendChild(d);
-  });
-
-  // 2. إعدادات الرسائل الدورية الافتراضية
-  const rcfg=c.reminder_cfg||{interval:30,saudi:true,dhikr:true,water:true,water_text:"اشربوا ماااااااي"};
-  $("#reminterval").value=rcfg.interval||30;
-  $("#remsaudi").checked=!!rcfg.saudi;
-  $("#remdhikr").checked=!!rcfg.dhikr;
-  $("#remwater").checked=!!rcfg.water;
-  $("#remwatertxt").value=rcfg.water_text||"اشربوا ماااااااي";
-
-  // 3. المؤقتات المخصصة
-  const tBox=$("#timerlist");tBox.innerHTML="";
-  const timers=c.custom_timers||[];
-  if(!timers.length)tBox.innerHTML='<p class="empty">ما أضفت رسائل دورية مخصصة للحين</p>';
-  timers.forEach(tm=>{
-    const d=document.createElement("div");d.className="row col";
-    d.innerHTML='<div class="top"><b data-nt></b><span><button class="ic tog"></button><button class="ic ed">✏️</button><button class="ic del">🗑</button></span></div><div class="meta" data-nt></div><p data-nt></p>';
-    d.querySelector("b").textContent=tm.name||"مؤقت";
-    d.querySelector(".meta").textContent="كل "+tm.interval+" دقيقة • "+(tm.enabled?"مفعّل ✅":"متوقف ⏸");
-    d.querySelector("p").textContent=tm.text||"";
-    const tog=d.querySelector(".tog");tog.textContent=tm.enabled?"⏸":"▶️";tog.title=tm.enabled?"إيقاف مؤقت":"تفعيل";
-    tog.onclick=()=>act(()=>api("POST",base()+"/timers",{id:tm.id,name:tm.name,text:tm.text,interval:tm.interval,enabled:!tm.enabled}),"تم التحديث");
-    d.querySelector(".ed").onclick=()=>{
-      EDIT_TM_ID=tm.id;
-      $("#tmname").value=tm.name||"";
-      $("#tminterval").value=tm.interval||5;
-      $("#tmtext").value=tm.text||"";
-      $("#tmname").focus();
-    };
-    d.querySelector(".del").onclick=()=>{if(confirm("تحذف المؤقت؟"))act(()=>api("DELETE",base()+"/timers/"+encodeURIComponent(tm.id)),"تم الحذف")};
-    tBox.appendChild(d);
-  });
-
-  // 4. ربط تويتش والمودات
   $("#linkstate").textContent=t(!c.twitch?"الربط غير مفعّل من المطوّر.":c.linked?"✅ مربوط: كوماندات اختصار اللعبة تقدر تغيّر لعبة بثك.":"غير مربوط: اربط تويتش عشان كوماندات تغيير اللعبة تشتغل.");
   $("#connect").hidden=!c.twitch;
   $("#connect").textContent=t(c.linked?"إعادة الربط":"ربط تويتش");
@@ -1571,37 +1428,6 @@ $("#savetitle").onclick=()=>act(async()=>{
 },"تم تغيير عنوان البث");
 document.querySelectorAll(".lchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/lang",{lang:b.dataset.bl}),"تم تغيير لغة ردود البوت"));
 document.querySelectorAll(".rchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/reminders",{on:b.dataset.rm==="on"}),"تم الحفظ"));
-$("#savear").onclick=()=>act(async()=>{
-  const payload={};
-  document.querySelectorAll("#arlist input[type=checkbox]").forEach(chk=>{
-    const k=chk.dataset.key;
-    const txt=document.querySelector('#arlist input[type=text][data-key="'+k+'"]').value;
-    payload[k]={enabled:chk.checked,text:txt};
-  });
-  await api("POST",base()+"/auto_replies",payload);
-},"تم حفظ الردود التلقائية");
-$("#resetar").onclick=()=>{
-  if(confirm("تستعيد جميع الردود التلقائية للنص الافتراضي؟"))
-    act(()=>api("POST",base()+"/auto_replies",{reset:true}),"تمت الاستعادة");
-};
-$("#saveremcfg").onclick=()=>act(()=>api("POST",base()+"/reminder_cfg",{
-  interval:parseInt($("#reminterval").value,10)||30,
-  saudi:$("#remsaudi").checked,
-  dhikr:$("#remdhikr").checked,
-  water:$("#remwater").checked,
-  water_text:$("#remwatertxt").value
-}),"تم حفظ إعدادات الرسائل الدورية");
-$("#addtimer").onclick=()=>act(async()=>{
-  await api("POST",base()+"/timers",{
-    id:EDIT_TM_ID,
-    name:$("#tmname").value,
-    interval:parseInt($("#tminterval").value,10)||5,
-    text:$("#tmtext").value,
-    enabled:true
-  });
-  EDIT_TM_ID=null;
-  $("#tmname").value="";$("#tminterval").value="5";$("#tmtext").value="";
-},"تم حفظ المؤقت");
 $("#cancelcmd").onclick=closeModal;
 $("#modal").onclick=e=>{if(e.target.id==="modal")closeModal()};
 $("#savecmd").onclick=()=>act(async()=>{
@@ -1772,6 +1598,7 @@ def make_web_app(bot):
   twitch = bot.twitch
   redirect_uri = SITE_URL + "/auth/callback"
 
+  # ---------------- لوحة الأونر ----------------
   def authed(request):
     tok = request.cookies.get("session", "")
     return bool(SESSION_TOKEN) and hmac.compare_digest(tok.encode(), SESSION_TOKEN.encode())
@@ -1966,6 +1793,7 @@ def make_web_app(bot):
     raise resp
 
   async def auth_bot(request):
+    """ربط حساب البوت نفسه (مرة وحدة): افتحه من نافذة خاصة بحساب majek_bot."""
     state_val, url = await auth_start("b")
     resp = web.HTTPFound(url)
     resp.set_cookie("ostate", state_val, max_age=600, httponly=True,
@@ -2101,9 +1929,6 @@ def make_web_app(bot):
         "usage": bot.usage.get(ch, {}),
         "lang": store.data["lang"].get(ch, "ar"),
         "reminders": bool(store.data["reminders"].get(ch, False)),
-        "reminder_cfg": store.get_reminder_cfg(ch) if role == "owner" else {},
-        "custom_timers": store.get_custom_timers(ch) if role == "owner" else [],
-        "auto_replies": store.get_auto_replies(ch) if role == "owner" else {},
     })
 
   async def s_save_cmd(request):
@@ -2208,99 +2033,6 @@ def make_web_app(bot):
     await store.save()
     return web.json_response({"ok": True})
 
-  async def s_reminder_cfg(request):
-    a, err = access(request, owner_only=True)
-    if err:
-      return err
-    _, ch, _ = a
-    b = await jbody(request)
-    try:
-      iv = max(1, min(180, int(b.get("interval", 30))))
-    except Exception:
-      iv = 30
-    wt = str(b.get("water_text", "")).strip()[:450] or "اشربوا ماااااااي"
-    store.data.setdefault("reminder_cfg", {})[ch] = {
-        "interval": iv,
-        "saudi": bool(b.get("saudi", True)),
-        "dhikr": bool(b.get("dhikr", True)),
-        "water": bool(b.get("water", True)),
-        "water_text": wt,
-    }
-    await store.save()
-    return web.json_response({"ok": True})
-
-  async def s_save_timer(request):
-    a, err = access(request, owner_only=True)
-    if err:
-      return err
-    _, ch, _ = a
-    b = await jbody(request)
-    text = str(b.get("text", "")).strip()[:450]
-    if not text:
-      return jerr("اكتب نص الرسالة")
-    name = str(b.get("name", "")).strip()[:40] or "مؤقت"
-    try:
-      iv = max(1, min(180, int(b.get("interval", 5))))
-    except Exception:
-      return jerr("المدة غير صحيحة")
-    enabled = b.get("enabled") is not False
-    tid = str(b.get("id") or "").strip()
-    timers = store.data.setdefault("custom_timers", {}).setdefault(ch, [])
-    if tid:
-      for tm in timers:
-        if tm.get("id") == tid:
-          tm["name"] = name
-          tm["text"] = text
-          tm["interval"] = iv
-          tm["enabled"] = enabled
-          break
-      else:
-        timers.append({"id": tid, "name": name, "text": text, "interval": iv, "enabled": enabled})
-    else:
-      if len(timers) >= 20:
-        return jerr("الحد الأقصى 20 مؤقت")
-      timers.append({
-          "id": secrets.token_hex(4),
-          "name": name,
-          "text": text,
-          "interval": iv,
-          "enabled": enabled,
-      })
-    await store.save()
-    return web.json_response({"ok": True})
-
-  async def s_del_timer(request):
-    a, err = access(request, owner_only=True)
-    if err:
-      return err
-    _, ch, _ = a
-    tid = request.match_info["id"]
-    timers = store.data.setdefault("custom_timers", {}).get(ch, [])
-    store.data["custom_timers"][ch] = [tm for tm in timers if tm.get("id") != tid]
-    await store.save()
-    return web.json_response({"ok": True})
-
-  async def s_auto_replies(request):
-    a, err = access(request, owner_only=True)
-    if err:
-      return err
-    _, ch, _ = a
-    b = await jbody(request)
-    if b.get("reset"):
-      store.data.setdefault("auto_replies", {}).pop(ch, None)
-      await store.save()
-      return web.json_response({"ok": True})
-    ar_map = store.data.setdefault("auto_replies", {}).setdefault(ch, {})
-    for k, default_val in DEFAULT_AUTO_REPLIES.items():
-      if k in b and isinstance(b[k], dict):
-        txt = str(b[k].get("text", "")).strip()[:450]
-        ar_map[k] = {
-            "enabled": bool(b[k].get("enabled", True)),
-            "text": txt if txt else default_val["text"],
-        }
-    await store.save()
-    return web.json_response({"ok": True})
-
   async def s_title(request):
     a, err = access(request)
     if err:
@@ -2352,10 +2084,6 @@ def make_web_app(bot):
   r.add_post("/s/api/channel/{channel}/leave", s_leave)
   r.add_post("/s/api/channel/{channel}/lang", s_lang)
   r.add_post("/s/api/channel/{channel}/reminders", s_reminders)
-  r.add_post("/s/api/channel/{channel}/reminder_cfg", s_reminder_cfg)
-  r.add_post("/s/api/channel/{channel}/timers", s_save_timer)
-  r.add_delete("/s/api/channel/{channel}/timers/{id}", s_del_timer)
-  r.add_post("/s/api/channel/{channel}/auto_replies", s_auto_replies)
   r.add_post("/s/api/channel/{channel}/title", s_title)
   return app
 
@@ -2372,6 +2100,7 @@ async def start_web_server(bot):
 # البوت (EventSub للقراءة + Send Chat Message API للإرسال)
 # ============================================================
 class IRCClient:
+  """اتصال IRC بسيط بحساب البوت: يخدم القنوات اللي ما أعطت صلاحية EventSub (بدون شارة بوت)."""
 
   def __init__(self, bot, token):
     self.bot = bot
@@ -2393,7 +2122,7 @@ class IRCClient:
       except Exception as e:
         print(f"IRC: انقطع الاتصال ({e})")
         if "auth" in str(e):
-          delay = 300
+          delay = 300  # التوكن غلط: لا نكرر المحاولة بسرعة
       self.ready.clear()
       self.writer = None
       await asyncio.sleep(delay)
@@ -2414,7 +2143,7 @@ class IRCClient:
   async def _rejoin(self):
     for c in list(self.channels):
       self._raw("JOIN #" + c)
-      await asyncio.sleep(0.6)
+      await asyncio.sleep(0.6)  # حد تويتش: 20 دخول كل 10 ثواني
 
   async def _handle(self, line):
     tags = {}
@@ -2474,6 +2203,7 @@ class IRCClient:
 
 
 class Author:
+  """مرسل الرسالة (مبني من حدث EventSub)."""
 
   def __init__(self, ev):
     self.name = (ev.get("chatter_user_login") or "").lower()
@@ -2515,15 +2245,12 @@ class Bot:
     self.last_saudi_prayer = None
     self.live_cache = {}
     self.cmd_cooldown = {}
-    self.usage = {}
-    self.seen = {}
-    self.queues = {}
-    self.paused = set()
+    self.usage = {}  # قناة -> {كوماند: عدد الاستخدام} من آخر تشغيل
+    self.seen = {}  # معرفات أحداث EventSub لمنع التكرار
+    self.queues = {}  # قناة -> طابور الإرسال
+    self.paused = set()  # قنوات الستريمر سحب منها الصلاحية: ما نعيد الاشتراك لين يعيد الربط
     self.irc = IRCClient(self, IRC_TOKEN) if IRC_TOKEN else None
-    self.irc_channels = set()
-    # تتبع أوقات الإرسال للرسائل الدورية والمؤقتات المخصصة لكل قناة
-    self.rem_state = {}    # ch -> {"last": float, "step": int}
-    self.timer_last = {}   # (ch, timer_id) -> float
+    self.irc_channels = set()  # قنوات تشتغل بالـ IRC لأن ما فيها صلاحية EventSub
 
   def run(self):
     loop = asyncio.get_event_loop()
@@ -2544,7 +2271,9 @@ class Bot:
     else:
       print("ملاحظة: ما فيه TWITCH_TOKEN، فالقنوات اللي ما أعطت صلاحية ما راح يرد فيها البوت")
 
+  # ---------- الاشتراك في شات القنوات ----------
   async def resub_all(self):
+    # احذف الاشتراكات المعطلة (تويتش يعطلها لو السيرفر نام) وأعد الاشتراك
     for s in await self.twitch.list_subs():
       if s.get("status") not in ("enabled", "webhook_callback_verification_pending"):
         await self.twitch.drop_sub(s["id"])
@@ -2554,7 +2283,7 @@ class Bot:
     ])
 
   async def resub_loop(self):
-    await asyncio.sleep(10)
+    await asyncio.sleep(10)  # لين يشتغل السيرفر ويقدر يرد على تحقق تويتش
     while True:
       try:
         await self.resub_all()
@@ -2564,11 +2293,11 @@ class Bot:
 
   async def join_channels(self, names):
     for n in names:
-      self.paused.discard(n)
+      self.paused.discard(n)  # الاستدعاء الصريح (إضافة أو إعادة ربط) يرفع الإيقاف
       ok, why = await self.twitch.subscribe_chat(n)
       if ok:
         print(f"اشتراك الشات {n}: ✅")
-        if n in self.irc_channels:
+        if n in self.irc_channels:  # صارت تشتغل بـ EventSub، نطلع من IRC عشان ما يتكرر الرد
           self.irc_channels.discard(n)
           if self.irc:
             self.irc.part(n)
@@ -2592,9 +2321,10 @@ class Bot:
         self.irc.part(n)
       q = self.queues.pop(n, None)
       if q is not None:
-        q.put_nowait(None)
+        q.put_nowait(None)  # يوقف عامل الإرسال
 
   async def on_revocation(self, sub):
+    """تويتش ألغى الاشتراك: لو الستريمر سحب الصلاحية نوقف المحاولات لين يعيد الربط."""
     status = sub.get("status")
     print(f"تويتش ألغى اشتراك: {status}")
     if status not in ("authorization_revoked", "user_removed"):
@@ -2608,6 +2338,7 @@ class Bot:
   def get_channel(self, name):
     return ChatChannel(self, name) if name in self.store.data["channels"] else None
 
+  # ---------- الإرسال: طابور لكل قناة مع حدود تحمي الحساب من السبام ----------
   async def send_chat(self, channel_name, text):
     if channel_name in self.store.data["banned"]:
       return
@@ -2629,7 +2360,7 @@ class Bot:
         return
       text, queued_at = item
       if time.time() - queued_at > SEND_STALE:
-        continue
+        continue  # رسالة قديمة، ما لها فايدة
       while True:
         now = time.time()
         times = [t for t in times if now - t < SEND_WINDOW]
@@ -2697,70 +2428,31 @@ class Bot:
     return selected
 
   async def periodic_reminders(self):
-    # يفحص كل 30 ثانية لتنفيذ الرسائل الدورية الافتراضية والمؤقتات المخصصة بدقة حسب مدة كل قناة
+    step = 0
     while True:
-      await asyncio.sleep(30)
-      now = time.time()
+      await asyncio.sleep(1800)
+      if step == 0:
+        message_text = f"اللهم صلِّ وسلم على نبينا محمد، {self.get_random_saudi_prayer()}"
+      elif step == 1:
+        message_text = self.get_random_dhikr()
+      else:
+        message_text = "اشربوا ماااااااي"
+
       for channel_name in list(self.store.data["channels"]):
-        if channel_name in self.store.data["banned"]:
-          continue
+        if not self.store.data["reminders"].get(channel_name, False):
+          continue  # الستريمر ما فعّل الرسائل الدورية
+        if await self.is_channel_live(channel_name):
+          channel = self.get_channel(channel_name)
+          if channel:
+            try:
+              await channel.send(message_text)
+            except Exception as e:
+              print(f"تعذر إرسال التذكير في {channel_name}: {e}")
 
-        rem_on = self.store.data["reminders"].get(channel_name, False)
-        timers = [tm for tm in self.store.get_custom_timers(channel_name) if tm.get("enabled")]
-
-        if not rem_on and not timers:
-          continue
-
-        if not await self.is_channel_live(channel_name):
-          continue
-
-        channel = self.get_channel(channel_name)
-        if not channel:
-          continue
-
-        # 1. الرسائل الدورية الافتراضية حسب المدة المحددة للستريمر
-        if rem_on:
-          cfg = self.store.get_reminder_cfg(channel_name)
-          pool = []
-          if cfg["saudi"]:
-            pool.append(f"اللهم صلِّ وسلم على نبينا محمد، {self.get_random_saudi_prayer()}")
-          if cfg["dhikr"]:
-            pool.append(self.get_random_dhikr())
-          if cfg["water"]:
-            pool.append(cfg["water_text"])
-
-          if pool:
-            st = self.rem_state.setdefault(channel_name, {"last": now, "step": 0})
-            if now - st["last"] >= cfg["interval"] * 60:
-              msg_text = pool[st["step"] % len(pool)]
-              st["step"] = (st["step"] + 1) % len(pool)
-              st["last"] = now
-              try:
-                await channel.send(msg_text)
-              except Exception as e:
-                print(f"تعذر إرسال التذكير في {channel_name}: {e}")
-
-        # 2. المؤقتات المخصصة (كل مؤقت بمدته الخاصة)
-        for tm in timers:
-          tid = tm.get("id")
-          if not tid:
-            continue
-          key = (channel_name, tid)
-          if key not in self.timer_last:
-            self.timer_last[key] = now
-            continue
-          iv_sec = max(1, int(tm.get("interval", 5))) * 60
-          if now - self.timer_last[key] >= iv_sec:
-            self.timer_last[key] = now
-            txt = format_response(tm.get("text", ""), channel_name, channel_name, channel_name)
-            if txt:
-              try:
-                await channel.send(txt[:490])
-              except Exception as e:
-                print(f"تعذر إرسال المؤقت في {channel_name}: {e}")
+      step = (step + 1) % 3
 
   # ----------------------------------------------------------
-  # الكوماندات
+  # الكوماندات (إدارة + مخصصة)
   # ----------------------------------------------------------
   def lang_of(self, ch):
     return "en" if self.store.data["lang"].get(ch) == "en" else "ar"
@@ -2770,6 +2462,7 @@ class Bot:
     return (en if self.lang_of(ch) == "en" else ar).format(**kw)
 
   async def say(self, message, ch, key, extra="", **kw):
+    """يرد على المستخدم بلغة القناة: عربي «@user نص» أو إنجليزي «@user -> text»."""
     sep = " -> " if self.lang_of(ch) == "en" else " "
     text = self.tr(ch, key, **kw) + (self.tr(ch, extra) if extra else "")
     await message.channel.send(f"@{message.author.name}{sep}{text}"[:490])
@@ -2798,6 +2491,7 @@ class Bot:
     async def say(key, extra="", **kw):
       await self.say(message, channel_name, key, extra, **kw)
 
+    # ---------- !commands: رابط صفحة الكوماندات للجميع ----------
     if cmd == "commands":
       ckey = (channel_name, "!commands")
       now = time.time()
@@ -2810,6 +2504,7 @@ class Bot:
         await self.send_cmd_list(message, channel_name, level)
       return True
 
+    # ---------- !bot: تعريف بالبوت (يرد بس لما أحد يسأل، وإذا الستريمر ما سوّى كوماند بنفس الاسم) ----------
     if cmd == "bot" and "bot" not in channel_cmds:
       bkey = (channel_name, "!bot")
       now = time.time()
@@ -2820,6 +2515,7 @@ class Bot:
         await say("bot_info", u=f"{SITE_URL}/s")
       return True
 
+    # ---------- !reminders on/off: الرسائل الدورية ----------
     if cmd == "reminders":
       if not is_mod:
         return True
@@ -2832,6 +2528,7 @@ class Bot:
       await say("rem_on" if arg == "on" else "rem_off")
       return True
 
+    # ---------- كوماندات المودرز ----------
     if cmd in ("addcmd", "editcmd", "delcmd", "removecmd", "cmds"):
       if cmd == "cmds":
         await self.send_cmd_list(message, channel_name, level)
@@ -2854,6 +2551,7 @@ class Bot:
           await say("del_nf", c=parts[1])
         return True
 
+      # addcmd / editcmd
       if len(parts) < 3:
         await say("usage_add", cmd=cmd)
         return True
@@ -2884,6 +2582,9 @@ class Bot:
         await say("edited", c=disp_cmd(name, channel_cmds[name]))
       return True
 
+    # ---------- !addgame: اختصار يغيّر كاتيقوري البث ----------
+    # مثال: !addgame !f fortnite  ← بعدها !f يغيّر الكاتيقوري إلى Fortnite
+    # أي لعبة أو كاتيقوري موجود في تويتش تنفع (Just Chatting, Valorant, ...)
     if cmd == "addgame":
       if not is_mod:
         return True
@@ -2924,6 +2625,7 @@ class Bot:
                 c=disp_cmd(name, entry), g=game["name"])
       return True
 
+    # ---------- !settitle: تغيير عنوان البث ----------
     if cmd == "settitle":
       if not is_mod:
         return True
@@ -2944,6 +2646,7 @@ class Bot:
         await say("e_" + result, q="")
       return True
 
+    # ---------- كوماندات الأونر (إدارة القنوات) ----------
     if cmd in ("addchannel", "removechannel", "channels"):
       if not is_owner:
         return True
@@ -2981,12 +2684,14 @@ class Bot:
         await send(f"{mention} تم حذف القناة {target} ✅")
       return True
 
+    # ---------- كوماند مخصص ----------
     entry = channel_cmds.get(cmd)
     if entry is None:
       return False
     return await self.run_custom(message, cmd, entry, parts, channel_name, level)
 
   async def handle_plain(self, message, content, channel_name, level):
+    """كوماندات بدون !: أول كلمة في الرسالة تطابق اسم الكوماند."""
     parts = content.split(maxsplit=2)
     if not parts:
       return False
@@ -3005,7 +2710,9 @@ class Bot:
 
   async def run_custom(self, message, cmd, entry, parts, channel_name, level):
     send = message.channel.send
+    mention = f"@{message.author.name}"
 
+    # الصلاحية: اللي ما يملكها ما يرد عليه البوت
     if level < PERMS[entry["perm"]]:
       return True
 
@@ -3014,6 +2721,7 @@ class Bot:
 
     target = parts[1].lstrip("@") if len(parts) > 1 else ""
 
+    # اختصار لعبة: يشتغل حتى لو القناة أوفلاين
     if entry["type"] == "game":
       if now - self.cmd_cooldown.get(key, 0) < COMMAND_COOLDOWN:
         return True
@@ -3027,6 +2735,7 @@ class Bot:
         await self.say(message, channel_name, "e_" + result, q=entry["game"])
       return True
 
+    # الكوماندات العادية ما ترد إلا إذا القناة لايف
     if not await self.is_channel_live(channel_name):
       return True
 
@@ -3053,6 +2762,7 @@ class Bot:
     is_owner = username == OWNER
     level = user_level(message.author, is_owner)
 
+    # الكوماندات تشتغل حتى للأونر
     if content.startswith("!"):
       if await self.handle_command(
           message, content, username, channel_name, is_owner, level
@@ -3061,6 +2771,7 @@ class Bot:
     elif await self.handle_plain(message, content, channel_name, level):
       return
 
+    # الردود التلقائية: تجاهل المستخدمين المتجاهلين فقط (الأونر يُرد عليه عادي)
     if username in IGNORED_USERS:
       return
 
@@ -3076,49 +2787,44 @@ class Bot:
     if not await self.is_channel_live(channel_name):
       return
 
-    ars = self.store.get_auto_replies(channel_name)
-
-    content_l = content.lower()
+    content = content.lower()
     author_mention = f"@{message.author.name}"
-    clean_content = re.sub(r"[^\w\s]", "", content_l)
+    clean_content = re.sub(r"[^\w\s]", "", content)
     words = clean_content.split()
 
     if not words:
       return
 
-    has_evening = "مساء الخير" in content_l
-    has_full_greeting = "السلام عليكم" in content_l or "سلام عليكم" in content_l
+    has_evening = "مساء الخير" in content
+    has_full_greeting = "السلام عليكم" in content or "سلام عليكم" in content
     has_single_greeting = words[0] in ["السلام", "سلام"]
     has_greeting = has_full_greeting or has_single_greeting
 
-    key_matched = None
+    replied = False
+
     if has_greeting and has_evening:
-      key_matched = "salam_evening"
+      await send(
+          f"{author_mention} وعليكم السلام ورحمة الله وبركاته، ومساء النور"
+          " نورت البث"
+      )
+      replied = True
     elif has_evening:
-      key_matched = "evening"
+      await send(f"{author_mention} مساء النور")
+      replied = True
     elif words[0] == "باك":
-      key_matched = "back"
+      await send(f"{author_mention} ولكم باك")
+      replied = True
     elif words[0] in ["brb", "برب"]:
-      key_matched = "brb"
+      await send(f"{author_mention} خذ راحتك بس لا تطول علينا")
+      replied = True
     elif has_greeting:
-      key_matched = "salam"
+      await send(
+          f"{author_mention} وعليكم السلام ورحمة الله وبركاته، نورت البث"
+      )
+      replied = True
 
-    if not key_matched:
-      return
-
-    cfg = ars.get(key_matched)
-    if not cfg or not cfg.get("enabled"):
-      return
-
-    raw_text = cfg["text"]
-    # إذا الستريمر ما حط $(user) في النص نمنشن المستخدم تلقائياً في البداية
-    if "$(user)" in raw_text:
-      reply_msg = format_response(raw_text, author_mention, channel_name, author_mention)
-    else:
-      reply_msg = f"{author_mention} {format_response(raw_text, author_mention, channel_name, author_mention)}"
-
-    await send(reply_msg[:490])
-    user_reply_time[username] = current_time
+    if replied:
+      user_reply_time[username] = current_time
 
 
 if __name__ == "__main__":
