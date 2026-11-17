@@ -40,7 +40,6 @@ KNOWN_BOTS = {
     "blerp", "botrix", "sery_bot", "coebot", "deepbot", "ankhbot", "stay_hydrated_bot",
 }
 
-# كشف بوتات السبام والإعلانات الخبيثة بناءً على الأنماط الشائعة
 SPAM_BOT_PATTERNS = [
     r"follower", r"viewer", r"buy", r"cheap", r"graphic", r"design",
     r"panel", r"overlay", r"discord\.gg\/", r"t\.me\/", r"twitchtools",
@@ -164,7 +163,7 @@ MSG = {
     "game_nf": ("ما لقيت لعبة أو كاتيقوري باسم {q} في تويتش",
                 "I couldn't find a game or category named {q} on Twitch"),
     "g_added": ("تمت إضافة اختصار اللعبة {c} ({g}) بنجاح 🎮",
-                "The game command {c} has been added successfully ({g}) 🎮"),
+                 "The game command {c} has been added successfully ({g}) 🎮"),
     "g_edited": ("تم تعديل اختصار اللعبة {c} ({g}) بنجاح 🎮",
                  "The game command {c} has been edited successfully ({g}) 🎮"),
     "link_warn": (" ⚠️ الستريمر لازم يربط تويتش من الموقع عشان يشتغل",
@@ -188,9 +187,6 @@ MSG = {
 }
 
 
-# ============================================================
-# أدوات مساعدة
-# ============================================================
 def valid_channel(name):
   return re.fullmatch(r"[a-z0-9_]{3,25}", name) is not None
 
@@ -282,9 +278,6 @@ def read_session(tok):
   return login
 
 
-# ============================================================
-# التخزين
-# ============================================================
 class Store:
 
   def __init__(self):
@@ -300,9 +293,9 @@ class Store:
         "reminder_cfg": {},
         "custom_timers": {},
         "auto_replies": {},
-        "reports": [],            # البلاغات الواردة
-        "report_bans": [],        # الأشخاص المحظورين من إرسال البلاغات
-        "mod_settings": {},       # إعدادات حماية الشات (روابط، بوتات إعلانية، تحذيرات)
+        "reports": [],
+        "report_bans": [],
+        "mod_settings": {},
     }
 
   @property
@@ -321,7 +314,7 @@ class Store:
     return {
         "block_links": bool(saved.get("block_links", True)),
         "block_spambots": bool(saved.get("block_spambots", True)),
-        "timeout_enabled": bool(saved.get("timeout_enabled", False)), # True = تايم, False = تحذير فقط
+        "timeout_enabled": bool(saved.get("timeout_enabled", False)),
         "timeout_duration": int(saved.get("timeout_duration", 10)),
     }
 
@@ -419,9 +412,6 @@ class Store:
       print(f"تعذر حفظ البيانات: {e}")
 
 
-# ============================================================
-# Twitch API
-# ============================================================
 class TwitchAPI:
 
   def __init__(self, store):
@@ -680,9 +670,6 @@ class TwitchAPI:
     return st in (204, 400)
 
 
-# ============================================================
-# الواجهات (HTML)
-# ============================================================
 COMMON_CSS = r"""
 :root{--bg:#0e0e12;--card:#18181f;--line:#2a2a35;--tx:#f1f1f5;--mut:#9a9aab;--acc:#9146ff;--ok:#2ecc71;--bad:#ff5c6c}
 *{box-sizing:border-box}
@@ -979,7 +966,6 @@ HEAD = r"""<!DOCTYPE html>
 <body>
 """
 
-# ---------------- لوحة الأونر ----------------
 OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
 <div class="wrap">
 <div id="login" hidden>
@@ -1091,7 +1077,6 @@ function render(){
     bl.appendChild(d);
   });
   
-  // البلاغات
   const rbox=$("#replist");rbox.innerHTML="";
   const reps=S.reports||[];
   if(!reps.length)rbox.innerHTML='<p class="empty">ما فيه بلاغات جديدة</p>';
@@ -1155,7 +1140,6 @@ load();
 </html>
 """
 
-# ---------------- موقع الستريمر ----------------
 STREAMER_HTML = HEAD.replace("{{TITLE}}", "موقع الستريمر") + r"""
 <style>
 body{background:#0a0e17}
@@ -2088,7 +2072,6 @@ def make_web_app(bot):
       await store.save()
     return web.json_response({"ok": True})
 
-  # ---------------- موقع الستريمر ----------------
   def role_of(login, ch):
     if ch not in store.data["channels"]:
       return None
@@ -2629,9 +2612,7 @@ def make_web_app(bot):
   r.add_delete("/api/reports/{id}", api_del_report)
   r.add_post("/api/report_ban", api_report_ban)
   r.add_delete("/api/report_ban/{user}", api_report_unban)
-  # EventSub
   r.add_post("/eventsub", eventsub_hook)
-  # موقع الستريمر
   r.add_get("/s", s_index)
   r.add_get("/auth/login", auth_login)
   r.add_get("/c/{channel}", c_page)
@@ -2663,9 +2644,14 @@ def make_web_app(bot):
   return app
 
 
-# ============================================================
-# البوت (EventSub للقراءة + Send Chat Message API للإرسال)
-# ============================================================
+async def start_web_server(bot):
+  runner = web.AppRunner(make_web_app(bot))
+  await runner.setup()
+  port = int(os.environ.get("PORT", 10000))
+  site = web.TCPSite(runner, "0.0.0.0", port)
+  await site.start()
+
+
 class IRCClient:
 
   def __init__(self, bot, token):
@@ -2974,13 +2960,11 @@ class Bot:
       if any(c == chan and t == msg_txt and now - ts < 15 for c, t, ts in self.recent_sent):
         return
       
-      # فحص الحماية (بوتات السبام والروابط)
       ms = self.store.get_mod_settings(chan)
       is_owner = who == OWNER or who == chan
       is_mod = ev.get("chatter_user_id") and (ev.get("chatter_user_id") == ev.get("broadcaster_user_id")) or any(b.get("set_id") == "moderator" for b in ev.get("badges", []))
       
       if not is_owner and not is_mod:
-        # فحص بوتات الإعلانات والسبام الوهمية
         if ms["block_spambots"]:
           for pattern in SPAM_BOT_PATTERNS:
             if re.search(pattern, msg_txt, re.IGNORECASE):
@@ -2990,7 +2974,6 @@ class Bot:
                 await self.send_chat(chan, f"@{who} ممنوع نشر الإعلانات والخدمات التجارية في الشات ⚠️")
               return
 
-        # فحص الروابط
         if ms["block_links"]:
           if re.search(r"https?://|www\.|[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b", msg_txt):
             if ms["timeout_enabled"]:
@@ -3087,9 +3070,6 @@ class Bot:
               except Exception as e:
                 print(f"تعذر إرسال المؤقت في {channel_name}: {e}")
 
-  # ----------------------------------------------------------
-  # الكوماندات
-  # ----------------------------------------------------------
   def lang_of(self, ch):
     return "en" if self.store.data["lang"].get(ch) == "en" else "ar"
 
@@ -3366,9 +3346,6 @@ class Bot:
     await send(format_response(entry["reply"], message.author.name, channel_name, target)[:490])
     return True
 
-  # ----------------------------------------------------------
-  # الرسائل
-  # ----------------------------------------------------------
   async def event_message(self, message):
     if message.echo or not message.author.name:
       return
