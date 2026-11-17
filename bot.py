@@ -13,21 +13,16 @@ from urllib.parse import urlencode
 import aiohttp
 from aiohttp import web
 
-# يخلي اللوقز تطلع فوراً في Render (بدون ما تنحبس في الذاكرة)
 try:
   sys.stdout.reconfigure(line_buffering=True)
 except Exception:
   pass
 
-# تثبيت الـ Event Loop لبيئة Render
 asyncio.set_event_loop(asyncio.new_event_loop())
 
-# ============================================================
-# الإعدادات (الأسرار تنحط في Environment Variables في Render)
-# ============================================================
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")  # اختياري: لحفظ البيانات بشكل دائم
-GIST_ID = os.environ.get("GIST_ID")  # اختياري: معرف الـ Gist
-DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")  # لوحة الأونر
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+GIST_ID = os.environ.get("GIST_ID")
+DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
 
 CLIENT_ID = os.environ.get("TWITCH_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("TWITCH_CLIENT_SECRET", "")
@@ -44,6 +39,13 @@ KNOWN_BOTS = {
     "soundalerts", "pretzelrocks", "commanderroot", "anotherttvviewer",
     "blerp", "botrix", "sery_bot", "coebot", "deepbot", "ankhbot", "stay_hydrated_bot",
 }
+
+# كشف بوتات السبام والإعلانات الخبيثة بناءً على الأنماط الشائعة
+SPAM_BOT_PATTERNS = [
+    r"follower", r"viewer", r"buy", r"cheap", r"graphic", r"design",
+    r"panel", r"overlay", r"discord\.gg\/", r"t\.me\/", r"twitchtools",
+    r"vipechat", r"customr",
+]
 
 DATA_FILE = "bot_data.json"
 USER_COOLDOWN = 15
@@ -75,7 +77,7 @@ SCOPES = {
     "s": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE}",
     "c": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE}",
     "b": "user:bot user:read:chat user:write:chat",
-    "cb": "user:bot user:read:chat user:write:chat",  # حساب بوت مخصص للستريمر
+    "cb": "user:bot user:read:chat user:write:chat",
 }
 
 PERMS = {"everyone": 0, "sub": 1, "vip": 2, "mod": 3, "broadcaster": 4}
@@ -291,13 +293,16 @@ class Store:
         "commands": {},
         "editors": {},
         "tokens": {},
-        "custom_bots": {},      # قناة -> {"login": str, "user_id": str}
+        "custom_bots": {},
         "banned": [],
         "lang": {},
         "reminders": {c: True for c in DEFAULT_CHANNELS},
         "reminder_cfg": {},
         "custom_timers": {},
         "auto_replies": {},
+        "reports": [],            # البلاغات الواردة
+        "report_bans": [],        # الأشخاص المحظورين من إرسال البلاغات
+        "mod_settings": {},       # إعدادات حماية الشات (روابط، بوتات إعلانية، تحذيرات)
     }
 
   @property
@@ -309,6 +314,15 @@ class Store:
         "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github+json",
         "User-Agent": "twitch-bot",
+    }
+
+  def get_mod_settings(self, ch):
+    saved = self.data.setdefault("mod_settings", {}).get(ch, {})
+    return {
+        "block_links": bool(saved.get("block_links", True)),
+        "block_spambots": bool(saved.get("block_spambots", True)),
+        "timeout_enabled": bool(saved.get("timeout_enabled", False)), # True = تايم, False = تحذير فقط
+        "timeout_duration": int(saved.get("timeout_duration", 10)),
     }
 
   def get_auto_replies(self, ch):
@@ -374,6 +388,9 @@ class Store:
       self.data["reminder_cfg"] = loaded.get("reminder_cfg", {})
       self.data["custom_timers"] = loaded.get("custom_timers", {})
       self.data["auto_replies"] = loaded.get("auto_replies", {})
+      self.data["reports"] = loaded.get("reports", [])
+      self.data["report_bans"] = loaded.get("report_bans", [])
+      self.data["mod_settings"] = loaded.get("mod_settings", {})
       if "reminders" in loaded:
         self.data["reminders"] = loaded["reminders"]
       else:
@@ -558,7 +575,6 @@ class TwitchAPI:
     return st == 200 and bool(d.get("data"))
 
   def bot_for(self, channel):
-    """يرجع (bot_login, bot_user_id) الخاص بالقناة (المخصص إن وجد أو الافتراضي)."""
     cb = self.store.data.get("custom_bots", {}).get(channel)
     if isinstance(cb, dict) and cb.get("login") and cb.get("user_id"):
       return cb["login"].lower(), str(cb["user_id"])
@@ -584,6 +600,21 @@ class TwitchAPI:
     if st == 200 and d.get("data"):
       drop = str((d["data"][0].get("drop_reason") or {}).get("message", ""))
     return False, f"{st} {d.get('message') or drop or d.get('data')}"
+
+  async def timeout_user(self, channel, user_login, duration=10, reason="مخالفة قوانين الشات"):
+    if not self.enabled:
+      return False
+    info = self.store.data["tokens"].get(channel)
+    if not info:
+      return False
+    token = await self.user_token(channel)
+    uid = await self.user_id(user_login)
+    if not token or not uid:
+      return False
+    await self.call("POST", "moderation/bans", token, params={"broadcaster_id": info["user_id"], "moderator_id": info["user_id"]}, body={
+        "data": {"user_id": uid, "duration": duration, "reason": reason}
+    })
+    return True
 
   async def subscribe_chat(self, channel):
     if not self.enabled:
@@ -709,16 +740,16 @@ const $=s=>document.querySelector(s);
 const PERMS={everyone:"الكل",sub:"المشتركين وفوق",vip:"VIP وفوق",mod:"المودات فقط",broadcaster:"الستريمر فقط"};
 const BASIC=[
  {c:"السلام عليكم / سلام",ce:"Salam / Hello",ar:"رد تلقائي عند كتابة السلام",en:"Auto reply when typing salam",p:"everyone"},
- {c:"مساء الخير",ce:"Good evening",ar:"رد تلقائي عند قول مساء الخير",en:"Auto reply for evening greeting",p:"everyone"},
- {c:"باك",ce:"Back",ar:"رد تلقائي عند العودة (باك)",en:"Auto reply when returning",p:"everyone"},
- {c:"برب / brb",ce:"BRB",ar:"رد تلقائي عند الذهاب مؤقتاً",en:"Auto reply when going away",p:"everyone"},
+ {c:"مساء الخير",ce:"Good evening",ar:"رد تلقائي عند قول مساء الخير",en:"Good evening auto reply",p:"everyone"},
+ {c:"باك",ce:"Back",ar:"رد تلقائي عند العودة (باك)",en:"Back auto reply",p:"everyone"},
+ {c:"برب / brb",ce:"BRB",ar:"رد تلقائي عند الذهاب مؤقتاً",en:"BRB auto reply",p:"everyone"},
  {c:"!reminders on/off",ce:"!reminders on/off",ar:"تشغيل أو إيقاف الأذكار والأدعية والماء",en:"Toggle automatic reminders",p:"mod"},
  {c:"!addcmd !hi أهلاً $(user)",ce:"!addcmd !hi Hello $(user)",ar:"إضافة كوماند رد",en:"Add a text command",p:"mod"},
- {c:"!editcmd !hi مرحباً $(user)",ce:"!editcmd !hi Welcome $(user)",ar:"تعديل رد كوماند موجود",en:"Edit an existing command's reply",p:"mod"},
+ {c:"!editcmd !hi مرحباً $(user)",ce:"!editcmd !hi Welcome $(user)",ar:"تعديل رد كوماند موجود",en:"Edit an existing command",p:"mod"},
  {c:"!delcmd !hi",ce:"!delcmd !hi",ar:"حذف كوماند",en:"Delete a command",p:"mod"},
- {c:"!addgame !f fortnite",ce:"!addgame !f fortnite",ar:"إنشاء اختصار يغيّر لعبة البث",en:"Create a shortcut that changes the stream's game",p:"mod"},
- {c:"!settitle عنوان البث الجديد",ce:"!settitle New stream title",ar:"تغيير عنوان البث",en:"Change the stream title",p:"mod"},
- {c:"!commands",ce:"!commands",ar:"رابط صفحة كل الكوماندات",en:"Link to the page with all commands",p:"everyone"}
+ {c:"!addgame !f fortnite",ce:"!addgame !f fortnite",ar:"إنشاء اختصار يغيّر لعبة البث",en:"Create a game shortcut",p:"mod"},
+ {c:"!settitle عنوان البث الجديد",ce:"!settitle New stream title",ar:"تغيير عنوان البث",en:"Change stream title",p:"mod"},
+ {c:"!commands",ce:"!commands",ar:"رابط صفحة كل الكوماندات",en:"Public commands link",p:"everyone"}
 ];
 function copyText(s){
   try{navigator.clipboard.writeText(s).then(()=>toast("تم النسخ"),()=>{})}catch(e){}
@@ -812,11 +843,10 @@ const EN={
 "📝 العنوان الحالي:":"📝 Current title:","تم تغيير عنوان البث":"Stream title changed","اكتب العنوان":"Enter the title",
 "يحتاج ربط تويتش من الإعدادات عشان يشتغل":"Needs a Twitch link from Settings to work",
 "لغة ردود البوت":"Bot reply language","تم تغيير لغة ردود البوت":"Bot reply language changed",
-"تتحكم في لغة رسائل الكوماندات الأساسية (إضافة، تعديل، حذف، اللعبة، العنوان)":"Controls the language of the core command messages (add, edit, delete, game, title)",
-"تغيير اللعبة والعنوان غير مفعّل من المطوّر":"Changing the game and title isn't enabled by the developer",
-"الستريمر ما ربط تويتش من موقع الستريمر":"The streamer hasn't linked Twitch on the streamer site",
-"انتهى الربط مع تويتش، الستريمر يعيد الربط من الموقع":"The Twitch link expired, the streamer needs to relink on the site",
-"تويتش رفض التغيير، حاول مرة ثانية":"Twitch refused the change, try again"
+"تتحكم في لغة رسائل الكوماندات الأساسية (إضافة، تعديل، حذف، اللعبة، العنوان)":"Controls the language of the core command messages",
+"بلاغات المشاكل":"Reports & Issues","إبلاغ عن مشكلة":"Report an issue",
+"أبلغ عن مشكلة أو اقتراح":"Report an issue or suggestion",
+"تفاصيل المشكلة...":"Issue details..."
 };
 const AR={};for(const k in EN)AR[EN[k]]=k;
 let LANG="ar";
@@ -973,6 +1003,7 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
   <div class="tabs">
     <button class="on" data-t="ch">القنوات</button>
     <button data-t="cmd">الكوماندات</button>
+    <button data-t="rep">البلاغات</button>
     <button data-t="msg">إرسال رسالة</button>
     <button data-t="basic">الأساسية</button>
   </div>
@@ -997,6 +1028,17 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
     <div class="card"><h2>كوماندات القناة</h2><div id="cmdlist"></div></div>
   </section>
 
+  <section id="t-rep" hidden>
+    <div class="card">
+      <h2>بلاغات المشاكل الواردة</h2>
+      <div id="replist"></div>
+    </div>
+    <div class="card">
+      <h2>الأشخاص المحظورون من إرسال البلاغات (ترول)</h2>
+      <div id="repbanlist"></div>
+    </div>
+  </section>
+
   <section id="t-basic" hidden>
     <div class="card">
       <h2>كوماندات البوت الأساسية</h2>
@@ -1019,7 +1061,7 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
 
 <script>
 //COMMON_JS
-let S={channels:[],commands:{},bot:"",banned:[]};
+let S={channels:[],commands:{},bot:"",banned:[],reports:[],report_bans:[]};
 onAuth=()=>show(false);
 onLang=()=>{if(!$("#app").hidden)render()};
 function show(on){$("#login").hidden=on;$("#app").hidden=!on}
@@ -1048,6 +1090,30 @@ function render(){
     d.querySelector("button").onclick=()=>act(()=>api("DELETE","/api/ban/"+encodeURIComponent(n)),"تم رفع الحظر");
     bl.appendChild(d);
   });
+  
+  // البلاغات
+  const rbox=$("#replist");rbox.innerHTML="";
+  const reps=S.reports||[];
+  if(!reps.length)rbox.innerHTML='<p class="empty">ما فيه بلاغات جديدة</p>';
+  reps.forEach(r=>{
+    const d=document.createElement("div");d.className="row col";
+    d.innerHTML='<div class="top"><b dir="ltr">'+r.user+' <small style="color:var(--mut)">('+r.time+')</small></b><span><button class="btn ghost red" style="padding:4px 10px;font-size:12px">حظر من البلاغات</button> <button class="ic del">🗑</button></span></div><p>'+r.text+'</p>';
+    d.querySelector(".red").onclick=()=>act(()=>api("POST","/api/report_ban",{user:r.user}),"تم حظر المستخدم من إرسال بلاغات");
+    d.querySelector(".del").onclick=()=>act(()=>api("DELETE","/api/reports/"+r.id),"تم حذف البلاغ");
+    rbox.appendChild(d);
+  });
+
+  const rbz=$("#repbanlist");rbz.innerHTML="";
+  const rbans=S.report_bans||[];
+  if(!rbans.length)rbz.innerHTML='<p class="empty">ما فيه أشخاص محظورون من البلاغات</p>';
+  rbans.forEach(u=>{
+    const d=document.createElement("div");d.className="row";
+    d.innerHTML='<b dir="ltr"></b><button class="btn ghost">رفع الحظر</button>';
+    d.querySelector("b").textContent=u;
+    d.querySelector("button").onclick=()=>act(()=>api("DELETE","/api/report_ban/"+encodeURIComponent(u)),"تم رفع الحظر");
+    rbz.appendChild(d);
+  });
+
   for(const id of ["#cmdch","#msgch"]){
     const s=$(id),v=s.value;s.innerHTML="";
     S.channels.forEach(c=>s.add(new Option(c.name,c.name)));
@@ -1079,7 +1145,7 @@ $("#sendmsg").onclick=()=>act(async()=>{
 },"تم الإرسال");
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{
   document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x===b));
-  for(const t of ["ch","cmd","msg","basic"])$("#t-"+t).hidden=t!==b.dataset.t;
+  for(const t of ["ch","cmd","rep","msg","basic"])$("#t-"+t).hidden=t!==b.dataset.t;
 });
 setInterval(()=>{if(!$("#app").hidden)load()},60000);
 initLang();
@@ -1293,6 +1359,19 @@ main{flex:1;min-width:0}
         </section>
 
         <section class="pg own" id="p-set" hidden>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>إعدادات الحماية والأمان في الشات</h3>
+            <p class="mut">تحكم في حظر الروابط، حظر بوتات الإعلانات والسبام الوهمية، وإعدادات التحذيرات والتايم أوت.</p>
+            <div class="chkrow" style="margin-top:12px">
+              <label><input type="checkbox" id="blocklinks"> حظر الروابط تلقائياً</label>
+              <label><input type="checkbox" id="blockspambots"> حظر بوتات الإعلانات والسبام الوهمية</label>
+              <label><input type="checkbox" id="timeoutenabled"> تفعيل تايم أوت مع التحذير (بدلاً من تحذير نصي فقط)</label>
+            </div>
+            <label style="margin-top:10px">مدة التايم أوت (بالثواني)</label>
+            <input id="timeoutdur" type="number" min="1" max="600" value="10">
+            <button class="btn" id="savesec" style="margin-top:10px">حفظ إعدادات الحماية</button>
+          </div>
+
           <div class="panel" style="margin-bottom:14px">
             <h3>الردود التلقائية للبوت (الافتراضية)</h3>
             <p class="mut">عدّل نص الرد أو عطّل أي رد تلقائي ما تبيه يشتغل في قناتك. استخدم <code dir="ltr">$(user)</code> لاسم المشاهد.</p>
@@ -1522,7 +1601,12 @@ function renderCmds(){
 }
 function renderOwn(){
   const c=CH;
-  // 1. الردود التلقائية الافتراضية
+  const ms=c.mod_settings||{block_links:true,block_spambots:true,timeout_enabled:false,timeout_duration:10};
+  $("#blocklinks").checked=!!ms.block_links;
+  $("#blockspambots").checked=!!ms.block_spambots;
+  $("#timeoutenabled").checked=!!ms.timeout_enabled;
+  $("#timeoutdur").value=ms.timeout_duration||10;
+
   const arBox=$("#arlist");arBox.innerHTML="";
   const ars=c.auto_replies||{};
   Object.keys(AR_LABELS).forEach(k=>{
@@ -1535,7 +1619,6 @@ function renderOwn(){
     arBox.appendChild(d);
   });
 
-  // 2. إعدادات الرسائل الدورية الافتراضية
   const rcfg=c.reminder_cfg||{interval:30,saudi:true,dhikr:true,water:true,water_text:"اشربوا ماااااااي"};
   $("#reminterval").value=rcfg.interval||30;
   $("#remsaudi").checked=!!rcfg.saudi;
@@ -1543,7 +1626,6 @@ function renderOwn(){
   $("#remwater").checked=!!rcfg.water;
   $("#remwatertxt").value=rcfg.water_text||"اشربوا ماااااااي";
 
-  // 3. المؤقتات المخصصة
   const tBox=$("#timerlist");tBox.innerHTML="";
   const timers=c.custom_timers||[];
   if(!timers.length)tBox.innerHTML='<p class="empty">ما أضفت رسائل دورية مخصصة للحين</p>';
@@ -1566,7 +1648,6 @@ function renderOwn(){
     tBox.appendChild(d);
   });
 
-  // 4. حساب البوت المخصص
   $("#cbotstate").textContent=c.custom_bot
     ? "✅ البوت الحالي في قناتك هو: "+c.custom_bot
     : "البوت الحالي في قناتك هو البوت الافتراضي ("+(c.default_bot||"majek_bot")+")";
@@ -1574,7 +1655,6 @@ function renderOwn(){
   $("#cbotbtn").textContent=c.custom_bot?"تغيير حساب البوت المخصص":"ربط حساب بوت مخصص لقناتي";
   $("#cbotdel").hidden=!c.custom_bot;
 
-  // 5. ربط تويتش والمودات
   $("#linkstate").textContent=t(!c.twitch?"الربط غير مفعّل من المطوّر.":c.linked?"✅ مربوط: كوماندات اختصار اللعبة تقدر تغيّر لعبة بثك.":"غير مربوط: اربط تويتش عشان كوماندات تغيير اللعبة تشتغل.");
   $("#connect").hidden=!c.twitch;
   $("#connect").textContent=t(c.linked?"إعادة الربط":"ربط تويتش");
@@ -1607,6 +1687,12 @@ $("#savetitle").onclick=()=>act(async()=>{
 },"تم تغيير عنوان البث");
 document.querySelectorAll(".lchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/lang",{lang:b.dataset.bl}),"تم تغيير لغة ردود البوت"));
 document.querySelectorAll(".rchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/reminders",{on:b.dataset.rm==="on"}),"تم الحفظ"));
+$("#savesec").onclick=()=>act(()=>api("POST",base()+"/mod_settings",{
+  block_links:$("#blocklinks").checked,
+  block_spambots:$("#blockspambots").checked,
+  timeout_enabled:$("#timeoutenabled").checked,
+  timeout_duration:parseInt($("#timeoutdur").value,10)||10
+}),"تم حفظ إعدادات الحماية");
 $("#savear").onclick=()=>act(async()=>{
   const payload={};
   document.querySelectorAll("#arlist input[type=checkbox]").forEach(chk=>{
@@ -1702,7 +1788,10 @@ PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
       <h1 id="chname" dir="ltr" data-nt></h1>
       <div class="sub"><span class="pill" id="live" hidden></span><span class="mut" id="cnt" data-nt></span></div>
     </div>
-    <button class="btn ghost langbtn">EN</button>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn ghost" id="reportbtn" style="background:var(--card)">⚠️ إبلاغ عن مشكلة</button>
+      <button class="btn ghost langbtn">EN</button>
+    </div>
   </div>
   <div class="card" id="nf" hidden><p class="mut" style="margin:0">القناة غير موجودة أو البوت غير مفعّل فيها</p></div>
   <div id="box">
@@ -1721,6 +1810,19 @@ PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
   </div>
   <p class="hint" style="text-align:center;margin-top:18px"><a href="/s" style="color:var(--acc)">أنت الستريمر أو مود؟ ادخل لوحة التحكم</a></p>
 </div>
+
+<div class="modal" id="repmodal" hidden>
+  <div class="sheet">
+    <h2 style="margin-top:0">إبلاغ عن مشكلة في البوت</h2>
+    <label>يوزر تويتش الخاص بك (اختياري)</label>
+    <input id="repuser" dir="ltr" placeholder="اسمك أو يوزرك">
+    <label>تفاصيل المشكلة أو الملاحظة</label>
+    <textarea id="reptxt" placeholder="اكتب المشكلة بالتفصيل..."></textarea>
+    <button class="btn" id="sendrep">إرسال البلاغ</button>
+    <button class="btn ghost mt" id="closerep" style="width:100%">إلغاء</button>
+  </div>
+</div>
+
 <div id="toast"></div>
 <script>
 //COMMON_JS
@@ -1760,6 +1862,20 @@ $("#q").oninput=e=>{Q=e.target.value.trim();render()};
 document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{
   FILT=b.dataset.f;document.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x===b));render();
 });
+$("#reportbtn").onclick=()=>{$("#repmodal").hidden=false};
+$("#closerep").onclick=()=>{$("#repmodal").hidden=true};
+$("#sendrep").onclick=async()=>{
+  try{
+    const r=await fetch("/pub/"+encodeURIComponent(CHN)+"/report",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({user:$("#repuser").value,text:$("#reptxt").value})
+    });
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||"صار خطأ");
+    toast("تم إرسال البلاغ بنجاح ✅");
+    $("#reptxt").value="";$("#repmodal").hidden=true;
+  }catch(e){toast(e.message,1)}
+};
 initLang();
 fetch("/pub/"+encodeURIComponent(CHN)).then(r=>r.ok?r.json():Promise.reject()).then(d=>{D=d;render()}).catch(()=>{BAD=true;render()});
 </script>
@@ -1860,6 +1976,8 @@ def make_web_app(bot):
         "channels": [{"name": n, "live": l} for n, l in zip(names, lives)],
         "commands": store.data["commands"],
         "banned": store.data["banned"],
+        "reports": store.data.get("reports", []),
+        "report_bans": store.data.get("report_bans", []),
     })
 
   async def add_channel(request):
@@ -1943,6 +2061,31 @@ def make_web_app(bot):
     if not channel or not text:
       return jerr("اختر قناة واكتب الرسالة")
     await channel.send(text)
+    return web.json_response({"ok": True})
+
+  async def api_del_report(request):
+    rid = request.match_info["id"]
+    reps = store.data.get("reports", [])
+    store.data["reports"] = [r for r in reps if r.get("id") != rid]
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def api_report_ban(request):
+    user = str((await jbody(request)).get("user", "")).strip().lower()
+    if not user:
+      return jerr("اليوزر مطلوب")
+    rbans = store.data.setdefault("report_bans", [])
+    if user not in rbans:
+      rbans.append(user)
+      await store.save()
+    return web.json_response({"ok": True})
+
+  async def api_report_unban(request):
+    user = request.match_info["user"].lower()
+    rbans = store.data.setdefault("report_bans", [])
+    if user in rbans:
+      rbans.remove(user)
+      await store.save()
     return web.json_response({"ok": True})
 
   # ---------------- موقع الستريمر ----------------
@@ -2079,7 +2222,6 @@ def make_web_app(bot):
     user = data["data"][0]
     login_name = user["login"].lower()
 
-    # 1. ربط حساب البوت الأساسي
     if state_val[0] == "b":
       if login_name != BOT_LOGIN:
         resp = web.Response(
@@ -2090,7 +2232,6 @@ def make_web_app(bot):
       resp.del_cookie("ostate")
       return resp
 
-    # 2. ربط حساب بوت مخصص للستريمر (يقبل حساب البوت الجديد أو حساب الستريمر نفسه)
     if state_val[0] == "x":
       target_ch = request.cookies.get("cbot_ch", "").lower()
       sess_login = read_session(request.cookies.get("ssess", ""))
@@ -2116,7 +2257,6 @@ def make_web_app(bot):
       resp.del_cookie("cbot_ch")
       raise resp
 
-    # 3. دخول الستريمر / المود
     dest = "/s"
     if state_val[0] in ("c", "s") and login_name not in store.data["banned"]:
       if login_name not in store.data["channels"] and SELF_JOIN and valid_channel(login_name):
@@ -2160,6 +2300,31 @@ def make_web_app(bot):
         "commands": store.data["commands"].get(ch, {}),
     })
 
+  async def pub_report(request):
+    ch = request.match_info["channel"].lower()
+    if ch not in store.data["channels"]:
+      return jerr("القناة غير موجودة", 404)
+    body = await jbody(request)
+    user = str(body.get("user", "")).strip().lower() or "زائر"
+    if user in store.data.get("report_bans", []):
+      return jerr("أنت محظور من إرسال البلاغات", 403)
+    text = str(body.get("text", "")).strip()[:800]
+    if not text:
+      return jerr("اكتب تفاصيل المشكلة")
+    
+    reports = store.data.setdefault("reports", [])
+    reports.insert(0, {
+        "id": secrets.token_hex(4),
+        "channel": ch,
+        "user": user,
+        "text": text,
+        "time": time.strftime("%Y-%m-%d %H:%M"),
+    })
+    if len(reports) > 100:
+      store.data["reports"] = reports[:100]
+    await store.save()
+    return web.json_response({"ok": True})
+
   async def s_logout(request):
     resp = web.json_response({"ok": True})
     resp.del_cookie("ssess")
@@ -2200,6 +2365,7 @@ def make_web_app(bot):
         "reminder_cfg": store.get_reminder_cfg(ch) if role == "owner" else {},
         "custom_timers": store.get_custom_timers(ch) if role == "owner" else {},
         "auto_replies": store.get_auto_replies(ch) if role == "owner" else {},
+        "mod_settings": store.get_mod_settings(ch) if role == "owner" else {},
         "custom_bot": cb.get("login") if isinstance(cb, dict) else None,
         "default_bot": BOT_LOGIN,
     })
@@ -2320,6 +2486,21 @@ def make_web_app(bot):
       return err
     _, ch, _ = a
     store.data["reminders"][ch] = bool((await jbody(request)).get("on"))
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_mod_settings(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    store.data.setdefault("mod_settings", {})[ch] = {
+        "block_links": bool(b.get("block_links", True)),
+        "block_spambots": bool(b.get("block_spambots", True)),
+        "timeout_enabled": bool(b.get("timeout_enabled", False)),
+        "timeout_duration": int(b.get("timeout_duration", 10)),
+    }
     await store.save()
     return web.json_response({"ok": True})
 
@@ -2445,6 +2626,9 @@ def make_web_app(bot):
   r.add_post("/api/commands", save_command)
   r.add_delete("/api/commands/{channel}/{name}", del_command)
   r.add_post("/api/send", send_msg)
+  r.add_delete("/api/reports/{id}", api_del_report)
+  r.add_post("/api/report_ban", api_report_ban)
+  r.add_delete("/api/report_ban/{user}", api_report_unban)
   # EventSub
   r.add_post("/eventsub", eventsub_hook)
   # موقع الستريمر
@@ -2452,6 +2636,7 @@ def make_web_app(bot):
   r.add_get("/auth/login", auth_login)
   r.add_get("/c/{channel}", c_page)
   r.add_get("/pub/{channel}", pub)
+  r.add_post("/pub/{channel}/report", pub_report)
   r.add_get("/auth/streamer", auth_streamer)
   r.add_get("/auth/connect", auth_connect)
   r.add_get("/auth/bot", auth_bot)
@@ -2468,6 +2653,7 @@ def make_web_app(bot):
   r.add_post("/s/api/channel/{channel}/leave", s_leave)
   r.add_post("/s/api/channel/{channel}/lang", s_lang)
   r.add_post("/s/api/channel/{channel}/reminders", s_reminders)
+  r.add_post("/s/api/channel/{channel}/mod_settings", s_mod_settings)
   r.add_post("/s/api/channel/{channel}/reminder_cfg", s_reminder_cfg)
   r.add_post("/s/api/channel/{channel}/timers", s_save_timer)
   r.add_delete("/s/api/channel/{channel}/timers/{id}", s_del_timer)
@@ -2475,14 +2661,6 @@ def make_web_app(bot):
   r.add_post("/s/api/channel/{channel}/custom_bot/remove", s_remove_custom_bot)
   r.add_post("/s/api/channel/{channel}/title", s_title)
   return app
-
-
-async def start_web_server(bot):
-  runner = web.AppRunner(make_web_app(bot))
-  await runner.setup()
-  port = int(os.environ.get("PORT", 10000))
-  site = web.TCPSite(runner, "0.0.0.0", port)
-  await site.start()
 
 
 # ============================================================
@@ -2793,9 +2971,34 @@ class Bot:
         return
       if who == ch_bot and who != chan:
         return
-      # تجاهل الرسائل اللي أرسلها البوت نفسه قبل ثوانٍ (مهم إذا الستريمر ربط حسابه نفسه كبوت)
       if any(c == chan and t == msg_txt and now - ts < 15 for c, t, ts in self.recent_sent):
         return
+      
+      # فحص الحماية (بوتات السبام والروابط)
+      ms = self.store.get_mod_settings(chan)
+      is_owner = who == OWNER or who == chan
+      is_mod = ev.get("chatter_user_id") and (ev.get("chatter_user_id") == ev.get("broadcaster_user_id")) or any(b.get("set_id") == "moderator" for b in ev.get("badges", []))
+      
+      if not is_owner and not is_mod:
+        # فحص بوتات الإعلانات والسبام الوهمية
+        if ms["block_spambots"]:
+          for pattern in SPAM_BOT_PATTERNS:
+            if re.search(pattern, msg_txt, re.IGNORECASE):
+              if ms["timeout_enabled"]:
+                await self.twitch.timeout_user(chan, who, ms["timeout_duration"], "حظر بوت إعلاني")
+              else:
+                await self.send_chat(chan, f"@{who} ممنوع نشر الإعلانات والخدمات التجارية في الشات ⚠️")
+              return
+
+        # فحص الروابط
+        if ms["block_links"]:
+          if re.search(r"https?://|www\.|[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b", msg_txt):
+            if ms["timeout_enabled"]:
+              await self.twitch.timeout_user(chan, who, ms["timeout_duration"], "يمنع إرسال الروابط")
+            else:
+              await self.send_chat(chan, f"@{who} يمنع إرسال الروابط في الشات ⚠️")
+            return
+
       await self.event_message(ChatMessage(self, ev))
     except Exception as e:
       print(f"خطأ في معالجة رسالة: {e}")
