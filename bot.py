@@ -59,6 +59,12 @@ SEND_MAX_PER_WINDOW = 15
 SEND_QUEUE_MAX = 15  # لو تكدست أكثر من كذا، الرسائل الجديدة تنتجاهل
 SEND_STALE = 45  # رسالة علقت في الطابور أكثر من كذا ما تنرسل (قديمة)
 
+# احتياطي IRC: للقنوات اللي ما أعطت البوت صلاحية (بدون شارة بوت). اختياري: ضع TWITCH_TOKEN في Render
+IRC_TOKEN = (os.environ.get("TWITCH_TOKEN") or "").strip()
+IRC_HOST = "irc.chat.twitch.tv"
+IRC_PORT = 6697
+IRC_SSL = True
+
 AUTH_URL = "https://id.twitch.tv/oauth2/authorize"
 TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 HELIX = "https://api.twitch.tv/helix/"
@@ -2093,6 +2099,109 @@ async def start_web_server(bot):
 # ============================================================
 # البوت (EventSub للقراءة + Send Chat Message API للإرسال)
 # ============================================================
+class IRCClient:
+  """اتصال IRC بسيط بحساب البوت: يخدم القنوات اللي ما أعطت صلاحية EventSub (بدون شارة بوت)."""
+
+  def __init__(self, bot, token):
+    self.bot = bot
+    self.token = token if token.startswith("oauth:") else "oauth:" + token
+    self.writer = None
+    self.ready = asyncio.Event()
+    self.channels = set()
+
+  def _raw(self, line):
+    if self.writer:
+      self.writer.write((line.replace("\r", " ").replace("\n", " ") + "\r\n").encode("utf-8"))
+
+  async def run(self):
+    delay = 5
+    while True:
+      try:
+        await self._session()
+        delay = 5
+      except Exception as e:
+        print(f"IRC: انقطع الاتصال ({e})")
+        if "auth" in str(e):
+          delay = 300  # التوكن غلط: لا نكرر المحاولة بسرعة
+      self.ready.clear()
+      self.writer = None
+      await asyncio.sleep(delay)
+      delay = min(delay * 2, 120)
+
+  async def _session(self):
+    reader, writer = await asyncio.open_connection(IRC_HOST, IRC_PORT, ssl=IRC_SSL)
+    self.writer = writer
+    self._raw("CAP REQ :twitch.tv/tags twitch.tv/commands")
+    self._raw("PASS " + self.token)
+    self._raw("NICK " + BOT_LOGIN)
+    while True:
+      line = await asyncio.wait_for(reader.readline(), timeout=400)
+      if not line:
+        raise ConnectionError("closed")
+      await self._handle(line.decode("utf-8", "ignore").rstrip("\r\n"))
+
+  async def _rejoin(self):
+    for c in list(self.channels):
+      self._raw("JOIN #" + c)
+      await asyncio.sleep(0.6)  # حد تويتش: 20 دخول كل 10 ثواني
+
+  async def _handle(self, line):
+    tags = {}
+    rest = line
+    if rest.startswith("@"):
+      raw, _, rest = rest.partition(" ")
+      for kv in raw[1:].split(";"):
+        k, _, v = kv.partition("=")
+        tags[k] = v
+    if rest.startswith("PING"):
+      self._raw("PONG :tmi.twitch.tv")
+      return
+    parts = rest.split(" ", 3)
+    if len(parts) < 2:
+      return
+    cmd = parts[1]
+    if cmd == "001":
+      self.ready.set()
+      print("IRC: تم الاتصال بحساب البوت")
+      asyncio.create_task(self._rejoin())
+    elif cmd == "RECONNECT":
+      raise ConnectionError("reconnect requested")
+    elif cmd == "NOTICE" and "authentication failed" in rest.lower():
+      raise RuntimeError("auth failed: التوكن غلط أو من حساب ثاني")
+    elif cmd == "PRIVMSG" and len(parts) == 4:
+      nick = parts[0][1:].split("!", 1)[0].lower()
+      chan = parts[2].lstrip("#").lower()
+      text = parts[3][1:] if parts[3].startswith(":") else parts[3]
+      if text.startswith("\x01ACTION ") and text.endswith("\x01"):
+        text = text[8:-1]
+      ev = {
+          "chatter_user_login": nick,
+          "chatter_user_id": tags.get("user-id", ""),
+          "broadcaster_user_login": chan,
+          "broadcaster_user_id": tags.get("room-id", ""),
+          "message": {"text": text},
+          "badges": [{"set_id": b.split("/")[0]} for b in tags.get("badges", "").split(",") if b],
+      }
+      await self.bot.on_chat_event("irc-" + (tags.get("id") or secrets.token_hex(6)), ev)
+
+  def join(self, ch):
+    self.channels.add(ch)
+    if self.ready.is_set():
+      self._raw("JOIN #" + ch)
+
+  def part(self, ch):
+    if ch in self.channels:
+      self.channels.discard(ch)
+      if self.ready.is_set():
+        self._raw("PART #" + ch)
+
+  async def say(self, ch, text):
+    if not self.ready.is_set() or not self.writer:
+      return False
+    self._raw(f"PRIVMSG #{ch} :{text[:490]}")
+    return True
+
+
 class Author:
   """مرسل الرسالة (مبني من حدث EventSub)."""
 
@@ -2140,6 +2249,8 @@ class Bot:
     self.seen = {}  # معرفات أحداث EventSub لمنع التكرار
     self.queues = {}  # قناة -> طابور الإرسال
     self.paused = set()  # قنوات الستريمر سحب منها الصلاحية: ما نعيد الاشتراك لين يعيد الربط
+    self.irc = IRCClient(self, IRC_TOKEN) if IRC_TOKEN else None
+    self.irc_channels = set()  # قنوات تشتغل بالـ IRC لأن ما فيها صلاحية EventSub
 
   def run(self):
     loop = asyncio.get_event_loop()
@@ -2155,6 +2266,10 @@ class Bot:
     asyncio.create_task(start_web_server(self))
     asyncio.create_task(self.periodic_reminders())
     asyncio.create_task(self.resub_loop())
+    if self.irc:
+      asyncio.create_task(self.irc.run())
+    else:
+      print("ملاحظة: ما فيه TWITCH_TOKEN، فالقنوات اللي ما أعطت صلاحية ما راح يرد فيها البوت")
 
   # ---------- الاشتراك في شات القنوات ----------
   async def resub_all(self):
@@ -2180,7 +2295,18 @@ class Bot:
     for n in names:
       self.paused.discard(n)  # الاستدعاء الصريح (إضافة أو إعادة ربط) يرفع الإيقاف
       ok, why = await self.twitch.subscribe_chat(n)
-      print(f"اشتراك الشات {n}: " + ("✅" if ok else f"❌ {why}"))
+      if ok:
+        print(f"اشتراك الشات {n}: ✅")
+        if n in self.irc_channels:  # صارت تشتغل بـ EventSub، نطلع من IRC عشان ما يتكرر الرد
+          self.irc_channels.discard(n)
+          if self.irc:
+            self.irc.part(n)
+      elif self.irc:
+        print(f"اشتراك الشات {n}: ❌ {why} ← يشتغل بالـ IRC")
+        self.irc_channels.add(n)
+        self.irc.join(n)
+      else:
+        print(f"اشتراك الشات {n}: ❌ {why}")
       await asyncio.sleep(0.3)
 
   async def part_channels(self, names):
@@ -2189,6 +2315,10 @@ class Bot:
         await self.twitch.unsubscribe_chat(n)
       except Exception as e:
         print(f"تعذر إلغاء الاشتراك {n}: {e}")
+      if n in self.irc_channels:
+        self.irc_channels.discard(n)
+      if self.irc:
+        self.irc.part(n)
       q = self.queues.pop(n, None)
       if q is not None:
         q.put_nowait(None)  # يوقف عامل الإرسال
@@ -2246,7 +2376,11 @@ class Bot:
         continue
       times.append(time.time())
       try:
-        ok, why = await self.twitch.chat_send(ch, text)
+        if ch in self.irc_channels and self.irc:
+          ok = await self.irc.say(ch, text)
+          why = "IRC غير متصل"
+        else:
+          ok, why = await self.twitch.chat_send(ch, text)
         if not ok:
           print(f"تعذر الإرسال في {ch}: {why}")
           if str(why).startswith("429"):
