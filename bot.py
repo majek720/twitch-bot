@@ -6,11 +6,18 @@ import os
 import random
 import re
 import secrets
+import sys
 import time
 from urllib.parse import urlencode
 
 import aiohttp
 from aiohttp import web
+
+# يخلي اللوقز تطلع فوراً في Render (بدون ما تنحبس في الذاكرة)
+try:
+  sys.stdout.reconfigure(line_buffering=True)
+except Exception:
+  pass
 
 # تثبيت الـ Event Loop لبيئة Render
 asyncio.set_event_loop(asyncio.new_event_loop())
