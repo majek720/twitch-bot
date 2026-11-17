@@ -2771,8 +2771,8 @@ class Bot:
     elif await self.handle_plain(message, content, channel_name, level):
       return
 
-    # الردود التلقائية: تجاهل الأونر والمستخدمين المتجاهلين
-    if is_owner or username in IGNORED_USERS:
+    # الردود التلقائية: تجاهل المستخدمين المتجاهلين فقط (الأونر يُرد عليه عادي)
+    if username in IGNORED_USERS:
       return
 
     await self.auto_replies(message, content, username, channel_name)
