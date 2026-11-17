@@ -8,6 +8,7 @@ import re
 import secrets
 import sys
 import time
+import uuid
 from urllib.parse import urlencode
 
 import aiohttp
@@ -29,18 +30,18 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")  # اختياري: لحفظ الب
 GIST_ID = os.environ.get("GIST_ID")  # اختياري: معرف الـ Gist
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")  # لوحة الأونر
 
-# موقع الستريمرز (تسجيل دخول بتويتش + تغيير اللعبة) + EventSub (كلها مطلوبة الحين)
+# موقع الستريمرز (تسجيل دخول بتويتش + تغيير اللعبة) + EventSub
 CLIENT_ID = os.environ.get("TWITCH_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("TWITCH_CLIENT_SECRET", "")
 SITE_URL = (os.environ.get("SITE_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").rstrip("/")
-SELF_JOIN = os.environ.get("SELF_JOIN", "1") != "0"  # الستريمر يفعّل البوت بنفسه (ضع 0 لإيقافه)
+SELF_JOIN = os.environ.get("SELF_JOIN", "1") != "0"
 SECRET = (os.environ.get("SESSION_SECRET") or CLIENT_SECRET or "").encode()
 
 OWNER = "majek113"
 IGNORED_USERS = set()
 DEFAULT_CHANNELS = ["majek113", "teamiik", "iz0yi", "vul1_", "lyorll"]
 
-# بوتات معروفة: البوت ما يرد عليها أبداً (يمنع حلقات الردود بين البوتات)
+# بوتات معروفة: البوت ما يرد عليها أبداً
 KNOWN_BOTS = {
     "nightbot", "streamelements", "streamlabs", "moobot", "fossabot", "wizebot",
     "soundalerts", "pretzelrocks", "commanderroot", "anotherttvviewer",
@@ -52,14 +53,19 @@ USER_COOLDOWN = 15
 COMMAND_COOLDOWN = 5
 LIVE_CACHE_SECONDS = 60
 
-# حدود الإرسال (تويتش: 20 رسالة كل 30 ثانية لكل قناة، نبقى تحتها بمسافة أمان)
-SEND_MIN_GAP = 1.2  # أقل فاصل بين رسالتين في نفس القناة (ثواني)
+# الرسائل المجدولة (الأدعية والتذكيرات)
+MIN_TIMER_MINUTES = 5
+MAX_TIMER_MINUTES = 1440
+MAX_TIMERS = 20
+
+# حدود الإرسال
+SEND_MIN_GAP = 1.2
 SEND_WINDOW = 30
 SEND_MAX_PER_WINDOW = 15
-SEND_QUEUE_MAX = 15  # لو تكدست أكثر من كذا، الرسائل الجديدة تنتجاهل
-SEND_STALE = 45  # رسالة علقت في الطابور أكثر من كذا ما تنرسل (قديمة)
+SEND_QUEUE_MAX = 15
+SEND_STALE = 45
 
-# احتياطي IRC: للقنوات اللي ما أعطت البوت صلاحية (بدون شارة بوت). اختياري: ضع TWITCH_TOKEN في Render
+# احتياطي IRC
 IRC_TOKEN = (os.environ.get("TWITCH_TOKEN") or "").strip()
 IRC_HOST = "irc.chat.twitch.tv"
 IRC_PORT = 6697
@@ -75,20 +81,19 @@ MOD_SCOPE = "channel:manage:moderators"
 CHANNEL_BOT_SCOPE = "channel:bot"
 EVENTSUB_SECRET = hashlib.sha256(b"eventsub:" + SECRET).hexdigest()
 
-# الصلاحيات حسب نوع الدخول: s/c = ستريمر، b = حساب البوت نفسه
 SCOPES = {
     "s": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE}",
     "c": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE}",
     "b": "user:bot user:read:chat user:write:chat",
 }
 
-# مستويات الصلاحيات: كل مستوى يشمل اللي فوقه
 PERMS = {"everyone": 0, "sub": 1, "vip": 2, "mod": 3, "broadcaster": 4}
 
-# كوماندات البوت الأساسية (ما تنفع كأسماء لكوماندات مخصصة)
 BUILTIN = {
     "addcmd", "editcmd", "delcmd", "removecmd", "cmds", "addgame", "settitle",
     "addchannel", "removechannel", "channels", "commands", "reminders",
+    "followage", "accountage", "uptime", "game", "title", "sr", "song",
+    "queue", "wrongsong", "skip", "permit"
 }
 
 DHIKR_LIST = [
@@ -109,11 +114,28 @@ SAUDI_PRAYERS = [
     "اللهم انصر قواتنا المرابطة واحفظ حدودنا وجد ليالينا بالأمن والأمان يا رب العالمين",
 ]
 
+AUTO_DEFAULTS = {
+    "salam": ("رد السلام", "وعليكم السلام ورحمة الله وبركاته، نورت البث",
+              "لما أحد يكتب: السلام عليكم"),
+    "evening": ("رد مساء الخير", "مساء النور",
+                "لما أحد يكتب: مساء الخير"),
+    "both": ("رد السلام ومساء الخير معاً", "وعليكم السلام ورحمة الله وبركاته، ومساء النور نورت البث",
+             "لما أحد يكتب السلام عليكم ومساء الخير في نفس الرسالة"),
+    "back": ("رد باك", "ولكم باك", "لما أحد يبدأ رسالته بكلمة: باك"),
+    "brb": ("رد برب", "خذ راحتك بس لا تطول علينا", "لما أحد يبدأ رسالته بكلمة: برب أو brb"),
+}
+
+
+def default_timers():
+  return [
+      {"id": "saudi", "kind": "saudi", "text": "", "every": 90, "on": True, "delay": 30},
+      {"id": "dhikr", "kind": "dhikr", "text": "", "every": 90, "on": True, "delay": 60},
+      {"id": "water", "kind": "text", "text": "اشربوا ماااااااي", "every": 90, "on": True, "delay": 90},
+  ]
+
+
 user_reply_time = {}
 
-# ============================================================
-# رسائل الكوماندات الأساسية: (عربي، إنجليزي) والستريمر يختار من الموقع
-# ============================================================
 MSG = {
     "no_cmds": ("ما فيه كوماندات مضافة للحين", "No commands have been added yet"),
     "cmds_list": ("الكوماندات: {n}", "Commands: {n}"),
@@ -172,7 +194,6 @@ def valid_channel(name):
 
 
 def norm_cmd(v):
-  """يحوّل الكوماند القديم (نص) للشكل الجديد."""
   if isinstance(v, str):
     return {"type": "text", "reply": v, "game": "", "perm": "everyone", "bang": True}
   v = dict(v)
@@ -186,7 +207,6 @@ def norm_cmd(v):
 
 
 def build_command(b):
-  """يتحقق من بيانات كوماند جاية من الواجهة ويرجع (الاسم، الكوماند)."""
   name = str(b.get("name", "")).strip().lstrip("!").lower()
   if not name or len(name) > 30 or re.search(r"\s", name) or name in BUILTIN:
     raise ValueError("اسم الكوماند ما ينفع")
@@ -226,7 +246,6 @@ def user_level(author, is_owner):
 
 
 def format_response(text, user, channel, target, game=""):
-  """المتغيرات المدعومة: $(user) $(touser) $(channel) $(game)"""
   return (
       text.replace("$(user)", user)
       .replace("$(touser)", target or user)
@@ -262,7 +281,7 @@ def read_session(tok):
 
 
 # ============================================================
-# التخزين: Gist (دائم) أو ملف محلي (يتصفر مع كل إعادة تشغيل في Render)
+# التخزين
 # ============================================================
 class Store:
 
@@ -270,16 +289,30 @@ class Store:
     self.data = {
         "channels": list(DEFAULT_CHANNELS),
         "commands": {},
-        "editors": {},  # قناة -> قائمة مودات مصرّح لهم يعدلون الكوماندات
-        "tokens": {},  # قناة -> ربط تويتش لتغيير اللعبة
-        "banned": [],  # قنوات محظورة من استخدام البوت
-        "lang": {},  # قناة -> "ar" أو "en" للغة ردود الكوماندات الأساسية
-        "reminders": {c: True for c in DEFAULT_CHANNELS},  # قناة -> الرسائل الدورية شغالة؟
+        "editors": {},
+        "tokens": {},
+        "banned": [],
+        "lang": {},
+        "reminders": {c: True for c in DEFAULT_CHANNELS},
+        "timers": {},
+        "autos": {},
+        "sr": {},
+        "filters": {},
+        "reports": [],
     }
 
   @property
   def use_gist(self):
     return bool(GITHUB_TOKEN and GIST_ID)
+
+  def timers(self, ch):
+    d = self.data["timers"]
+    if ch not in d:
+      d[ch] = default_timers()
+    return d[ch]
+
+  def autos(self, ch):
+    return self.data["autos"].setdefault(ch, {})
 
   def _headers(self):
     return {
@@ -312,10 +345,14 @@ class Store:
       self.data["tokens"] = loaded.get("tokens", {})
       self.data["banned"] = loaded.get("banned", [])
       self.data["lang"] = loaded.get("lang", {})
+      self.data["timers"] = loaded.get("timers", {})
+      self.data["autos"] = loaded.get("autos", {})
+      self.data["sr"] = loaded.get("sr", {})
+      self.data["filters"] = loaded.get("filters", {})
+      self.data["reports"] = loaded.get("reports", [])
       if "reminders" in loaded:
         self.data["reminders"] = loaded["reminders"]
       else:
-        # أول تشغيل بعد الترقية: القنوات الحالية تبقى على وضعها (شغالة)، والجديدة تبدأ متوقفة
         self.data["reminders"] = {c: True for c in self.data["channels"]}
       self.data["channels"] = [c for c in self.data["channels"] if c not in self.data["banned"]]
     except Exception as e:
@@ -342,7 +379,7 @@ class Store:
 
 
 # ============================================================
-# Twitch API (تغيير اللعبة + تسجيل دخول الستريمرز + الشات عبر EventSub)
+# Twitch API
 # ============================================================
 class TwitchAPI:
 
@@ -350,7 +387,7 @@ class TwitchAPI:
     self.store = store
     self.app_token = None
     self.app_exp = 0
-    self.user_access = {}  # قناة -> (access_token, وقت الانتهاء)
+    self.user_access = {}
     self.user_ids = {}
     self.lock = asyncio.Lock()
 
@@ -435,7 +472,6 @@ class TwitchAPI:
     return None
 
   async def channel_info(self, login):
-    """يرجع (اللعبة الحالية، عنوان البث)."""
     uid = await self.user_id(login)
     if not uid:
       return None, None
@@ -458,7 +494,6 @@ class TwitchAPI:
     return items[0]
 
   async def _patch_channel(self, channel, body):
-    """يرجع (نجح؟، كود الخطأ): disabled / not_linked / expired / refused"""
     if not self.enabled:
       return False, "disabled"
     info = self.store.data["tokens"].get(channel)
@@ -476,7 +511,6 @@ class TwitchAPI:
     return False, "refused"
 
   async def set_game(self, channel, game_name):
-    """يرجع (نجح؟، اسم اللعبة أو كود الخطأ)."""
     if not self.enabled:
       return False, "disabled"
     if channel not in self.store.data["tokens"]:
@@ -488,12 +522,10 @@ class TwitchAPI:
     return (True, game["name"]) if ok else (False, err)
 
   async def set_title(self, channel, title):
-    """يرجع (نجح؟، العنوان الجديد أو كود الخطأ)."""
     title = title.strip()[:140]
     ok, err = await self._patch_channel(channel, {"title": title})
     return (True, title) if ok else (False, err)
 
-  # ---------- الشات عبر EventSub + Send Chat Message API ----------
   async def is_live(self, login):
     if not self.enabled:
       return False
@@ -502,7 +534,6 @@ class TwitchAPI:
     return st == 200 and bool(d.get("data"))
 
   async def chat_send(self, channel, text):
-    """يرسل رسالة بالـ API (بتوكن التطبيق) عشان تظهر شارة البوت."""
     if not self.enabled:
       return False, "disabled"
     token = await self.get_app_token()
@@ -522,7 +553,6 @@ class TwitchAPI:
     return False, f"{st} {d.get('message') or drop or d.get('data')}"
 
   async def subscribe_chat(self, channel):
-    """يشترك في رسائل شات القناة (EventSub) باسم البوت."""
     if not self.enabled:
       return False, "disabled"
     token = await self.get_app_token()
@@ -569,7 +599,6 @@ class TwitchAPI:
         await self.drop_sub(s["id"])
 
   async def make_bot_mod(self, channel, bot_login):
-    """يخلي البوت مود في القناة (400 = مود أو VIP من قبل)."""
     info = self.store.data["tokens"].get(channel)
     if not info:
       return False
@@ -1018,20 +1047,71 @@ load();
 </html>
 """
 
+# ---------------- زر البلاغات ----------------
+REPORT_HTML = r"""
+<style>
+#repbtn{position:fixed;bottom:18px;inset-inline-start:18px;z-index:60;background:#ef4444;color:#fff;border:0;border-radius:30px;padding:11px 16px;font:inherit;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(239,68,68,.35)}
+#repmodal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:grid;place-items:center;z-index:70;padding:16px}
+#repmodal .rsheet{background:#111827;border:1px solid #1c2438;border-top:3px solid #ef4444;border-radius:18px;padding:20px;width:100%;max-width:460px}
+#repmodal h3{margin:0 0 6px}
+#repmodal textarea{min-height:120px}
+#repmodal .rr{display:flex;gap:8px}
+#repmodal .rr .btn{flex:1}
+#repmodal .btn.sendr{background:#ef4444}
+</style>
+<button id="repbtn" data-nt>🚩 بلاغ</button>
+<div id="repmodal" hidden>
+  <div class="rsheet">
+    <h3>إرسال بلاغ عن مشكلة</h3>
+    <p class="hint" style="margin:0 0 10px">اكتب المشكلة اللي صارت مع البوت وتوصل مباشرة للمطوّر.</p>
+    <textarea id="reptxt" maxlength="800" placeholder="وصف المشكلة"></textarea>
+    <div class="rr"><button class="btn sendr" id="repsend">إرسال البلاغ</button><button class="btn ghost" id="repcancel">إلغاء</button></div>
+  </div>
+</div>
+"""
+
+REPORT_JS = r"""
+Object.assign(EN,{"🚩 بلاغ":"🚩 Report","إرسال بلاغ عن مشكلة":"Report a problem",
+"اكتب المشكلة اللي صارت مع البوت وتوصل مباشرة للمطوّر.":"Describe the problem you had with the bot. It goes straight to the developer.",
+"وصف المشكلة":"Problem description","إرسال البلاغ":"Send report","إلغاء":"Cancel",
+"اكتب وصف المشكلة":"Describe the problem","وصل بلاغك، شكراً لك ✅":"Report sent, thank you ✅",
+"تم منعك من إرسال البلاغات":"You've been blocked from sending reports",
+"أرسلت بلاغات كثيرة، حاول بعد شوي":"Too many reports, try again later"});
+for(const k in EN)AR[EN[k]]=k;
+(function(){
+  const b=document.getElementById("repbtn"),m=document.getElementById("repmodal");
+  if(!b)return;
+  const ctx=()=>{try{if(typeof CH!=="undefined"&&CH)return CH.name}catch(e){}try{if(typeof CHN!=="undefined")return CHN}catch(e){}return ""};
+  b.onclick=()=>{m.hidden=false;document.getElementById("reptxt").focus()};
+  document.getElementById("repcancel").onclick=()=>{m.hidden=true};
+  m.onclick=e=>{if(e.target===m)m.hidden=true};
+  document.getElementById("repsend").onclick=async()=>{
+    const txt=document.getElementById("reptxt").value.trim();
+    if(!txt){toast("اكتب وصف المشكلة",1);return}
+    try{
+      await api("POST","/report",{text:txt,channel:ctx(),page:location.pathname});
+      document.getElementById("reptxt").value="";m.hidden=true;toast("وصل بلاغك، شكراً لك ✅");
+    }catch(e){toast(e.message,1)}
+  };
+})();
+"""
+
 # ---------------- موقع الستريمر ----------------
 STREAMER_HTML = HEAD.replace("{{TITLE}}", "موقع الستريمر") + r"""
 <style>
 body{background:#0a0e17}
+#app{--pc:#9146ff;--acc:var(--pc)}
 .shell{display:flex;min-height:100vh}
-aside{width:250px;background:#0d1220;border-inline-end:1px solid #1c2438;display:flex;flex-direction:column;padding:16px 12px;position:sticky;top:0;height:100vh;flex-shrink:0}
+aside{width:260px;background:#0d1220;border-inline-end:1px solid #1c2438;display:flex;flex-direction:column;padding:16px 12px;position:sticky;top:0;height:100vh;flex-shrink:0;overflow-y:auto}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;padding:4px 8px 14px}
 .brand .logo{width:36px;height:36px;font-size:18px}
 aside select{margin:0 0 14px}
-.sec{font-size:11px;color:#5d6785;letter-spacing:.08em;padding:10px 12px 6px}
-.nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;color:var(--mut);cursor:pointer;font-weight:500;margin-bottom:2px;border-inline-start:3px solid transparent}
-.nav a:hover{background:#151c2e;color:var(--tx)}
-.nav a.on{background:linear-gradient(90deg,rgba(145,70,255,.22),rgba(145,70,255,.04));color:#fff;border-inline-start-color:var(--acc)}
-.nav i{font-style:normal;width:22px;text-align:center}
+.sec{font-size:11px;color:#5d6785;letter-spacing:.08em;padding:12px 12px 6px}
+.nav a{--c:#9146ff;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;color:var(--mut);cursor:pointer;font-weight:500;margin-bottom:3px;border-inline-start:3px solid transparent;transition:.15s}
+.nav a:hover{background:color-mix(in srgb,var(--c) 12%,transparent);color:var(--tx)}
+.nav a.on{background:linear-gradient(90deg,color-mix(in srgb,var(--c) 32%,transparent),color-mix(in srgb,var(--c) 4%,transparent));color:#fff;border-inline-start-color:var(--c)}
+.nav i{font-style:normal;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 24%,transparent);font-size:16px;flex-shrink:0}
+.nav a.on i{background:var(--c)}
 .me{margin-top:auto;border-top:1px solid #1c2438;padding-top:12px}
 .meinfo{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .mav{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#9146ff,#5b21b6);display:grid;place-items:center;font-weight:700}
@@ -1040,22 +1120,24 @@ aside select{margin:0 0 14px}
 .mebtns .btn{flex:1;text-align:center}
 main{flex:1;min-width:0}
 .top{display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid #1c2438;position:sticky;top:0;background:rgba(10,14,23,.88);backdrop-filter:blur(8px);z-index:5}
-.top h1{font-size:18px;margin:0;flex:1}
+.top h1{font-size:18px;margin:0;flex:1;border-inline-start:4px solid var(--pc);padding-inline-start:10px}
 .burger{display:none;width:auto!important;padding:8px 12px!important}
 .content{max-width:1080px;margin:0 auto;padding:24px}
 .panel,.stat,.hero,.cmd{background:#111827;border:1px solid #1c2438;border-radius:16px}
-.panel{padding:18px}
+.panel{padding:18px;border-top:3px solid var(--pc)}
 .panel h3{margin:0 0 4px;font-size:15px}
-.hero{padding:28px 20px;text-align:center;margin-bottom:14px;background:radial-gradient(circle at 50% 0,rgba(145,70,255,.28),transparent 65%),#111827}
-.av{width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,#9146ff,#5b21b6);display:grid;place-items:center;font-size:36px;font-weight:700;margin:0 auto 12px;box-shadow:0 0 0 5px rgba(145,70,255,.22)}
+.hero{padding:28px 20px;text-align:center;margin-bottom:14px;background:radial-gradient(circle at 50% 0,color-mix(in srgb,var(--pc) 32%,transparent),transparent 65%),#111827}
+.av{width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,var(--pc),#5b21b6);display:grid;place-items:center;font-size:36px;font-weight:700;margin:0 auto 12px;box-shadow:0 0 0 5px color-mix(in srgb,var(--pc) 25%,transparent)}
 .hero h2{font-size:26px;margin:0 0 8px;color:var(--tx)}
 .pill{display:inline-block;font-size:12px;padding:4px 12px;border-radius:20px;background:#1c2438;color:var(--mut);font-weight:700}
 .pill.live{background:rgba(46,204,113,.15);color:#2ecc71}
 .acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:18px}
 .acts .btn,.acts a.btn{width:auto;padding:10px 18px}
 .btn.line{background:none;border:1px solid #2a3350;color:var(--tx)}
+.btn.sm{width:auto;padding:8px 14px;font-size:13px}
 .grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:14px}
-.stat{padding:18px}
+.stat{padding:18px;border-top:3px solid var(--sc,#9146ff)}
+.stat:nth-child(1){--sc:#3b82f6}.stat:nth-child(2){--sc:#ec4899}.stat:nth-child(3){--sc:#22c55e}.stat:nth-child(4){--sc:#f59e0b}
 .stat small{font-size:12px;color:var(--mut)}
 .stat b{display:block;font-size:28px;margin-top:6px}
 .stat b.ok{color:var(--ok)}.stat b.bad{color:var(--bad);font-size:20px;margin-top:12px}
@@ -1063,33 +1145,45 @@ main{flex:1;min-width:0}
 .bar{display:flex;align-items:center;gap:10px;margin:12px 0;font-size:14px}
 .bar b{min-width:70px}
 .bar i{flex:1;height:10px;background:#1c2438;border-radius:6px;overflow:hidden}
-.bar s{display:block;height:100%;background:linear-gradient(90deg,#9146ff,#c084fc);border-radius:6px}
+.bar s{display:block;height:100%;background:linear-gradient(90deg,var(--pc),#f0abfc);border-radius:6px}
 .bar em{font-style:normal;color:var(--mut);min-width:24px;text-align:end}
 .bubble{background:#0a0e17;border:1px solid #1c2438;border-radius:12px;padding:12px 14px;min-height:56px;white-space:pre-wrap;word-break:break-word;font-size:14px}
 .bubble:before{content:"🤖 ";}
 .simrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.guide p{margin:0;padding:9px 0;border-bottom:1px solid #1c2438;font-size:14px;color:var(--mut)}
-.guide p:last-child{border:0}
-.guide code{color:#c4a1ff;background:#1a1530;padding:2px 8px;border-radius:6px;font-size:13px;margin-inline-end:8px;direction:ltr;display:inline-block}
 .tool{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .tool input{flex:1;min-width:160px;margin:0}
 .tool .btn{width:auto}
-.chip,.lchip,.rchip{background:#111827;border:1px solid #1c2438;color:var(--mut);padding:8px 14px;border-radius:20px;font:inherit;cursor:pointer;font-size:13px}
-.chip.on,.lchip.on,.rchip.on{background:var(--acc);border-color:var(--acc);color:#fff}
-.cmd{display:flex;gap:12px;padding:14px;margin-bottom:10px;align-items:flex-start}
+.chip,.lchip,.rchip,.srchip{background:#111827;border:1px solid #1c2438;color:var(--mut);padding:8px 14px;border-radius:20px;font:inherit;cursor:pointer;font-size:13px}
+.chip.on,.lchip.on,.rchip.on,.srchip.on{background:var(--pc);border-color:var(--pc);color:#fff}
+.cmd{display:flex;gap:12px;padding:14px;margin-bottom:10px;align-items:flex-start;border-inline-start:4px solid var(--pc)}
+.cmd.off{opacity:.55}
+.cmd.col{flex-direction:column;align-items:stretch}
 .cbody{flex:1;min-width:0}
 .chead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .chead b{font-size:16px;color:#e9ddff}
 .cbody p{margin:0;color:var(--mut);font-size:14px;word-break:break-word}
 .bd{font-size:11px;padding:3px 10px;border-radius:20px;background:#1c2438;color:var(--mut)}
-.bd.g{background:rgba(145,70,255,.2);color:#c4a1ff}
+.bd.g{background:color-mix(in srgb,var(--pc) 22%,transparent);color:#fff}
+.bd.warn{background:rgba(245,158,11,.18);color:#f5a623}
+.chk{display:flex;align-items:center;gap:10px;margin:9px 0;color:var(--tx);font-size:14px;cursor:pointer}
+.chk input{width:auto;margin:0;accent-color:var(--pc)}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sub{font-size:13px;color:var(--mut);margin:12px 0 6px}
+.song{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid #1c2438}
+.song:last-child{border:0}
+.song b{flex:1;font-size:14px;word-break:break-word;font-weight:500}
+.song small{color:var(--mut)}
+.song.now b{color:#f9a8d4}
+.copyrow{display:flex;gap:8px}
+.copyrow input{margin:0;direction:ltr}
+.copyrow .btn{width:auto}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:grid;place-items:center;z-index:50;padding:16px}
 .sheet{background:#111827;border:1px solid #1c2438;border-radius:18px;padding:20px;width:100%;max-width:520px;max-height:92vh;overflow:auto}
 .sheet .card{background:none;border:0;padding:0;margin:0}
 #bd{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:30}
 @media(max-width:860px){
  aside{display:none}
- aside.open{display:flex;position:fixed;inset-block:0;inset-inline-start:0;z-index:40;width:270px}
+ aside.open{display:flex;position:fixed;inset-block:0;inset-inline-start:0;z-index:40;width:280px}
  .burger{display:block}
  .grid2,.simrow{grid-template-columns:1fr}
  .content{padding:16px}.top{padding:12px 16px}
@@ -1114,10 +1208,14 @@ main{flex:1;min-width:0}
     <div class="brand"><div class="logo">🎮</div><span>موقع الستريمر</span></div>
     <select id="chsel" hidden></select>
     <div class="nav" id="nav">
-      <a data-p="ov" class="on"><i>🏠</i><span>الرئيسية</span></a>
-      <a data-p="cmd"><i>⌨️</i><span>الكوماندات</span></a>
-      <a data-p="mods" class="own"><i>🛡️</i><span>المودات</span></a>
-      <a data-p="set" class="own"><i>⚙️</i><span>الإعدادات</span></a>
+      <a data-p="ov" class="on" style="--c:#9146ff"><i>🏠</i><span>الرئيسية</span></a>
+      <a data-p="cmd" style="--c:#3b82f6"><i>⌨️</i><span>الكوماندات</span></a>
+      <a data-p="auto" class="own" style="--c:#f59e0b"><i>⏰</i><span>الرسائل التلقائية</span></a>
+      <a data-p="songs" class="own" style="--c:#ec4899"><i>🎵</i><span>طلبات الأغاني</span></a>
+      <a data-p="spam" class="own" style="--c:#ef4444"><i>🛡️</i><span>الحماية من السبام</span></a>
+      <a data-p="bot" class="own" style="--c:#14b8a6"><i>🤖</i><span>حساب البوت</span></a>
+      <a data-p="mods" class="own" style="--c:#22c55e"><i>👥</i><span>المودات</span></a>
+      <a data-p="set" class="own" style="--c:#94a3b8"><i>⚙️</i><span>الإعدادات</span></a>
     </div>
     <div class="me">
       <div class="meinfo"><div class="mav" id="meav"></div><div><b id="who" dir="ltr" data-nt></b><small class="mut" id="role"></small></div></div>
@@ -1199,6 +1297,127 @@ main{flex:1;min-width:0}
             <button class="btn plus" id="newcmd">كوماند جديد</button>
           </div>
           <div id="cmdlist"></div>
+          <div class="panel" style="margin-top:14px">
+            <h3>كوماندات جاهزة في البوت</h3>
+            <p class="hint" style="margin:0 0 6px">تشتغل مباشرة بدون إضافة. وإذا سوّيت كوماند بنفس الاسم يشتغل كوماندك بدلها</p>
+            <div id="builtinlist"></div>
+          </div>
+        </section>
+
+        <section class="pg own" id="p-auto" hidden>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>الرسائل الدورية</h3>
+            <p class="mut">تشتغل أثناء البث فقط. هذا المفتاح يشغّل أو يوقف كل الرسائل المجدولة اللي تحته</p>
+            <div class="tool" style="margin:12px 0 0">
+              <button class="rchip" data-rm="on">مفعّلة</button>
+              <button class="rchip" data-rm="off">متوقفة</button>
+            </div>
+          </div>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>الرسائل المجدولة</h3>
+            <p class="mut">أدعية وأذكار وتذكيرات تنكتب تلقائياً بالفاصل اللي تحدده. تقدر تعدل الافتراضية أو تحذفها وتضيف رسائلك.</p>
+            <div id="tmlist" style="margin-top:12px"></div>
+            <div class="cmd col" id="tmform" hidden>
+              <label>نص الرسالة</label>
+              <textarea id="tmtext" placeholder="مثال: اللهم صلِّ وسلم على نبينا محمد"></textarea>
+              <p class="hint" id="tmhint" hidden>اتركه فاضي وتبقى الرسالة تختار عشوائي من القائمة الجاهزة، أو اكتب نص خاص فيه عشان يستبدلها.</p>
+              <label>كل كم دقيقة؟</label>
+              <input id="tmevery" type="number" min="5" max="1440" value="30" dir="ltr">
+              <p class="hint" id="tmmin"></p>
+              <div class="tool" style="margin:0">
+                <button class="btn" id="tmsave">حفظ</button>
+                <button class="btn ghost" id="tmcancel">إلغاء</button>
+              </div>
+            </div>
+            <div class="acts" style="justify-content:flex-start">
+              <button class="btn" id="tmnew">رسالة جديدة</button>
+              <button class="btn line" id="tmreset">استرجاع الرسائل الافتراضية</button>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>الردود التلقائية</h3>
+            <p class="mut">ردود البوت على السلام ومساء الخير وباك وبرب. تقدر تعدل النص أو تحذف الرد. الرد يبدأ دائماً بمنشن للمشاهد، وتقدر تستخدم $(user).</p>
+            <div id="aulist" style="margin-top:12px"></div>
+          </div>
+        </section>
+
+        <section class="pg own" id="p-songs" hidden>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>طلبات الأغاني</h3>
+            <p class="mut">المشاهدين يطلبون أغاني من يوتيوب بالشات: !sr رابط أو اسم الأغنية</p>
+            <div class="tool" style="margin:12px 0">
+              <button class="srchip" data-sr="on">مفعّلة</button>
+              <button class="srchip" data-sr="off">متوقفة</button>
+            </div>
+            <div class="grid3">
+              <div><label>أقصى طلبات لكل مشاهد</label><input id="sr-user" type="number" min="1" max="20" dir="ltr"></div>
+              <div><label>أقصى طول للطابور</label><input id="sr-queue" type="number" min="1" max="100" dir="ltr"></div>
+              <div><label>أقصى مدة للأغنية (دقائق)</label><input id="sr-min" type="number" min="1" max="60" dir="ltr"></div>
+            </div>
+            <label>مين يقدر يطلب؟</label>
+            <select id="sr-perm">
+              <option value="everyone">الكل</option>
+              <option value="sub">المشتركين وفوق</option>
+              <option value="vip">VIP وفوق</option>
+              <option value="mod">المودات فقط</option>
+            </select>
+            <button class="btn" id="sr-save">حفظ الإعدادات</button>
+            <p class="hint" id="sr-nokey" style="margin:10px 0 0" hidden>البحث بالاسم والحد الأقصى للمدة يحتاجون YOUTUBE_API_KEY في Render. بدونه يشتغل بالروابط فقط.</p>
+          </div>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>مشغّل الأغاني</h3>
+            <p class="mut">افتح الرابط في تبويب، أو حطه Browser Source في OBS. لا تشاركه مع أحد.</p>
+            <div class="copyrow" style="margin-top:10px">
+              <input id="sr-playerurl" readonly>
+              <button class="btn sm" id="sr-copy">نسخ</button>
+              <a class="btn sm" id="sr-open" target="_blank">فتح</a>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>الطابور</h3>
+            <div class="tool" style="margin:10px 0">
+              <button class="btn sm" id="sr-skip">⏭ تخطي الأغنية</button>
+              <button class="btn sm line" id="sr-clear">مسح الطابور</button>
+            </div>
+            <div id="srlist"></div>
+          </div>
+        </section>
+
+        <section class="pg own" id="p-spam" hidden>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>الحماية من السبام</h3>
+            <p class="mut" id="spamstate"></p>
+            <label class="chk"><input type="checkbox" id="f-links"><span>🔗 منع الروابط</span></label>
+            <label class="chk"><input type="checkbox" id="f-caps"><span>🔠 منع الحروف الكبيرة الكثيرة (إنجليزي)</span></label>
+            <label class="chk"><input type="checkbox" id="f-symbols"><span>⚠️ منع الرموز الكثيرة</span></label>
+            <label class="chk"><input type="checkbox" id="f-repeat"><span>🔁 منع تكرار الحرف الواحد (مثل: هههههههههه)</span></label>
+            <label class="chk"><input type="checkbox" id="f-long"><span>📏 منع الرسائل الطويلة (فوق 300 حرف)</span></label>
+            <div class="sub">كلمات ممنوعة (كلمة أو جملة في كل سطر)</div>
+            <textarea id="f-words" style="min-height:80px" dir="auto"></textarea>
+            <div class="sub">روابط مسموحة (دومين في كل سطر، مثل: youtube.com)</div>
+            <textarea id="f-allowed" style="min-height:70px" dir="ltr"></textarea>
+            <div class="grid3" style="margin-top:6px">
+              <div><label>مدة الكتم بالثواني (0 = حذف الرسالة فقط)</label><input id="f-timeout" type="number" min="0" max="600" dir="ltr"></div>
+            </div>
+            <label class="chk"><input type="checkbox" id="f-warn"><span>أرسل تنبيه للمشاهد المخالف</span></label>
+            <label class="chk"><input type="checkbox" id="f-sub"><span>استثناء المشتركين من الفلاتر</span></label>
+            <label class="chk"><input type="checkbox" id="f-vip"><span>استثناء الـ VIP من الفلاتر</span></label>
+            <button class="btn" id="savespam">حفظ</button>
+            <p class="hint" style="margin:10px 0 0">المودات والستريمر مستثنون دائماً. والمود يقدر يسمح لشخص بروابط لمدة دقيقة بـ !permit اسم_المشاهد</p>
+          </div>
+        </section>
+
+        <section class="pg own" id="p-bot" hidden>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>حساب البوت في قناتك</h3>
+            <p class="mut">الحساب اللي يكتب فيه البوت بقناتك: <b id="botlogin" dir="ltr" data-nt></b> <span class="bd g" id="botmode"></span></p>
+            <div class="acts" style="justify-content:flex-start">
+              <a class="btn" href="/auth/mybot?m=self">استخدم حسابي أنا كبوت</a>
+              <a class="btn line" href="/auth/mybot?m=other">اربط حساب ثاني كبوت</a>
+              <button class="btn line" id="botreset" hidden>رجّع للبوت الافتراضي</button>
+            </div>
+            <p class="hint" style="margin:12px 0 0">«حسابي أنا»: البوت يكتب باسمك. «حساب ثاني»: سجّل دخول بحساب البوت اللي تبيه (حساب جديد تسوّيه للبوت أحسن) ووافق على الصلاحيات. بعدها يستقبل ويرد البوت بهذا الحساب بقناتك فقط.</p>
+          </div>
         </section>
 
         <section class="pg own" id="p-mods" hidden>
@@ -1224,14 +1443,6 @@ main{flex:1;min-width:0}
             <div class="bubble" id="langprev" data-nt></div>
           </div>
           <div class="panel" style="margin-bottom:14px">
-            <h3>الرسائل الدورية</h3>
-            <p class="mut">أذكار وتذكير بشرب الماء كل نصف ساعة أثناء البث فقط</p>
-            <div class="tool" style="margin:12px 0 0">
-              <button class="rchip" data-rm="on">مفعّلة</button>
-              <button class="rchip" data-rm="off">متوقفة</button>
-            </div>
-          </div>
-          <div class="panel" style="margin-bottom:14px">
             <h3>ربط تويتش (لتغيير اللعبة والعنوان)</h3>
             <p class="mut" id="linkstate"></p>
             <a class="btn" id="connect" href="/auth/connect">ربط تويتش</a>
@@ -1254,6 +1465,7 @@ main{flex:1;min-width:0}
     <button class="btn ghost mt" id="cancelcmd" style="width:100%">إلغاء</button>
   </div>
 </div>
+<!--REPORT_HTML-->
 <div id="toast"></div>
 
 <script>
@@ -1267,17 +1479,43 @@ Object.assign(EN,{
 "جرّب الكوماند قبل ما ينشر. يستخدم نفس المتغيرات":"Try a command before going live. Uses the same variables",
 "اسم المشاهد":"Viewer name","كلمة بعد الكوماند (اختياري)":"Word after the command (optional)",
 "🎮 سيتغيّر كاتيقوري البث إلى:":"🎮 The stream category will change to:",
-"كوماندات الشات السريعة":"Quick chat commands","إضافة كوماند رد":"Add a text command",
-"إضافة اختصار لعبة":"Add a game shortcut","حذف كوماند":"Delete a command",
-"رابط الكوماندات للجميع":"Public commands link","فتح صفحة الكوماندات العامة":"Open public commands page",
-"إلغاء":"Cancel","ستريمر":"Streamer","مود":"Mod","ما فيه كوماندات تطابق بحثك":"No commands match your search",
-"الرسائل الدورية":"Periodic messages",
-"أذكار وتذكير بشرب الماء كل نصف ساعة أثناء البث فقط":"Adhkar and a water reminder every 30 minutes, only while live",
-"مفعّلة":"On","متوقفة":"Off","تم الحفظ":"Saved"
+"فتح صفحة الكوماندات العامة":"Open public commands page",
+"إلغاء":"Cancel","ستريمر":"Streamer","مود":"Mod",
+"الرسائل الدورية":"Periodic messages","مفعّلة":"On","متوقفة":"Off","تم الحفظ":"Saved",
+"الرسائل التلقائية":"Auto messages","طلبات الأغاني":"Song requests","الحماية من السبام":"Spam protection",
+"حساب البوت":"Bot account","الإعدادات":"Settings",
+"تشتغل أثناء البث فقط. هذا المفتاح يشغّل أو يوقف كل الرسائل المجدولة اللي تحته":"Runs only while live. This switch turns all the scheduled messages below on or off",
+"الرسائل المجدولة":"Scheduled messages","رسالة جديدة":"New message","استرجاع الرسائل الافتراضية":"Restore default messages",
+"كل كم دقيقة؟":"Every how many minutes?","حفظ":"Save","الردود التلقائية":"Auto replies",
+"تعطيل":"Disable","تفعيل":"Enable","استرجاع الافتراضي":"Restore default","محذوف":"Deleted",
+"ما فيه رسائل مجدولة":"No scheduled messages","تحذف هذي الرسالة؟":"Delete this message?",
+"حفظ الإعدادات":"Save settings","نسخ":"Copy","فتح":"Open","مشغّل الأغاني":"Song player","الطابور":"Queue",
+"⏭ تخطي الأغنية":"⏭ Skip song","مسح الطابور":"Clear queue","ما فيه أغاني بالطابور":"The queue is empty",
+"الحماية من السبام":"Spam protection","حفظ":"Save",
+"حساب البوت في قناتك":"Your channel's bot account","استخدم حسابي أنا كبوت":"Use my own account as the bot",
+"اربط حساب ثاني كبوت":"Link another account as the bot","رجّع للبوت الافتراضي":"Back to the default bot",
+"بوت مخصص":"Custom bot","البوت الافتراضي":"Default bot",
+"كوماندات جاهزة في البوت":"Built-in bot commands",
+"الحروف الكبيرة":"Caps","تم الحفظ":"Saved"
 });
 for(const k in EN)AR[EN[k]]=k;
 let ME=null,CH=null,PG="ov",FILT="all",Q="";
-const TITLES={ov:"الرئيسية",cmd:"الكوماندات",mods:"المودات",set:"الإعدادات"};
+const TITLES={ov:"الرئيسية",cmd:"الكوماندات",auto:"الرسائل التلقائية",songs:"طلبات الأغاني",spam:"الحماية من السبام",bot:"حساب البوت",mods:"المودات",set:"الإعدادات"};
+const COLORS={ov:"#9146ff",cmd:"#3b82f6",auto:"#f59e0b",songs:"#ec4899",spam:"#ef4444",bot:"#14b8a6",mods:"#22c55e",set:"#94a3b8"};
+const OWNPG=["auto","songs","spam","bot","mods","set"];
+const BUILTIN_CMDS=[
+ ["!followage","من متى يتابع المشاهد القناة","How long a viewer has followed"],
+ ["!accountage","عمر حساب المشاهد في تويتش","How old a viewer's account is"],
+ ["!uptime","كم صار البث شغال","How long the stream has been live"],
+ ["!game","اللعبة الحالية","The current game"],
+ ["!title","عنوان البث الحالي","The current stream title"],
+ ["!sr رابط أو اسم","طلب أغنية","Request a song"],
+ ["!song","الأغنية الحالية","The current song"],
+ ["!queue","الأغاني اللي بالطابور","The songs in the queue"],
+ ["!wrongsong","يشيل آخر أغنية طلبتها","Removes your last requested song"],
+ ["!skip","تخطي الأغنية (مود)","Skip the song (mod)"],
+ ["!permit اسم","يسمح لشخص بروابط دقيقة (مود)","Lets a viewer post links for a minute (mod)"]
+];
 const dn=(n,c)=>((c&&c.bang===false)?"":"!")+n;
 const base=()=>"/s/api/channel/"+encodeURIComponent(CH.name);
 const base2=()=>"/s/api/channel/"+encodeURIComponent($("#chsel").value);
@@ -1292,10 +1530,11 @@ function fillSel(){
   if(ME.channels.some(c=>c.name===prev))sel.value=prev;
 }
 function go(p){
-  if((p==="mods"||p==="set")&&(!CH||CH.role!=="owner"))p="ov";
+  if(OWNPG.includes(p)&&(!CH||CH.role!=="owner"))p="ov";
   PG=p;
   document.querySelectorAll(".pg").forEach(x=>x.hidden=x.id!=="p-"+p);
   document.querySelectorAll("#nav a").forEach(x=>x.classList.toggle("on",x.dataset.p===p));
+  $("#app").style.setProperty("--pc",COLORS[p]||"#9146ff");
   $("#ptitle").textContent=t(TITLES[p]);
   $("#side").classList.remove("open");$("#bd").hidden=true;
 }
@@ -1343,9 +1582,9 @@ function render(){
   $("#s-mods").textContent=own?c.editors.length:"—";
   const sl=$("#s-link");sl.textContent=t(c.linked?"مربوط":"غير مربوط");sl.className=c.linked?"ok":"bad";
   document.querySelectorAll(".own").forEach(x=>x.hidden=!own||(x.classList.contains("pg")&&x.id!=="p-"+PG));
-  if(!own&&(PG==="mods"||PG==="set"))go("ov");
-  renderTop();renderSim();renderCmds();
-  if(own)renderOwn();
+  if(!own&&OWNPG.includes(PG))go("ov");
+  renderTop();renderSim();renderCmds();renderBuiltin();
+  if(own){renderOwn();renderAuto();renderSongs();renderSpam();renderBot()}
 }
 function renderTop(){
   const u=CH.usage||{},k=Object.keys(u).sort((a,b)=>u[b]-u[a]).slice(0,5),max=k.length?u[k[0]]:1,box=$("#topbox");
@@ -1394,6 +1633,17 @@ function renderCmds(){
     box.appendChild(d);
   });
 }
+function renderBuiltin(){
+  const box=$("#builtinlist");box.innerHTML="";
+  BUILTIN_CMDS.forEach(b=>{
+    const d=document.createElement("div");d.className="bc";
+    d.innerHTML='<code data-nt></code><span class="d" data-nt></span><button class="ic" data-nt>📋</button>';
+    d.querySelector("code").textContent=b[0];
+    d.querySelector(".d").textContent=LANG==="en"?b[2]:b[1];
+    d.querySelector("button").onclick=()=>copyText(b[0].split(" ")[0]);
+    box.appendChild(d);
+  });
+}
 function renderOwn(){
   const c=CH;
   $("#linkstate").textContent=t(!c.twitch?"الربط غير مفعّل من المطوّر.":c.linked?"✅ مربوط: كوماندات اختصار اللعبة تقدر تغيّر لعبة بثك.":"غير مربوط: اربط تويتش عشان كوماندات تغيير اللعبة تشتغل.");
@@ -1409,6 +1659,94 @@ function renderOwn(){
     d.querySelector("button").onclick=()=>act(()=>api("DELETE",base()+"/editors/"+encodeURIComponent(n)),"تمت الإزالة");
     box.appendChild(d);
   });
+}
+/* ---------- الرسائل التلقائية ---------- */
+let TM_ID="";
+const KINDN={saudi:"🤲 دعاء للسعودية (عشوائي من قائمة جاهزة)",dhikr:"📿 ذكر (عشوائي من قائمة جاهزة)"};
+Object.assign(EN,{"🤲 دعاء للسعودية (عشوائي من قائمة جاهزة)":"🤲 Prayer for Saudi Arabia (random from a ready list)","📿 ذكر (عشوائي من قائمة جاهزة)":"📿 Dhikr (random from a ready list)",
+"رد السلام":"Reply to salam","رد مساء الخير":"Reply to good evening","رد السلام ومساء الخير معاً":"Reply to salam + good evening","رد باك":"Reply to back","رد برب":"Reply to brb"});
+for(const k in EN)AR[EN[k]]=k;
+const fmtEvery=n=>LANG==="en"?(n%60===0?"every "+n/60+" h":"every "+n+" min"):(n%60===0?"كل "+n/60+(n/60===1?" ساعة":" ساعات"):"كل "+n+" دقيقة");
+function tmOpen(m){
+  TM_ID=m?m.id:"";
+  $("#tmform").hidden=false;
+  $("#tmtext").value=m&&m.kind==="text"?m.text:"";
+  $("#tmevery").value=m?m.every:30;
+  $("#tmevery").min=CH.min_every;
+  $("#tmmin").textContent=(LANG==="en"?"Minimum ":"أقل مدة ")+CH.min_every+(LANG==="en"?" minutes":" دقايق");
+  $("#tmhint").hidden=!(m&&m.kind!=="text");
+  $("#tmform").scrollIntoView({behavior:"smooth",block:"center"});
+}
+function renderAuto(){
+  const c=CH,box=$("#tmlist");box.innerHTML="";
+  if(!c.timers.length)box.innerHTML='<p class="empty">'+t("ما فيه رسائل مجدولة")+'</p>';
+  c.timers.forEach(m=>{
+    const d=document.createElement("div");d.className="cmd"+(m.on?"":" off");
+    d.innerHTML='<div class="cbody"><div class="chead"><span class="bd g" data-nt></span><span class="bd" data-nt></span></div><p data-nt></p></div><div><button class="ic tg">'+(m.on?"⏸":"▶️")+'</button><button class="ic ed">✏️</button><button class="ic del">🗑</button></div>';
+    const bs=d.querySelectorAll(".bd");
+    bs[0].textContent=fmtEvery(m.every);
+    bs[1].textContent=m.kind==="text"?t("💬 رد عادي"):t(KINDN[m.kind]);
+    d.querySelector("p").textContent=m.kind==="text"?m.text:"";
+    if(m.kind!=="text")d.querySelector("p").hidden=true;
+    d.querySelector(".tg").title=t(m.on?"تعطيل":"تفعيل");
+    d.querySelector(".tg").onclick=()=>act(()=>api("POST",base()+"/timers",{id:m.id,text:m.kind==="text"?m.text:"",every:m.every,on:!m.on}),"تم الحفظ");
+    d.querySelector(".ed").onclick=()=>tmOpen(m);
+    d.querySelector(".del").onclick=()=>{if(ask("تحذف هذي الرسالة؟"))act(()=>api("DELETE",base()+"/timers/"+encodeURIComponent(m.id)),"تم الحفظ")};
+    box.appendChild(d);
+  });
+  const ab=$("#aulist");ab.innerHTML="";
+  c.autos.forEach(a=>{
+    const d=document.createElement("div");d.className="cmd col"+(a.on?"":" off");
+    d.innerHTML='<div class="chead"><b data-nt></b><span class="bd warn" data-nt></span></div><p class="hint" style="margin:0 0 8px" data-nt></p><textarea style="min-height:60px;margin:0" data-nt></textarea><div class="tool" style="margin:10px 0 0"><button class="btn sm sv"></button><button class="btn sm line tg"></button><button class="btn sm line rs"></button></div>';
+    d.querySelector("b").textContent=t(a.label);
+    const bw=d.querySelector(".bd");bw.textContent=t("محذوف");bw.hidden=a.on;
+    d.querySelector(".hint").textContent=a.hint;
+    const ta=d.querySelector("textarea");ta.value=a.text;
+    d.querySelector(".sv").textContent=t("حفظ");
+    d.querySelector(".tg").textContent=a.on?"🗑 "+t("تعطيل"):t("تفعيل");
+    d.querySelector(".rs").textContent=t("استرجاع الافتراضي");
+    d.querySelector(".sv").onclick=()=>act(()=>api("POST",base()+"/autos",{key:a.key,text:ta.value,on:a.on}),"تم الحفظ");
+    d.querySelector(".tg").onclick=()=>act(()=>api("POST",base()+"/autos",{key:a.key,text:ta.value,on:!a.on}),"تم الحفظ");
+    d.querySelector(".rs").onclick=()=>act(()=>api("POST",base()+"/autos",{key:a.key,text:"",on:true}),"تم الحفظ");
+    ab.appendChild(d);
+  });
+}
+/* ---------- طلبات الأغاني ---------- */
+function renderSongs(){
+  const c=CH,s=c.sr,q=c.songs;
+  document.querySelectorAll(".srchip").forEach(x=>x.classList.toggle("on",x.dataset.sr===(s.on?"on":"off")));
+  $("#sr-user").value=s.per_user;$("#sr-queue").value=s.max_queue;$("#sr-min").value=s.max_minutes;$("#sr-perm").value=s.perm;
+  $("#sr-nokey").hidden=!!c.yt_key;
+  const url=location.origin+c.player_path;
+  $("#sr-playerurl").value=url;$("#sr-open").href=url;
+  const box=$("#srlist");box.innerHTML="";
+  const add=(m,now)=>{
+    const d=document.createElement("div");d.className="song"+(now?" now":"");
+    d.innerHTML='<span>'+(now?"▶️":"🎵")+'</span><b data-nt></b><small data-nt></small>'+(now?"":'<button class="ic">✖</button>');
+    d.querySelector("b").textContent=m.title;d.querySelector("small").textContent=m.by;
+    const b=d.querySelector("button");if(b)b.onclick=()=>act(()=>api("DELETE",base()+"/sr/"+encodeURIComponent(m.qid)),"تمت الإزالة");
+    box.appendChild(d);
+  };
+  if(q.current)add(q.current,true);
+  q.queue.forEach(m=>add(m,false));
+  if(!q.current&&!q.queue.length)box.innerHTML='<p class="empty">'+t("ما فيه أغاني بالطابور")+'</p>';
+}
+/* ---------- الحماية ---------- */
+function renderSpam(){
+  const f=CH.filters;
+  for(const k of ["links","caps","symbols","repeat","long"])$("#f-"+k).checked=!!f[k];
+  $("#f-words").value=(f.words||[]).join("\n");$("#f-allowed").value=(f.allowed||[]).join("\n");
+  $("#f-timeout").value=f.timeout;$("#f-warn").checked=!!f.warn;$("#f-sub").checked=!!f.exempt_sub;$("#f-vip").checked=!!f.exempt_vip;
+  Object.assign(EN,{"✅ الحماية جاهزة: البوت يقدر يحذف الرسائل ويكتم.":"✅ Protection is ready: the bot can delete messages and time users out.",
+  "⚠️ الحماية ما تشتغل لسه: لازم صاحب البوت يربط حساب البوت (/auth/bot) من جديد، والبوت يكون مود في قناتك.":"⚠️ Protection isn't active yet: the bot owner must relink the bot account (/auth/bot) and the bot must be a mod in your channel."});
+  for(const k in EN)AR[EN[k]]=k;
+  $("#spamstate").textContent=t(CH.mod_ready?"✅ الحماية جاهزة: البوت يقدر يحذف الرسائل ويكتم.":"⚠️ الحماية ما تشتغل لسه: لازم صاحب البوت يربط حساب البوت (/auth/bot) من جديد، والبوت يكون مود في قناتك.");
+}
+/* ---------- حساب البوت ---------- */
+function renderBot(){
+  $("#botlogin").textContent=CH.bot.login;
+  $("#botmode").textContent=t(CH.bot.custom?"بوت مخصص":"البوت الافتراضي");
+  $("#botreset").hidden=!CH.bot.custom;
 }
 cmdFormInit();
 document.querySelectorAll("#nav a").forEach(a=>a.onclick=()=>go(a.dataset.p));
@@ -1428,6 +1766,24 @@ $("#savetitle").onclick=()=>act(async()=>{
 },"تم تغيير عنوان البث");
 document.querySelectorAll(".lchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/lang",{lang:b.dataset.bl}),"تم تغيير لغة ردود البوت"));
 document.querySelectorAll(".rchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/reminders",{on:b.dataset.rm==="on"}),"تم الحفظ"));
+$("#tmnew").onclick=()=>tmOpen(null);
+$("#tmcancel").onclick=()=>{$("#tmform").hidden=true};
+$("#tmsave").onclick=()=>act(async()=>{
+  const cur=CH.timers.find(x=>x.id===TM_ID);
+  await api("POST",base()+"/timers",{id:TM_ID,text:$("#tmtext").value,every:parseInt($("#tmevery").value,10),on:cur?cur.on:true});
+  $("#tmform").hidden=true;
+},"تم الحفظ");
+$("#tmreset").onclick=()=>{if(ask("ترجع الرسائل المجدولة الافتراضية؟ الرسائل اللي أضفتها تنحذف."))act(()=>api("POST",base()+"/timers/reset"),"تم الحفظ")};
+document.querySelectorAll(".srchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/sr/settings",{on:b.dataset.sr==="on"}),"تم الحفظ"));
+$("#sr-save").onclick=()=>act(()=>api("POST",base()+"/sr/settings",{per_user:parseInt($("#sr-user").value,10),max_queue:parseInt($("#sr-queue").value,10),max_minutes:parseInt($("#sr-min").value,10),perm:$("#sr-perm").value}),"تم الحفظ");
+$("#sr-copy").onclick=()=>copyText($("#sr-playerurl").value);
+$("#sr-skip").onclick=()=>act(()=>api("POST",base()+"/sr/skip"),"تم الحفظ");
+$("#sr-clear").onclick=()=>act(()=>api("POST",base()+"/sr/clear"),"تم الحفظ");
+$("#savespam").onclick=()=>act(()=>api("POST",base()+"/filters",{
+  links:$("#f-links").checked,caps:$("#f-caps").checked,symbols:$("#f-symbols").checked,repeat:$("#f-repeat").checked,long:$("#f-long").checked,
+  words:$("#f-words").value,allowed:$("#f-allowed").value,timeout:parseInt($("#f-timeout").value,10)||0,
+  warn:$("#f-warn").checked,exempt_sub:$("#f-sub").checked,exempt_vip:$("#f-vip").checked}),"تم الحفظ");
+$("#botreset").onclick=()=>act(()=>api("POST",base()+"/botacct/reset"),"تم الحفظ");
 $("#cancelcmd").onclick=closeModal;
 $("#modal").onclick=e=>{if(e.target.id==="modal")closeModal()};
 $("#savecmd").onclick=()=>act(async()=>{
@@ -1443,11 +1799,14 @@ $("#leave").onclick=()=>{
 $("#logout").onclick=async()=>{await api("POST","/s/api/logout");onAuth({enabled:true})};
 const qp=new URLSearchParams(location.search);
 if(qp.get("msg")==="ready")toast("تم تفعيل البوت وربط تويتش ✅");
-const ERR={cancel:"تم إلغاء الدخول",fail:"فشل الدخول مع تويتش، حاول مرة ثانية",not_joined:"التفعيل الذاتي مقفل، كلم المطوّر",scope:"ما وافقت على الصلاحية المطلوبة"};
+if(qp.get("msg")==="botset")toast("تم ربط حساب البوت ✅");
+const ERR={cancel:"تم إلغاء الدخول",fail:"فشل الدخول مع تويتش، حاول مرة ثانية",not_joined:"التفعيل الذاتي مقفل، كلم المطوّر",scope:"ما وافقت على الصلاحية المطلوبة",wrong:"لازم تدخل بنفس حسابك"};
 if(qp.get("err"))toast(ERR[qp.get("err")]||"صار خطأ",1);
+const goto=qp.get("go");
 if(location.search)history.replaceState(null,"","/s");
+//REPORT_JS
 initLang();
-init();
+init().then(()=>{if(goto&&CH)go(goto)});
 </script>
 </body>
 </html>
@@ -1468,7 +1827,8 @@ PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
 .chip{background:var(--card);border:1px solid var(--line);color:var(--mut);padding:8px 14px;border-radius:20px;font:inherit;cursor:pointer;font-size:13px}
 .chip.on{background:var(--acc);border-color:var(--acc);color:#fff}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
-.cc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.cc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0;border-top:3px solid var(--k,#3b82f6)}
+.cc.game{--k:#ec4899}
 .cc .h{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .cc b{font-size:16px;color:#e9ddff;cursor:pointer;word-break:break-all}
 .cc b:hover{color:#fff}
@@ -1477,7 +1837,12 @@ PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
 .bd.p-vip{background:rgba(236,72,153,.18);color:#f59ac8}
 .bd.p-mod{background:rgba(46,204,113,.15);color:#2ecc71}
 .bd.p-broadcaster{background:rgba(245,166,35,.18);color:#f5a623}
-.sec{margin-top:22px}
+.sec{margin-top:22px;border-top:3px solid #f59e0b}
+.sec.sr{border-top-color:#ec4899}
+.song{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line);font-size:14px}
+.song:last-child{border:0}
+.song b{flex:1;font-weight:500;word-break:break-word}
+.song small{color:var(--mut)}
 @media(max-width:560px){.hero{padding:16px}.av{width:52px;height:52px;font-size:22px}}
 </style>
 <div class="wrap">
@@ -1491,7 +1856,11 @@ PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
   </div>
   <div class="card" id="nf" hidden><p class="mut" style="margin:0">القناة غير موجودة أو البوت غير مفعّل فيها</p></div>
   <div id="box">
-    <div class="tool">
+    <div class="card sec sr" id="srbox" hidden>
+      <h2>🎵 طلبات الأغاني</h2>
+      <div id="srlist"></div>
+    </div>
+    <div class="tool" style="margin-top:16px">
       <input id="q" placeholder="بحث في الكوماندات">
       <button class="chip on" data-f="all">كل الأنواع</button>
       <button class="chip" data-f="text">ردود</button>
@@ -1506,9 +1875,12 @@ PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
   </div>
   <p class="hint" style="text-align:center;margin-top:18px"><a href="/s" style="color:var(--acc)">أنت الستريمر أو مود؟ ادخل لوحة التحكم</a></p>
 </div>
+<!--REPORT_HTML-->
 <div id="toast"></div>
 <script>
 //COMMON_JS
+Object.assign(EN,{"🎵 طلبات الأغاني":"🎵 Song requests","ما فيه أغاني بالطابور":"The queue is empty"});
+for(const k in EN)AR[EN[k]]=k;
 const CHN=decodeURIComponent(location.pathname.split("/").pop()).toLowerCase();
 let D=null,BAD=false,FILT="all",Q="";
 function render(){
@@ -1518,6 +1890,13 @@ function render(){
   const lp=$("#live");lp.hidden=false;lp.className="pill"+(D.live?" live":"");lp.textContent=t(D.live?"لايف":"أوفلاين");
   const all=Object.keys(D.commands).sort(),q=Q.toLowerCase();
   $("#cnt").textContent=all.length+" "+t("كوماند");
+  const sb=$("#srbox"),sl=$("#srlist");sb.hidden=!(D.songs&&D.songs.on);sl.innerHTML="";
+  if(D.songs&&D.songs.on){
+    const add=(m,now)=>{const d=document.createElement("div");d.className="song";d.innerHTML='<span>'+(now?"▶️":"🎵")+'</span><b data-nt></b><small data-nt></small>';d.querySelector("b").textContent=m.title;d.querySelector("small").textContent=m.by;sl.appendChild(d)};
+    if(D.songs.current)add(D.songs.current,true);
+    D.songs.queue.forEach(m=>add(m,false));
+    if(!D.songs.current&&!D.songs.queue.length)sl.innerHTML='<p class="empty">'+t("ما فيه أغاني بالطابور")+'</p>';
+  }
   const box=$("#list");box.innerHTML="";
   const names=all.filter(n=>{
     const c=D.commands[n];
@@ -1528,7 +1907,7 @@ function render(){
     box.innerHTML='<p class="empty" style="grid-column:1/-1">'+t(all.length?"ما فيه كوماندات تطابق بحثك":"ما فيه كوماندات")+'</p>';
   }
   names.forEach(n=>{
-    const c=D.commands[n],d=document.createElement("div");d.className="cc";
+    const c=D.commands[n],d=document.createElement("div");d.className="cc"+(c.type==="game"?" game":"");
     d.innerHTML='<div class="h"><b dir="ltr" data-nt></b><span class="bd" data-nt></span></div><div class="meta" data-nt></div><p data-nt></p>';
     const nm=(c.bang===false?"":"!")+n,b=d.querySelector("b");
     b.textContent=nm;b.title=t("اضغط للنسخ");b.onclick=()=>copyText(nm);
@@ -1545,6 +1924,7 @@ $("#q").oninput=e=>{Q=e.target.value.trim();render()};
 document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{
   FILT=b.dataset.f;document.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x===b));render();
 });
+//REPORT_JS
 initLang();
 fetch("/pub/"+encodeURIComponent(CHN)).then(r=>r.ok?r.json():Promise.reject()).then(d=>{D=d;render()}).catch(()=>{BAD=true;render()});
 </script>
@@ -1552,11 +1932,66 @@ fetch("/pub/"+encodeURIComponent(CHN)).then(r=>r.ok?r.json():Promise.reject()).t
 </html>
 """
 
+# ---------------- مشغّل الأغاني ----------------
+PLAYER_HTML = r"""<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مشغّل الأغاني</title>
+<style>
+html,body{margin:0;height:100%;background:#0b0b10;color:#f1f1f5;font-family:Tajawal,system-ui,sans-serif}
+#wrap{display:flex;flex-direction:column;height:100%}
+#pl{flex:1;min-height:0}
+#bar{padding:10px 14px;background:#18181f;border-top:3px solid #ec4899;font-size:15px;display:flex;gap:10px;align-items:center}
+#bar b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#bar small{color:#9a9aab}
+button{background:#ec4899;color:#fff;border:0;border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer}
+</style></head><body>
+<div id="wrap"><div id="pl"></div><div id="bar"><span>🎵</span><b id="ttl">...</b><small id="by"></small><button id="sk">⏭</button></div></div>
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+const CH=__CH__,K=__KEY__;
+let player=null,cur="",ready=false,busy=false;
+const url=p=>"/player/api/"+encodeURIComponent(CH)+"/"+p+"?k="+encodeURIComponent(K);
+async function next(){
+  if(busy)return;busy=true;
+  try{const r=await fetch(url("next"),{method:"POST"});apply(await r.json())}catch(e){}
+  busy=false;
+}
+function apply(s){
+  const c=s.current;
+  document.getElementById("ttl").textContent=c?c.title:"ما فيه أغنية الحين";
+  document.getElementById("by").textContent=c?c.by:"";
+  const id=c?c.qid:"";
+  if(id!==cur){
+    cur=id;
+    if(ready){c?player.loadVideoById(c.vid):player.stopVideo()}
+  }
+}
+async function poll(){
+  try{
+    const s=await (await fetch(url("state"))).json();
+    if(!s.current&&s.queue.length)await next();else apply(s);
+  }catch(e){}
+}
+function onYouTubeIframeAPIReady(){
+  player=new YT.Player("pl",{width:"100%",height:"100%",playerVars:{autoplay:1,rel:0},events:{
+    onReady:()=>{ready=true;cur="";poll()},
+    onStateChange:e=>{if(e.data===0)next()},
+    onError:()=>next()
+  }});
+}
+document.getElementById("sk").onclick=next;
+setInterval(poll,3000);
+</script></body></html>
+"""
+
 OWNER_HTML = (OWNER_HTML.replace("{{FORM}}", CMD_FORM.replace("{{TOP}}", '<select id="cmdch"></select>'))
               .replace("/*COMMON_CSS*/", COMMON_CSS).replace("//COMMON_JS", COMMON_JS))
 STREAMER_HTML = (STREAMER_HTML.replace("{{FORM}}", CMD_FORM.replace("{{TOP}}", ""))
+                 .replace("<!--REPORT_HTML-->", REPORT_HTML).replace("//REPORT_JS", REPORT_JS)
                  .replace("/*COMMON_CSS*/", COMMON_CSS).replace("//COMMON_JS", COMMON_JS))
-PUBLIC_HTML = PUBLIC_HTML.replace("/*COMMON_CSS*/", COMMON_CSS).replace("//COMMON_JS", COMMON_JS)
+PUBLIC_HTML = (PUBLIC_HTML.replace("<!--REPORT_HTML-->", REPORT_HTML).replace("//REPORT_JS", REPORT_JS)
+               .replace("/*COMMON_CSS*/", COMMON_CSS).replace("//COMMON_JS", COMMON_JS))
 
 SESSION_TOKEN = (
     hashlib.sha256(("dash:" + DASHBOARD_PASSWORD).encode()).hexdigest()
@@ -1729,6 +2164,24 @@ def make_web_app(bot):
     await channel.send(text)
     return web.json_response({"ok": True})
 
+  async def submit_report(request):
+    b = await jbody(request)
+    txt = str(b.get("text", "")).strip()[:800]
+    if not txt:
+      return jerr("اكتب وصف المشكلة")
+    login_name = read_session(request.cookies.get("ssess", "")) or "anonymous"
+    store.data["reports"].append({
+        "id": uuid.uuid4().hex[:8],
+        "user": login_name,
+        "channel": str(b.get("channel", "")),
+        "page": str(b.get("page", "")),
+        "text": txt,
+        "time": int(time.time()),
+    })
+    store.data["reports"] = store.data["reports"][-100:]
+    await store.save()
+    return web.json_response({"ok": True})
+
   # ---------------- موقع الستريمر ----------------
   def role_of(login, ch):
     if ch not in store.data["channels"]:
@@ -1793,7 +2246,6 @@ def make_web_app(bot):
     raise resp
 
   async def auth_bot(request):
-    """ربط حساب البوت نفسه (مرة وحدة): افتحه من نافذة خاصة بحساب majek_bot."""
     state_val, url = await auth_start("b")
     resp = web.HTTPFound(url)
     resp.set_cookie("ostate", state_val, max_age=600, httponly=True,
@@ -1891,6 +2343,7 @@ def make_web_app(bot):
         "name": ch,
         "live": await bot.is_channel_live(ch),
         "commands": store.data["commands"].get(ch, {}),
+        "songs": {"on": False, "current": None, "queue": []},
     })
 
   async def s_logout(request):
@@ -1917,6 +2370,27 @@ def make_web_app(bot):
         game, title = await twitch.channel_info(ch)
       except Exception:
         game = title = None
+
+    ch_autos = store.autos(ch)
+    autos_out = []
+    for k, (lbl, default_txt, hint) in AUTO_DEFAULTS.items():
+      cur = ch_autos.get(k, {})
+      autos_out.append({
+          "key": k,
+          "label": lbl,
+          "hint": hint,
+          "text": cur.get("text") if cur.get("text") else default_txt,
+          "on": cur.get("on", True),
+      })
+
+    sr_cfg = store.data["sr"].get(ch, {
+        "on": False, "per_user": 3, "max_queue": 25, "max_minutes": 10, "perm": "everyone"
+    })
+    flt_cfg = store.data["filters"].get(ch, {
+        "links": False, "caps": False, "symbols": False, "repeat": False, "long": False,
+        "words": [], "allowed": [], "timeout": 10, "warn": True, "exempt_sub": False, "exempt_vip": True
+    })
+
     return web.json_response({
         "name": ch, "role": role,
         "live": await bot.is_channel_live(ch),
@@ -1929,6 +2403,16 @@ def make_web_app(bot):
         "usage": bot.usage.get(ch, {}),
         "lang": store.data["lang"].get(ch, "ar"),
         "reminders": bool(store.data["reminders"].get(ch, False)),
+        "timers": store.timers(ch),
+        "min_every": MIN_TIMER_MINUTES,
+        "autos": autos_out,
+        "sr": sr_cfg,
+        "songs": {"current": None, "queue": []},
+        "yt_key": bool(os.environ.get("YOUTUBE_API_KEY")),
+        "player_path": f"/player/{ch}",
+        "filters": flt_cfg,
+        "mod_ready": True,
+        "bot": {"login": bot.nick, "custom": False},
     })
 
   async def s_save_cmd(request):
@@ -2033,6 +2517,136 @@ def make_web_app(bot):
     await store.save()
     return web.json_response({"ok": True})
 
+  async def s_save_timer(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    tid = str(b.get("id", "")).strip()
+    txt = str(b.get("text", "")).strip()[:450]
+    try:
+      every = int(b.get("every", 30))
+    except Exception:
+      every = 30
+    every = max(MIN_TIMER_MINUTES, min(MAX_TIMER_MINUTES, every))
+    on = bool(b.get("on", True))
+    timers = store.timers(ch)
+
+    if tid:
+      for m in timers:
+        if m["id"] == tid:
+          if txt:
+            m["kind"] = "text"
+            m["text"] = txt
+          elif m["kind"] == "text":
+            return jerr("اكتب نص الرسالة")
+          m["every"] = every
+          m["on"] = on
+          break
+      else:
+        return jerr("الرسالة غير موجودة", 404)
+    else:
+      if len(timers) >= MAX_TIMERS:
+        return jerr(f"الحد الأقصى {MAX_TIMERS} رسالة")
+      if not txt:
+        return jerr("اكتب نص الرسالة")
+      timers.append({
+          "id": uuid.uuid4().hex[:8],
+          "kind": "text",
+          "text": txt,
+          "every": every,
+          "on": on,
+          "delay": every,
+      })
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_del_timer(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    tid = request.match_info["id"]
+    timers = store.timers(ch)
+    store.data["timers"][ch] = [m for m in timers if m["id"] != tid]
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_reset_timers(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    store.data["timers"][ch] = default_timers()
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_save_auto(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    key = str(b.get("key", ""))
+    if key not in AUTO_DEFAULTS:
+      return jerr("رد غير معروف")
+    txt = str(b.get("text", "")).strip()[:450]
+    on = bool(b.get("on", True))
+    autos = store.autos(ch)
+    if not txt and on:
+      autos.pop(key, None)
+    else:
+      autos[key] = {"text": txt, "on": on}
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_sr_settings(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    cur = store.data["sr"].setdefault(ch, {
+        "on": False, "per_user": 3, "max_queue": 25, "max_minutes": 10, "perm": "everyone"
+    })
+    if "on" in b:
+      cur["on"] = bool(b["on"])
+    if "per_user" in b:
+      cur["per_user"] = max(1, min(20, int(b["per_user"] or 3)))
+    if "max_queue" in b:
+      cur["max_queue"] = max(1, min(100, int(b["max_queue"] or 25)))
+    if "max_minutes" in b:
+      cur["max_minutes"] = max(1, min(60, int(b["max_minutes"] or 10)))
+    if b.get("perm") in PERMS:
+      cur["perm"] = b["perm"]
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_filters(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    words = [w.strip().lower() for w in str(b.get("words", "")).splitlines() if w.strip()]
+    allowed = [w.strip().lower() for w in str(b.get("allowed", "")).splitlines() if w.strip()]
+    store.data["filters"][ch] = {
+        "links": bool(b.get("links")),
+        "caps": bool(b.get("caps")),
+        "symbols": bool(b.get("symbols")),
+        "repeat": bool(b.get("repeat")),
+        "long": bool(b.get("long")),
+        "words": words[:100],
+        "allowed": allowed[:100],
+        "timeout": max(0, min(600, int(b.get("timeout") or 0))),
+        "warn": bool(b.get("warn")),
+        "exempt_sub": bool(b.get("exempt_sub")),
+        "exempt_vip": bool(b.get("exempt_vip")),
+    }
+    await store.save()
+    return web.json_response({"ok": True})
+
   async def s_title(request):
     a, err = access(request)
     if err:
@@ -2062,6 +2676,7 @@ def make_web_app(bot):
   r.add_post("/api/commands", save_command)
   r.add_delete("/api/commands/{channel}/{name}", del_command)
   r.add_post("/api/send", send_msg)
+  r.add_post("/report", submit_report)
   # EventSub
   r.add_post("/eventsub", eventsub_hook)
   # موقع الستريمر
@@ -2084,6 +2699,12 @@ def make_web_app(bot):
   r.add_post("/s/api/channel/{channel}/leave", s_leave)
   r.add_post("/s/api/channel/{channel}/lang", s_lang)
   r.add_post("/s/api/channel/{channel}/reminders", s_reminders)
+  r.add_post("/s/api/channel/{channel}/timers", s_save_timer)
+  r.add_delete("/s/api/channel/{channel}/timers/{id}", s_del_timer)
+  r.add_post("/s/api/channel/{channel}/timers/reset", s_reset_timers)
+  r.add_post("/s/api/channel/{channel}/autos", s_save_auto)
+  r.add_post("/s/api/channel/{channel}/sr/settings", s_sr_settings)
+  r.add_post("/s/api/channel/{channel}/filters", s_filters)
   r.add_post("/s/api/channel/{channel}/title", s_title)
   return app
 
@@ -2100,7 +2721,6 @@ async def start_web_server(bot):
 # البوت (EventSub للقراءة + Send Chat Message API للإرسال)
 # ============================================================
 class IRCClient:
-  """اتصال IRC بسيط بحساب البوت: يخدم القنوات اللي ما أعطت صلاحية EventSub (بدون شارة بوت)."""
 
   def __init__(self, bot, token):
     self.bot = bot
@@ -2122,7 +2742,7 @@ class IRCClient:
       except Exception as e:
         print(f"IRC: انقطع الاتصال ({e})")
         if "auth" in str(e):
-          delay = 300  # التوكن غلط: لا نكرر المحاولة بسرعة
+          delay = 300
       self.ready.clear()
       self.writer = None
       await asyncio.sleep(delay)
@@ -2143,7 +2763,7 @@ class IRCClient:
   async def _rejoin(self):
     for c in list(self.channels):
       self._raw("JOIN #" + c)
-      await asyncio.sleep(0.6)  # حد تويتش: 20 دخول كل 10 ثواني
+      await asyncio.sleep(0.6)
 
   async def _handle(self, line):
     tags = {}
@@ -2203,7 +2823,6 @@ class IRCClient:
 
 
 class Author:
-  """مرسل الرسالة (مبني من حدث EventSub)."""
 
   def __init__(self, ev):
     self.name = (ev.get("chatter_user_login") or "").lower()
@@ -2245,12 +2864,13 @@ class Bot:
     self.last_saudi_prayer = None
     self.live_cache = {}
     self.cmd_cooldown = {}
-    self.usage = {}  # قناة -> {كوماند: عدد الاستخدام} من آخر تشغيل
-    self.seen = {}  # معرفات أحداث EventSub لمنع التكرار
-    self.queues = {}  # قناة -> طابور الإرسال
-    self.paused = set()  # قنوات الستريمر سحب منها الصلاحية: ما نعيد الاشتراك لين يعيد الربط
+    self.usage = {}
+    self.seen = {}
+    self.queues = {}
+    self.paused = set()
+    self.timer_last = {}  # (channel, timer_id) -> timestamp
     self.irc = IRCClient(self, IRC_TOKEN) if IRC_TOKEN else None
-    self.irc_channels = set()  # قنوات تشتغل بالـ IRC لأن ما فيها صلاحية EventSub
+    self.irc_channels = set()
 
   def run(self):
     loop = asyncio.get_event_loop()
@@ -2271,9 +2891,7 @@ class Bot:
     else:
       print("ملاحظة: ما فيه TWITCH_TOKEN، فالقنوات اللي ما أعطت صلاحية ما راح يرد فيها البوت")
 
-  # ---------- الاشتراك في شات القنوات ----------
   async def resub_all(self):
-    # احذف الاشتراكات المعطلة (تويتش يعطلها لو السيرفر نام) وأعد الاشتراك
     for s in await self.twitch.list_subs():
       if s.get("status") not in ("enabled", "webhook_callback_verification_pending"):
         await self.twitch.drop_sub(s["id"])
@@ -2283,7 +2901,7 @@ class Bot:
     ])
 
   async def resub_loop(self):
-    await asyncio.sleep(10)  # لين يشتغل السيرفر ويقدر يرد على تحقق تويتش
+    await asyncio.sleep(10)
     while True:
       try:
         await self.resub_all()
@@ -2293,11 +2911,11 @@ class Bot:
 
   async def join_channels(self, names):
     for n in names:
-      self.paused.discard(n)  # الاستدعاء الصريح (إضافة أو إعادة ربط) يرفع الإيقاف
+      self.paused.discard(n)
       ok, why = await self.twitch.subscribe_chat(n)
       if ok:
         print(f"اشتراك الشات {n}: ✅")
-        if n in self.irc_channels:  # صارت تشتغل بـ EventSub، نطلع من IRC عشان ما يتكرر الرد
+        if n in self.irc_channels:
           self.irc_channels.discard(n)
           if self.irc:
             self.irc.part(n)
@@ -2321,10 +2939,9 @@ class Bot:
         self.irc.part(n)
       q = self.queues.pop(n, None)
       if q is not None:
-        q.put_nowait(None)  # يوقف عامل الإرسال
+        q.put_nowait(None)
 
   async def on_revocation(self, sub):
-    """تويتش ألغى الاشتراك: لو الستريمر سحب الصلاحية نوقف المحاولات لين يعيد الربط."""
     status = sub.get("status")
     print(f"تويتش ألغى اشتراك: {status}")
     if status not in ("authorization_revoked", "user_removed"):
@@ -2338,7 +2955,6 @@ class Bot:
   def get_channel(self, name):
     return ChatChannel(self, name) if name in self.store.data["channels"] else None
 
-  # ---------- الإرسال: طابور لكل قناة مع حدود تحمي الحساب من السبام ----------
   async def send_chat(self, channel_name, text):
     if channel_name in self.store.data["banned"]:
       return
@@ -2360,7 +2976,7 @@ class Bot:
         return
       text, queued_at = item
       if time.time() - queued_at > SEND_STALE:
-        continue  # رسالة قديمة، ما لها فايدة
+        continue
       while True:
         now = time.time()
         times = [t for t in times if now - t < SEND_WINDOW]
@@ -2428,31 +3044,48 @@ class Bot:
     return selected
 
   async def periodic_reminders(self):
-    step = 0
+    start_ts = time.time()
     while True:
-      await asyncio.sleep(1800)
-      if step == 0:
-        message_text = f"اللهم صلِّ وسلم على نبينا محمد، {self.get_random_saudi_prayer()}"
-      elif step == 1:
-        message_text = self.get_random_dhikr()
-      else:
-        message_text = "اشربوا ماااااااي"
-
+      await asyncio.sleep(60)
+      now = time.time()
       for channel_name in list(self.store.data["channels"]):
         if not self.store.data["reminders"].get(channel_name, False):
-          continue  # الستريمر ما فعّل الرسائل الدورية
-        if await self.is_channel_live(channel_name):
-          channel = self.get_channel(channel_name)
-          if channel:
+          continue
+        if not await self.is_channel_live(channel_name):
+          continue
+        channel = self.get_channel(channel_name)
+        if not channel:
+          continue
+        for m in self.store.timers(channel_name):
+          if not m.get("on", True):
+            continue
+          key = (channel_name, m["id"])
+          interval = max(MIN_TIMER_MINUTES, int(m.get("every", 30))) * 60
+          last = self.timer_last.get(key)
+          if last is None:
+            delay = int(m.get("delay", m.get("every", 30))) * 60
+            if now - start_ts < delay:
+              continue
+          elif now - last < interval:
+            continue
+
+          self.timer_last[key] = now
+          kind = m.get("kind", "text")
+          if kind == "saudi":
+            msg_text = f"اللهم صلِّ وسلم على نبينا محمد، {self.get_random_saudi_prayer()}"
+          elif kind == "dhikr":
+            msg_text = self.get_random_dhikr()
+          else:
+            msg_text = m.get("text", "")
+
+          if msg_text:
             try:
-              await channel.send(message_text)
+              await channel.send(msg_text)
             except Exception as e:
               print(f"تعذر إرسال التذكير في {channel_name}: {e}")
 
-      step = (step + 1) % 3
-
   # ----------------------------------------------------------
-  # الكوماندات (إدارة + مخصصة)
+  # الكوماندات
   # ----------------------------------------------------------
   def lang_of(self, ch):
     return "en" if self.store.data["lang"].get(ch) == "en" else "ar"
@@ -2462,7 +3095,6 @@ class Bot:
     return (en if self.lang_of(ch) == "en" else ar).format(**kw)
 
   async def say(self, message, ch, key, extra="", **kw):
-    """يرد على المستخدم بلغة القناة: عربي «@user نص» أو إنجليزي «@user -> text»."""
     sep = " -> " if self.lang_of(ch) == "en" else " "
     text = self.tr(ch, key, **kw) + (self.tr(ch, extra) if extra else "")
     await message.channel.send(f"@{message.author.name}{sep}{text}"[:490])
@@ -2491,7 +3123,7 @@ class Bot:
     async def say(key, extra="", **kw):
       await self.say(message, channel_name, key, extra, **kw)
 
-    # ---------- !commands: رابط صفحة الكوماندات للجميع ----------
+    # ---------- !commands ----------
     if cmd == "commands":
       ckey = (channel_name, "!commands")
       now = time.time()
@@ -2504,7 +3136,7 @@ class Bot:
         await self.send_cmd_list(message, channel_name, level)
       return True
 
-    # ---------- !bot: تعريف بالبوت (يرد بس لما أحد يسأل، وإذا الستريمر ما سوّى كوماند بنفس الاسم) ----------
+    # ---------- !bot ----------
     if cmd == "bot" and "bot" not in channel_cmds:
       bkey = (channel_name, "!bot")
       now = time.time()
@@ -2515,7 +3147,7 @@ class Bot:
         await say("bot_info", u=f"{SITE_URL}/s")
       return True
 
-    # ---------- !reminders on/off: الرسائل الدورية ----------
+    # ---------- !reminders on/off ----------
     if cmd == "reminders":
       if not is_mod:
         return True
@@ -2551,7 +3183,6 @@ class Bot:
           await say("del_nf", c=parts[1])
         return True
 
-      # addcmd / editcmd
       if len(parts) < 3:
         await say("usage_add", cmd=cmd)
         return True
@@ -2582,9 +3213,7 @@ class Bot:
         await say("edited", c=disp_cmd(name, channel_cmds[name]))
       return True
 
-    # ---------- !addgame: اختصار يغيّر كاتيقوري البث ----------
-    # مثال: !addgame !f fortnite  ← بعدها !f يغيّر الكاتيقوري إلى Fortnite
-    # أي لعبة أو كاتيقوري موجود في تويتش تنفع (Just Chatting, Valorant, ...)
+    # ---------- !addgame ----------
     if cmd == "addgame":
       if not is_mod:
         return True
@@ -2625,7 +3254,7 @@ class Bot:
                 c=disp_cmd(name, entry), g=game["name"])
       return True
 
-    # ---------- !settitle: تغيير عنوان البث ----------
+    # ---------- !settitle ----------
     if cmd == "settitle":
       if not is_mod:
         return True
@@ -2646,7 +3275,7 @@ class Bot:
         await say("e_" + result, q="")
       return True
 
-    # ---------- كوماندات الأونر (إدارة القنوات) ----------
+    # ---------- كوماندات الأونر ----------
     if cmd in ("addchannel", "removechannel", "channels"):
       if not is_owner:
         return True
@@ -2691,7 +3320,6 @@ class Bot:
     return await self.run_custom(message, cmd, entry, parts, channel_name, level)
 
   async def handle_plain(self, message, content, channel_name, level):
-    """كوماندات بدون !: أول كلمة في الرسالة تطابق اسم الكوماند."""
     parts = content.split(maxsplit=2)
     if not parts:
       return False
@@ -2710,18 +3338,14 @@ class Bot:
 
   async def run_custom(self, message, cmd, entry, parts, channel_name, level):
     send = message.channel.send
-    mention = f"@{message.author.name}"
 
-    # الصلاحية: اللي ما يملكها ما يرد عليه البوت
     if level < PERMS[entry["perm"]]:
       return True
 
     key = (channel_name, cmd)
     now = time.time()
-
     target = parts[1].lstrip("@") if len(parts) > 1 else ""
 
-    # اختصار لعبة: يشتغل حتى لو القناة أوفلاين
     if entry["type"] == "game":
       if now - self.cmd_cooldown.get(key, 0) < COMMAND_COOLDOWN:
         return True
@@ -2735,7 +3359,6 @@ class Bot:
         await self.say(message, channel_name, "e_" + result, q=entry["game"])
       return True
 
-    # الكوماندات العادية ما ترد إلا إذا القناة لايف
     if not await self.is_channel_live(channel_name):
       return True
 
@@ -2762,7 +3385,6 @@ class Bot:
     is_owner = username == OWNER
     level = user_level(message.author, is_owner)
 
-    # الكوماندات تشتغل حتى للأونر
     if content.startswith("!"):
       if await self.handle_command(
           message, content, username, channel_name, is_owner, level
@@ -2771,7 +3393,6 @@ class Bot:
     elif await self.handle_plain(message, content, channel_name, level):
       return
 
-    # الردود التلقائية: تجاهل المستخدمين المتجاهلين فقط (الأونر يُرد عليه عادي)
     if username in IGNORED_USERS:
       return
 
@@ -2800,30 +3421,29 @@ class Bot:
     has_single_greeting = words[0] in ["السلام", "سلام"]
     has_greeting = has_full_greeting or has_single_greeting
 
-    replied = False
+    ch_autos = self.store.autos(channel_name)
 
+    def get_auto(key):
+      cfg = ch_autos.get(key, {})
+      if not cfg.get("on", True):
+        return None
+      txt = cfg.get("text") or AUTO_DEFAULTS[key][1]
+      return format_response(txt, message.author.name, channel_name, "")
+
+    reply_txt = None
     if has_greeting and has_evening:
-      await send(
-          f"{author_mention} وعليكم السلام ورحمة الله وبركاته، ومساء النور"
-          " نورت البث"
-      )
-      replied = True
+      reply_txt = get_auto("both")
     elif has_evening:
-      await send(f"{author_mention} مساء النور")
-      replied = True
+      reply_txt = get_auto("evening")
     elif words[0] == "باك":
-      await send(f"{author_mention} ولكم باك")
-      replied = True
+      reply_txt = get_auto("back")
     elif words[0] in ["brb", "برب"]:
-      await send(f"{author_mention} خذ راحتك بس لا تطول علينا")
-      replied = True
+      reply_txt = get_auto("brb")
     elif has_greeting:
-      await send(
-          f"{author_mention} وعليكم السلام ورحمة الله وبركاته، نورت البث"
-      )
-      replied = True
+      reply_txt = get_auto("salam")
 
-    if replied:
+    if reply_txt:
+      await send(f"{author_mention} {reply_txt}"[:490])
       user_reply_time[username] = current_time
 
 
