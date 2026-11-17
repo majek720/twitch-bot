@@ -28,6 +28,7 @@ DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")  # لوحة الأ
 CLIENT_ID = os.environ.get("TWITCH_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("TWITCH_CLIENT_SECRET", "")
 SITE_URL = (os.environ.get("SITE_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").rstrip("/")
+SELF_JOIN = os.environ.get("SELF_JOIN", "1") != "0"  # الستريمر يفعّل البوت بنفسه (ضع 0 لإيقافه)
 SECRET = (os.environ.get("SESSION_SECRET") or CLIENT_SECRET or "").encode()
 
 OWNER = "majek113"
@@ -626,8 +627,11 @@ STREAMER_HTML = HEAD.replace("{{TITLE}}", "موقع الستريمر") + r"""
   <div class="card">
     <div class="logo" style="margin:0 auto 12px">🎮</div>
     <h1 style="font-size:20px;margin:0 0 8px">موقع الستريمر</h1>
-    <p class="mut">ادخل بحساب تويتش عشان تتحكم بكوماندات قناتك</p>
-    <a class="btn" id="loginBtn" href="/auth/login">الدخول عن طريق تويتش</a>
+    <p class="mut">ضغطة وحدة وتتفعّل الأمور: البوت يدخل قناتك ويرتبط تغيير اللعبة</p>
+    <div id="loginbtns">
+      <a class="btn" href="/auth/streamer">أنا ستريمر: تفعيل البوت في قناتي</a>
+      <a class="btn ghost mt" style="display:block;width:100%;text-align:center" href="/auth/login">أنا مود: دخول فقط</a>
+    </div>
     <p class="mut" id="nolink" hidden>الموقع غير مفعّل بعد من المطوّر.</p>
   </div>
 </div>
@@ -641,7 +645,7 @@ STREAMER_HTML = HEAD.replace("{{TITLE}}", "موقع الستريمر") + r"""
   </header>
   <select id="chsel" hidden></select>
   <div class="card" id="nochan" hidden>
-    <p class="mut" style="margin:0">قناتك مو مضافة للبوت. كلم majek113 عشان يضيفها، وبعدها تقدر تدخل من هنا.</p>
+    <p class="mut" style="margin:0">ما عندك قنوات هنا. إذا أنت ستريمر اضغط "أنا ستريمر" عشان تفعّل البوت في قناتك، وإذا أنت مود خلّ الستريمر يضيفك.</p>
   </div>
 
   <div id="main" hidden>
@@ -692,7 +696,7 @@ STREAMER_HTML = HEAD.replace("{{TITLE}}", "موقع الستريمر") + r"""
 let ME=null,CH=null;
 onAuth=d=>{
   $("#app").hidden=true;$("#login").hidden=false;
-  if(d&&d.enabled===false){$("#loginBtn").hidden=true;$("#nolink").hidden=false}
+  if(d&&d.enabled===false){$("#loginbtns").hidden=true;$("#nolink").hidden=false}
 };
 const base=()=>"/s/api/channel/"+encodeURIComponent(CH.name);
 function tab(t){
@@ -759,8 +763,8 @@ $("#leave").onclick=()=>{
 $("#logout").onclick=async()=>{await api("POST","/s/api/logout");onAuth({enabled:true})};
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>tab(b.dataset.t));
 const qp=new URLSearchParams(location.search);
-if(qp.get("msg")==="linked")toast("تم الربط مع تويتش ✅");
-const ERR={cancel:"تم إلغاء الدخول",fail:"فشل الدخول مع تويتش، حاول مرة ثانية",not_joined:"قناتك مو مضافة للبوت",scope:"ما وافقت على الصلاحية المطلوبة"};
+if(qp.get("msg")==="ready")toast("تم تفعيل البوت وربط تويتش ✅");
+const ERR={cancel:"تم إلغاء الدخول",fail:"فشل الدخول مع تويتش، حاول مرة ثانية",not_joined:"التفعيل الذاتي مقفل، كلم المطوّر",scope:"ما وافقت على الصلاحية المطلوبة"};
 if(qp.get("err"))toast(ERR[qp.get("err")]||"صار خطأ",1);
 if(location.search)history.replaceState(null,"","/s");
 init();
@@ -953,12 +957,19 @@ def make_web_app(bot):
     url = AUTH_URL + "?" + urlencode({
         "client_id": CLIENT_ID, "redirect_uri": redirect_uri,
         "response_type": "code", "state": state_val,
-        "scope": GAME_SCOPE if mode == "c" else "",
+        "scope": GAME_SCOPE if mode in ("c", "s") else "",
     })
     return state_val, url
 
   async def auth_login(request):
     state_val, url = await auth_start("l")
+    resp = web.HTTPFound(url)
+    resp.set_cookie("ostate", state_val, max_age=600, httponly=True,
+                    samesite="Lax", secure=is_https(request))
+    raise resp
+
+  async def auth_streamer(request):
+    state_val, url = await auth_start("s")
     resp = web.HTTPFound(url)
     resp.set_cookie("ostate", state_val, max_age=600, httponly=True,
                     samesite="Lax", secure=is_https(request))
@@ -991,7 +1002,14 @@ def make_web_app(bot):
     user = data["data"][0]
     login_name = user["login"].lower()
     dest = "/s"
-    if state_val[0] == "c":
+    if state_val[0] in ("c", "s"):
+      if login_name not in store.data["channels"] and SELF_JOIN and valid_channel(login_name):
+        store.data["channels"].append(login_name)
+        await store.save()
+        try:
+          await bot.join_channels([login_name])
+        except Exception as e:
+          print(f"تعذر الدخول لقناة {login_name}: {e}")
       if login_name not in store.data["channels"]:
         dest = "/s?err=not_joined"
       elif GAME_SCOPE not in (tok.get("scope") or []) or not tok.get("refresh_token"):
@@ -1000,7 +1018,7 @@ def make_web_app(bot):
         store.data["tokens"][login_name] = {"refresh": tok["refresh_token"], "user_id": user["id"]}
         twitch.user_access[login_name] = (tok["access_token"], time.time() + tok.get("expires_in", 3600))
         await store.save()
-        dest = "/s?msg=linked"
+        dest = "/s?msg=ready"
     resp = web.HTTPFound(dest)
     resp.set_cookie("ssess", make_session(login_name), max_age=60 * 60 * 24 * 30,
                     httponly=True, samesite="Lax", secure=is_https(request))
@@ -1137,6 +1155,7 @@ def make_web_app(bot):
   # موقع الستريمر
   r.add_get("/s", s_index)
   r.add_get("/auth/login", auth_login)
+  r.add_get("/auth/streamer", auth_streamer)
   r.add_get("/auth/connect", auth_connect)
   r.add_get("/auth/callback", auth_callback)
   r.add_post("/s/api/logout", s_logout)
