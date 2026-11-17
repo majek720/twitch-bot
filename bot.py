@@ -763,99 +763,260 @@ load();
 
 # ---------------- موقع الستريمر ----------------
 STREAMER_HTML = HEAD.replace("{{TITLE}}", "موقع الستريمر") + r"""
-<div class="wrap">
-<div id="login" hidden>
-  <div class="card">
+<style>
+body{background:#0a0e17}
+.shell{display:flex;min-height:100vh}
+aside{width:250px;background:#0d1220;border-inline-end:1px solid #1c2438;display:flex;flex-direction:column;padding:16px 12px;position:sticky;top:0;height:100vh;flex-shrink:0}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;padding:4px 8px 14px}
+.brand .logo{width:36px;height:36px;font-size:18px}
+aside select{margin:0 0 14px}
+.sec{font-size:11px;color:#5d6785;letter-spacing:.08em;padding:10px 12px 6px}
+.nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;color:var(--mut);cursor:pointer;font-weight:500;margin-bottom:2px;border-inline-start:3px solid transparent}
+.nav a:hover{background:#151c2e;color:var(--tx)}
+.nav a.on{background:linear-gradient(90deg,rgba(145,70,255,.22),rgba(145,70,255,.04));color:#fff;border-inline-start-color:var(--acc)}
+.nav i{font-style:normal;width:22px;text-align:center}
+.me{margin-top:auto;border-top:1px solid #1c2438;padding-top:12px}
+.meinfo{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.mav{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#9146ff,#5b21b6);display:grid;place-items:center;font-weight:700}
+.meinfo b{display:block;font-size:14px}
+.mebtns{display:flex;gap:8px}
+.mebtns .btn{flex:1;text-align:center}
+main{flex:1;min-width:0}
+.top{display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid #1c2438;position:sticky;top:0;background:rgba(10,14,23,.88);backdrop-filter:blur(8px);z-index:5}
+.top h1{font-size:18px;margin:0;flex:1}
+.burger{display:none;width:auto!important;padding:8px 12px!important}
+.content{max-width:1080px;margin:0 auto;padding:24px}
+.panel,.stat,.hero,.cmd{background:#111827;border:1px solid #1c2438;border-radius:16px}
+.panel{padding:18px}
+.panel h3{margin:0 0 4px;font-size:15px}
+.hero{padding:28px 20px;text-align:center;margin-bottom:14px;background:radial-gradient(circle at 50% 0,rgba(145,70,255,.28),transparent 65%),#111827}
+.av{width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,#9146ff,#5b21b6);display:grid;place-items:center;font-size:36px;font-weight:700;margin:0 auto 12px;box-shadow:0 0 0 5px rgba(145,70,255,.22)}
+.hero h2{font-size:26px;margin:0 0 8px;color:var(--tx)}
+.pill{display:inline-block;font-size:12px;padding:4px 12px;border-radius:20px;background:#1c2438;color:var(--mut);font-weight:700}
+.pill.live{background:rgba(46,204,113,.15);color:#2ecc71}
+.acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:18px}
+.acts .btn,.acts a.btn{width:auto;padding:10px 18px}
+.btn.line{background:none;border:1px solid #2a3350;color:var(--tx)}
+.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:14px}
+.stat{padding:18px}
+.stat small{font-size:12px;color:var(--mut)}
+.stat b{display:block;font-size:28px;margin-top:6px}
+.stat b.ok{color:var(--ok)}.stat b.bad{color:var(--bad);font-size:20px;margin-top:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.bar{display:flex;align-items:center;gap:10px;margin:12px 0;font-size:14px}
+.bar b{min-width:70px}
+.bar i{flex:1;height:10px;background:#1c2438;border-radius:6px;overflow:hidden}
+.bar s{display:block;height:100%;background:linear-gradient(90deg,#9146ff,#c084fc);border-radius:6px}
+.bar em{font-style:normal;color:var(--mut);min-width:24px;text-align:end}
+.bubble{background:#0a0e17;border:1px solid #1c2438;border-radius:12px;padding:12px 14px;min-height:56px;white-space:pre-wrap;word-break:break-word;font-size:14px}
+.bubble:before{content:"🤖 ";}
+.simrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.guide p{margin:0;padding:9px 0;border-bottom:1px solid #1c2438;font-size:14px;color:var(--mut)}
+.guide p:last-child{border:0}
+.guide code{color:#c4a1ff;background:#1a1530;padding:2px 8px;border-radius:6px;font-size:13px;margin-inline-end:8px;direction:ltr;display:inline-block}
+.tool{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.tool input{flex:1;min-width:160px;margin:0}
+.tool .btn{width:auto}
+.chip{background:#111827;border:1px solid #1c2438;color:var(--mut);padding:8px 14px;border-radius:20px;font:inherit;cursor:pointer;font-size:13px}
+.chip.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.cmd{display:flex;gap:12px;padding:14px;margin-bottom:10px;align-items:flex-start}
+.cbody{flex:1;min-width:0}
+.chead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.chead b{font-size:16px;color:#e9ddff}
+.cbody p{margin:0;color:var(--mut);font-size:14px;word-break:break-word}
+.bd{font-size:11px;padding:3px 10px;border-radius:20px;background:#1c2438;color:var(--mut)}
+.bd.g{background:rgba(145,70,255,.2);color:#c4a1ff}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:grid;place-items:center;z-index:50;padding:16px}
+.sheet{background:#111827;border:1px solid #1c2438;border-radius:18px;padding:20px;width:100%;max-width:520px;max-height:92vh;overflow:auto}
+.sheet .card{background:none;border:0;padding:0;margin:0}
+#bd{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:30}
+@media(max-width:860px){
+ aside{display:none}
+ aside.open{display:flex;position:fixed;inset-block:0;inset-inline-start:0;z-index:40;width:270px}
+ .burger{display:block}
+ .grid2,.simrow{grid-template-columns:1fr}
+ .content{padding:16px}.top{padding:12px 16px}
+}
+</style>
+<div id="login" hidden style="padding:16px">
+  <div class="card" style="max-width:380px;margin:12vh auto 0;text-align:center">
     <div class="logo" style="margin:0 auto 12px">🎮</div>
     <h1 style="font-size:20px;margin:0 0 8px">موقع الستريمر</h1>
     <p class="mut">ضغطة وحدة وتتفعّل الأمور: البوت يدخل قناتك ويرتبط تغيير اللعبة</p>
     <div id="loginbtns">
       <a class="btn" href="/auth/streamer">أنا ستريمر: تفعيل البوت في قناتي</a>
-      <a class="btn ghost mt" style="display:block;width:100%;text-align:center" href="/auth/login">أنا مود: دخول فقط</a>
+      <a class="btn line mt" href="/auth/login">أنا مود: دخول فقط</a>
     </div>
     <p class="mut" id="nolink" hidden>الموقع غير مفعّل بعد من المطوّر.</p>
     <button class="btn ghost langbtn" style="margin-top:10px">EN</button>
   </div>
 </div>
 
-<div id="app" hidden>
-  <header>
-    <div class="logo">🎮</div>
-    <div><h1>موقع الستريمر</h1><small id="who" dir="ltr"></small></div>
-    <div class="sp"></div>
-    <button class="btn ghost langbtn">EN</button>
-    <button class="btn ghost" id="logout">خروج</button>
-  </header>
-  <select id="chsel" hidden></select>
-  <div class="card" id="nochan" hidden>
-    <p class="mut" style="margin:0">ما عندك قنوات هنا. إذا أنت ستريمر اضغط "أنا ستريمر" عشان تفعّل البوت في قناتك، وإذا أنت مود خلّ الستريمر يضيفك.</p>
-  </div>
-
-  <div class="card" id="banned" hidden>
-    <h2>🚫 قناتك محظورة</h2>
-    <p class="mut" style="margin:0">تم حظر قناتك من استخدام البوت. إذا تعتقد أن هذا خطأ تواصل مع المطوّر.</p>
-  </div>
-  <div id="main" hidden>
-    <div class="card">
-      <div class="row" style="padding:0;border:0">
-        <span class="dot" id="dot"></span><b id="chname" dir="ltr"></b><small id="live"></small>
-      </div>
-      <div class="mut" id="curgame" style="margin-top:8px"></div>
+<div class="shell" id="app" hidden>
+  <aside id="side">
+    <div class="brand"><div class="logo">🎮</div><span>موقع الستريمر</span></div>
+    <select id="chsel" hidden></select>
+    <div class="nav" id="nav">
+      <a data-p="ov" class="on"><i>🏠</i><span>الرئيسية</span></a>
+      <a data-p="cmd"><i>⌨️</i><span>الكوماندات</span></a>
+      <a data-p="mods" class="own"><i>🛡️</i><span>المودات</span></a>
+      <a data-p="set" class="own"><i>⚙️</i><span>الإعدادات</span></a>
     </div>
-
-    <div class="tabs">
-      <button class="on" data-t="cmd">الكوماندات</button>
-      <button data-t="set" id="tabset">الإعدادات</button>
+    <div class="me">
+      <div class="meinfo"><div class="mav" id="meav"></div><div><b id="who" dir="ltr" data-nt></b><small class="mut" id="role"></small></div></div>
+      <div class="mebtns"><button class="btn ghost langbtn">EN</button><button class="btn ghost" id="logout">خروج</button></div>
     </div>
+  </aside>
+  <div id="bd" hidden></div>
+  <main>
+    <div class="top">
+      <button class="btn ghost burger" id="burger">☰</button>
+      <h1 id="ptitle">الرئيسية</h1>
+      <span class="pill" id="livepill"></span>
+    </div>
+    <div class="content">
+      <div class="card" id="nochan" hidden>
+        <p class="mut" style="margin:0">ما عندك قنوات هنا. إذا أنت ستريمر اضغط "أنا ستريمر" عشان تفعّل البوت في قناتك، وإذا أنت مود خلّ الستريمر يضيفك.</p>
+      </div>
+      <div class="card" id="banned" hidden>
+        <h2>🚫 قناتك محظورة</h2>
+        <p class="mut" style="margin:0">تم حظر قناتك من استخدام البوت. إذا تعتقد أن هذا خطأ تواصل مع المطوّر.</p>
+      </div>
 
-    <section id="t-cmd">
-      {{FORM}}
-      <div class="card"><h2>كوماندات القناة</h2><div id="cmdlist"></div></div>
-    </section>
+      <div id="main" hidden>
+        <section class="pg" id="p-ov">
+          <div class="hero">
+            <div class="av" id="av"></div>
+            <h2 id="chname" dir="ltr" data-nt></h2>
+            <div class="mut" id="curgame" data-nt style="margin-top:10px"></div>
+            <div class="acts">
+              <button class="btn plus" id="ovnew">كوماند جديد</button>
+              <a class="btn line" id="pubbtn" target="_blank">فتح صفحة الكوماندات العامة</a>
+            </div>
+          </div>
+          <div class="grid4">
+            <div class="stat"><small>كوماندات عادية</small><b id="s-text">0</b></div>
+            <div class="stat"><small>اختصارات الألعاب</small><b id="s-game">0</b></div>
+            <div class="stat"><small>المودات</small><b id="s-mods">0</b></div>
+            <div class="stat"><small>حالة الربط</small><b id="s-link"></b></div>
+          </div>
+          <div class="grid2">
+            <div class="panel">
+              <h3>الأكثر استخداماً</h3>
+              <p class="hint" style="margin:0 0 6px">الاستخدام يُحسب من آخر تشغيل للبوت</p>
+              <div id="topbox"></div>
+            </div>
+            <div class="panel">
+              <h3>محاكي الكوماند</h3>
+              <p class="hint" style="margin:0 0 10px">جرّب الكوماند قبل ما ينشر. يستخدم نفس المتغيرات</p>
+              <select id="simcmd"></select>
+              <div class="simrow">
+                <input id="simuser" placeholder="اسم المشاهد" dir="ltr">
+                <input id="simarg" placeholder="كلمة بعد الكوماند (اختياري)" dir="ltr">
+              </div>
+              <div class="bubble" id="simout" data-nt></div>
+            </div>
+          </div>
+          <div class="panel guide">
+            <h3>كوماندات الشات السريعة</h3>
+            <p><code>!addcmd !hi أهلاً $(user)</code>إضافة كوماند رد</p>
+            <p><code>!addgame !f fortnite</code>إضافة اختصار لعبة</p>
+            <p><code>!delcmd !hi</code>حذف كوماند</p>
+            <p><code>!commands</code>رابط الكوماندات للجميع</p>
+          </div>
+        </section>
 
-    <section id="t-set" hidden>
-      <div class="card">
-        <h2>ربط تويتش (لكوماندات تغيير اللعبة)</h2>
-        <p class="mut" id="linkstate"></p>
-        <a class="btn" id="connect" href="/auth/connect">ربط تويتش</a>
-        <button class="btn ghost mt" id="unlink" hidden>إلغاء الربط</button>
+        <section class="pg" id="p-cmd" hidden>
+          <div class="tool">
+            <input id="q" placeholder="بحث في الكوماندات">
+            <button class="chip on" data-f="all">كل الأنواع</button>
+            <button class="chip" data-f="text">ردود</button>
+            <button class="chip" data-f="game">ألعاب</button>
+            <button class="btn plus" id="newcmd">كوماند جديد</button>
+          </div>
+          <div id="cmdlist"></div>
+        </section>
+
+        <section class="pg own" id="p-mods" hidden>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>المودات المصرّح لهم يعدلون الكوماندات</h3>
+            <div style="display:flex;gap:10px;margin-top:12px">
+              <input id="newed" dir="ltr" placeholder="يوزر المود في تويتش" style="margin:0">
+              <button class="btn" id="added" style="width:auto">إضافة مود</button>
+            </div>
+            <div id="edlist" style="margin-top:10px"></div>
+            <p class="hint">المود يدخل بحسابه من نفس الموقع ويعدل الكوماندات فقط. ما يقدر يشيل البوت أو يغيّر الإعدادات.</p>
+          </div>
+        </section>
+
+        <section class="pg own" id="p-set" hidden>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>ربط تويتش (لكوماندات تغيير اللعبة)</h3>
+            <p class="mut" id="linkstate"></p>
+            <a class="btn" id="connect" href="/auth/connect">ربط تويتش</a>
+            <button class="btn ghost mt" id="unlink" hidden>إلغاء الربط</button>
+          </div>
+          <div class="panel">
+            <h3>إزالة البوت</h3>
+            <p class="mut">يطلع البوت من قناتك وتتوقف كل الكوماندات والردود. الربط مع تويتش ينحذف.</p>
+            <button class="btn red" id="leave">إزالة البوت من قناتي</button>
+          </div>
+        </section>
       </div>
-      <div class="card">
-        <h2>المودات المصرّح لهم يعدلون الكوماندات</h2>
-        <input id="newed" dir="ltr" placeholder="يوزر المود في تويتش">
-        <button class="btn" id="added">إضافة مود</button>
-        <div id="edlist" style="margin-top:8px"></div>
-        <p class="hint">المود يدخل بحسابه من نفس الموقع ويعدل الكوماندات فقط. ما يقدر يشيل البوت أو يغيّر الإعدادات.</p>
-      </div>
-      <div class="card">
-        <h2>إزالة البوت</h2>
-        <p class="mut">يطلع البوت من قناتك وتتوقف كل الكوماندات والردود. الربط مع تويتش ينحذف.</p>
-        <button class="btn red" id="leave">إزالة البوت من قناتي</button>
-      </div>
-    </section>
-  </div>
+    </div>
+  </main>
 </div>
+
+<div class="modal" id="modal" hidden>
+  <div class="sheet">
+    {{FORM}}
+    <button class="btn ghost mt" id="cancelcmd" style="width:100%">إلغاء</button>
+  </div>
 </div>
 <div id="toast"></div>
 
 <script>
 //COMMON_JS
-let ME=null,CH=null;
+Object.assign(EN,{
+"الرئيسية":"Overview","المودات":"Mods","كوماند جديد":"New command","بحث في الكوماندات":"Search commands",
+"كل الأنواع":"All types","ردود":"Replies","ألعاب":"Games","اختصارات الألعاب":"Game shortcuts",
+"كوماندات عادية":"Text commands","حالة الربط":"Twitch link","مربوط":"Linked","غير مربوط":"Not linked",
+"الأكثر استخداماً":"Most used","الاستخدام يُحسب من آخر تشغيل للبوت":"Usage is counted since the bot's last restart",
+"ما فيه استخدام للحين":"No usage yet","محاكي الكوماند":"Command simulator",
+"جرّب الكوماند قبل ما ينشر. يستخدم نفس المتغيرات":"Try a command before going live. Uses the same variables",
+"اسم المشاهد":"Viewer name","كلمة بعد الكوماند (اختياري)":"Word after the command (optional)",
+"🎮 سيتغيّر كاتيقوري البث إلى:":"🎮 The stream category will change to:",
+"كوماندات الشات السريعة":"Quick chat commands","إضافة كوماند رد":"Add a text command",
+"إضافة اختصار لعبة":"Add a game shortcut","حذف كوماند":"Delete a command",
+"رابط الكوماندات للجميع":"Public commands link","فتح صفحة الكوماندات العامة":"Open public commands page",
+"إلغاء":"Cancel","ستريمر":"Streamer","مود":"Mod","ما فيه كوماندات تطابق بحثك":"No commands match your search"
+});
+for(const k in EN)AR[EN[k]]=k;
+let ME=null,CH=null,PG="ov",FILT="all",Q="";
+const TITLES={ov:"الرئيسية",cmd:"الكوماندات",mods:"المودات",set:"الإعدادات"};
+const dn=(n,c)=>((c&&c.bang===false)?"":"!")+n;
+const base=()=>"/s/api/channel/"+encodeURIComponent(CH.name);
+const base2=()=>"/s/api/channel/"+encodeURIComponent($("#chsel").value);
 onAuth=d=>{
   $("#app").hidden=true;$("#login").hidden=false;
   if(d&&d.enabled===false){$("#loginbtns").hidden=true;$("#nolink").hidden=false}
 };
+onLang=()=>{if(ME)fillSel();if(CH)render();cmdFormSync();$("#ptitle").textContent=t(TITLES[PG])};
 function fillSel(){
   const sel=$("#chsel"),prev=sel.value;sel.innerHTML="";
   ME.channels.forEach(c=>sel.add(new Option(c.name+(c.role==="editor"?" "+t("(مود)"):""),c.name)));
   if(ME.channels.some(c=>c.name===prev))sel.value=prev;
 }
-onLang=()=>{if(ME)fillSel();if(CH)render();cmdFormSync()};
-const base=()=>"/s/api/channel/"+encodeURIComponent(CH.name);
-function tab(t){
-  document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x.dataset.t===t));
-  for(const k of ["cmd","set"])$("#t-"+k).hidden=k!==t;
+function go(p){
+  if((p==="mods"||p==="set")&&(!CH||CH.role!=="owner"))p="ov";
+  PG=p;
+  document.querySelectorAll(".pg").forEach(x=>x.hidden=x.id!=="p-"+p);
+  document.querySelectorAll("#nav a").forEach(x=>x.classList.toggle("on",x.dataset.p===p));
+  $("#ptitle").textContent=t(TITLES[p]);
+  $("#side").classList.remove("open");$("#bd").hidden=true;
 }
+const openModal=()=>{$("#modal").hidden=false};
+const closeModal=()=>{$("#modal").hidden=true};
 async function act(fn,msg,reinit){
   try{await fn();if(msg)toast(msg);reinit?await init():await loadCh()}
   catch(e){if(e.message!=="auth")toast(e.message,1)}
@@ -863,30 +1024,87 @@ async function act(fn,msg,reinit){
 async function init(){
   try{ME=await api("GET","/s/api/me")}catch(e){if(e.message!=="auth")toast(e.message,1);return}
   $("#login").hidden=true;$("#app").hidden=false;
-  $("#who").textContent=ME.login;
+  $("#who").textContent=ME.login;$("#meav").textContent=ME.login.charAt(0).toUpperCase();
   $("#banned").hidden=!ME.banned;
+  $("#nav").hidden=!!ME.banned;
   if(ME.banned){$("#nochan").hidden=true;$("#main").hidden=true;$("#chsel").hidden=true;return}
   fillSel();
   $("#chsel").hidden=ME.channels.length<2;
   $("#nochan").hidden=ME.channels.length>0;
   $("#main").hidden=!ME.channels.length;
+  $("#nav").hidden=!ME.channels.length;
   if(ME.channels.length)await loadCh();
 }
 async function loadCh(){
   try{CH=await api("GET",base2())}catch(e){if(e.message!=="auth")toast(e.message,1);return}
   render();
 }
-const base2=()=>"/s/api/channel/"+encodeURIComponent($("#chsel").value);
 function render(){
-  const c=CH,own=c.role==="owner";
-  $("#chname").textContent=c.name;
-  $("#dot").className="dot"+(c.live?" on":"");
-  $("#live").textContent=t(c.live?"لايف":"أوفلاين");
+  const c=CH,own=c.role==="owner",names=Object.keys(c.commands);
+  const games=names.filter(n=>c.commands[n].type==="game").length;
+  $("#chname").textContent=c.name;$("#av").textContent=c.name.charAt(0).toUpperCase();
+  $("#livepill").className="pill"+(c.live?" live":"");
+  $("#livepill").textContent=t(c.live?"لايف":"أوفلاين");
   $("#curgame").textContent=c.game?t("🎮 اللعبة الحالية:")+" "+c.game:"";
-  $("#tabset").hidden=!own;
-  if(!own&&!$("#t-set").hidden)tab("cmd");
-  renderCmdList($("#cmdlist"),c.commands,n=>act(()=>api("DELETE",base()+"/commands/"+encodeURIComponent(n)),"تم حذف الكوماند"));
-  if(!own)return;
+  $("#pubbtn").href="/c/"+encodeURIComponent(c.name);
+  $("#role").textContent=t(own?"ستريمر":"مود");
+  $("#s-text").textContent=names.length-games;$("#s-game").textContent=games;
+  $("#s-mods").textContent=own?c.editors.length:"—";
+  const sl=$("#s-link");sl.textContent=t(c.linked?"مربوط":"غير مربوط");sl.className=c.linked?"ok":"bad";
+  document.querySelectorAll(".own").forEach(x=>x.hidden=!own||(x.classList.contains("pg")&&x.id!=="p-"+PG));
+  if(!own&&(PG==="mods"||PG==="set"))go("ov");
+  renderTop();renderSim();renderCmds();
+  if(own)renderOwn();
+}
+function renderTop(){
+  const u=CH.usage||{},k=Object.keys(u).sort((a,b)=>u[b]-u[a]).slice(0,5),max=k.length?u[k[0]]:1,box=$("#topbox");
+  box.innerHTML="";
+  if(!k.length){box.innerHTML='<p class="empty">'+t("ما فيه استخدام للحين")+'</p>';return}
+  k.forEach(n=>{
+    const d=document.createElement("div");d.className="bar";
+    d.innerHTML='<b dir="ltr" data-nt></b><i><s></s></i><em data-nt></em>';
+    d.querySelector("b").textContent=dn(n,CH.commands[n]);
+    d.querySelector("s").style.width=Math.max(6,u[n]/max*100)+"%";
+    d.querySelector("em").textContent=u[n];
+    box.appendChild(d);
+  });
+}
+function renderSim(){
+  const s=$("#simcmd"),v=s.value;s.innerHTML="";
+  Object.keys(CH.commands).sort().forEach(n=>s.add(new Option(dn(n,CH.commands[n]),n)));
+  if(CH.commands[v])s.value=v;
+  runSim();
+}
+function runSim(){
+  const c=CH&&CH.commands[$("#simcmd").value],o=$("#simout");
+  if(!c){o.textContent="…";return}
+  const user=$("#simuser").value.trim()||"viewer",arg=$("#simarg").value.trim().replace(/^@/,"");
+  const rep=(c.reply||"").split("$(user)").join(user).split("$(touser)").join(arg||user).split("$(channel)").join(CH.name).split("$(game)").join(c.game||"");
+  o.textContent=(c.type==="game"?t("🎮 سيتغيّر كاتيقوري البث إلى:")+" "+c.game+"\n":"")+rep;
+}
+function renderCmds(){
+  const box=$("#cmdlist"),cmds=CH.commands,q=Q.toLowerCase();box.innerHTML="";
+  const names=Object.keys(cmds).sort().filter(n=>{
+    const c=cmds[n];
+    if(FILT!=="all"&&c.type!==FILT)return false;
+    return !q||n.includes(q)||(c.reply||"").toLowerCase().includes(q)||(c.game||"").toLowerCase().includes(q);
+  });
+  if(!names.length){box.innerHTML='<p class="empty">'+t(Object.keys(cmds).length?"ما فيه كوماندات تطابق بحثك":"ما فيه كوماندات")+'</p>';return}
+  names.forEach(n=>{
+    const c=cmds[n],d=document.createElement("div");d.className="cmd";
+    d.innerHTML='<div class="cbody"><div class="chead"><b dir="ltr" data-nt></b><span class="bd t" data-nt></span><span class="bd" data-nt></span></div><p data-nt></p></div><div><button class="ic ed">✏️</button><button class="ic del">🗑</button></div>';
+    d.querySelector("b").textContent=dn(n,c);
+    const bt=d.querySelector(".bd.t");bt.textContent=c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:t("💬 رد عادي");
+    if(c.type==="game")bt.classList.add("g");
+    d.querySelectorAll(".bd")[1].textContent=t(PERMS[c.perm]||"الكل");
+    d.querySelector("p").textContent=c.reply||"";
+    d.querySelector(".ed").onclick=()=>{cmdFormFill(n,c);openModal()};
+    d.querySelector(".del").onclick=()=>{if(ask("تحذف !{n}؟",n))act(()=>api("DELETE",base()+"/commands/"+encodeURIComponent(n)),"تم حذف الكوماند")};
+    box.appendChild(d);
+  });
+}
+function renderOwn(){
+  const c=CH;
   $("#linkstate").textContent=t(!c.twitch?"الربط غير مفعّل من المطوّر.":c.linked?"✅ مربوط: كوماندات اختصار اللعبة تقدر تغيّر لعبة بثك.":"غير مربوط: اربط تويتش عشان كوماندات تغيير اللعبة تشتغل.");
   $("#connect").hidden=!c.twitch;
   $("#connect").textContent=t(c.linked?"إعادة الربط":"ربط تويتش");
@@ -902,9 +1120,22 @@ function render(){
   });
 }
 cmdFormInit();
+document.querySelectorAll("#nav a").forEach(a=>a.onclick=()=>go(a.dataset.p));
+$("#burger").onclick=()=>{$("#side").classList.add("open");$("#bd").hidden=false};
+$("#bd").onclick=()=>{$("#side").classList.remove("open");$("#bd").hidden=true};
 $("#chsel").onchange=loadCh;
+$("#q").oninput=e=>{Q=e.target.value.trim();renderCmds()};
+document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{
+  FILT=b.dataset.f;document.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x===b));renderCmds();
+});
+$("#simcmd").onchange=runSim;$("#simuser").oninput=runSim;$("#simarg").oninput=runSim;
+const newCmd=()=>{cmdFormClear();openModal()};
+$("#newcmd").onclick=newCmd;
+$("#ovnew").onclick=()=>{go("cmd");newCmd()};
+$("#cancelcmd").onclick=closeModal;
+$("#modal").onclick=e=>{if(e.target.id==="modal")closeModal()};
 $("#savecmd").onclick=()=>act(async()=>{
-  await api("POST",base()+"/commands",cmdFormGet());cmdFormClear();
+  await api("POST",base()+"/commands",cmdFormGet());cmdFormClear();closeModal();
 },"تم حفظ الكوماند");
 $("#added").onclick=()=>act(async()=>{
   await api("POST",base()+"/editors",{name:$("#newed").value});$("#newed").value="";
@@ -914,7 +1145,6 @@ $("#leave").onclick=()=>{
   if(ask("متأكد تبي تشيل البوت من قناتك؟"))act(()=>api("POST",base()+"/leave"),"تم إزالة البوت",true);
 };
 $("#logout").onclick=async()=>{await api("POST","/s/api/logout");onAuth({enabled:true})};
-document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>tab(b.dataset.t));
 const qp=new URLSearchParams(location.search);
 if(qp.get("msg")==="ready")toast("تم تفعيل البوت وربط تويتش ✅");
 const ERR={cancel:"تم إلغاء الدخول",fail:"فشل الدخول مع تويتش، حاول مرة ثانية",not_joined:"التفعيل الذاتي مقفل، كلم المطوّر",scope:"ما وافقت على الصلاحية المطلوبة"};
@@ -1296,6 +1526,7 @@ def make_web_app(bot):
         "linked": ch in store.data["tokens"],
         "commands": store.data["commands"].get(ch, {}),
         "editors": store.data["editors"].get(ch, []) if role == "owner" else [],
+        "usage": bot.usage.get(ch, {}),
     })
 
   async def s_save_cmd(request):
@@ -1436,6 +1667,7 @@ class Bot(commands.Bot):
     self.last_saudi_prayer = None
     self.live_cache = {}
     self.cmd_cooldown = {}
+    self.usage = {}  # قناة -> {كوماند: عدد الاستخدام} من آخر تشغيل
     self._started = False
 
   async def event_ready(self):
@@ -1692,6 +1924,10 @@ class Bot(commands.Bot):
     parts[0] = word
     return await self.run_custom(message, word, entry, parts, channel_name, level)
 
+  def count_use(self, channel_name, cmd):
+    d = self.usage.setdefault(channel_name, {})
+    d[cmd] = d.get(cmd, 0) + 1
+
   async def run_custom(self, message, cmd, entry, parts, channel_name, level):
     send = message.channel.send
     mention = f"@{message.author.name}"
@@ -1710,6 +1946,7 @@ class Bot(commands.Bot):
       if now - self.cmd_cooldown.get(key, 0) < COMMAND_COOLDOWN:
         return True
       self.cmd_cooldown[key] = now
+      self.count_use(channel_name, cmd)
       ok, result = await self.twitch.set_game(channel_name, entry["game"])
       if ok:
         text = format_response(entry["reply"], message.author.name, channel_name, target, result)
@@ -1725,6 +1962,7 @@ class Bot(commands.Bot):
     if now - self.cmd_cooldown.get(key, 0) < COMMAND_COOLDOWN:
       return True
     self.cmd_cooldown[key] = now
+    self.count_use(channel_name, cmd)
 
     await send(format_response(entry["reply"], message.author.name, channel_name, target)[:490])
     return True
