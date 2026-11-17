@@ -74,76 +74,6 @@ SAUDI_PRAYERS = [
 
 user_reply_time = {}
 
-# ============================================================
-# ردود البوت بالإنجليزي (لما الستريمر يحوّل لغة قناته)
-# ============================================================
-DHIKR_EN = [
-    "Glory be to Allah and praise Him, glory be to Allah the Almighty",
-    "There is no god but You, glory be to You, I was among the wrongdoers",
-    "There is no power and no strength except with Allah, the Most High, the Almighty",
-    "I seek forgiveness from Allah the Almighty and repent to Him",
-    "Glory be to Allah, praise be to Allah, there is no god but Allah, Allah is the Greatest",
-    "O Allah, help us to remember You, thank You, and worship You well",
-]
-
-SAUDI_PRAYERS_EN = [
-    "O Allah, protect the Kingdom of Saudi Arabia and bless its security, prosperity, leaders and people",
-    "O Allah, keep Saudi Arabia safe and secure and protect it from all evil and harm",
-    "O Allah, make this land safe and peaceful, along with all Muslim lands, and protect our homeland Saudi Arabia",
-    "O Allah, protect the Custodian of the Two Holy Mosques and his trusted Crown Prince, and bless their efforts in serving the homeland",
-    "O Allah, we entrust Saudi Arabia to You: its security, its land, its skies and the safety of its people",
-    "O Allah, grant victory to our stationed forces, protect our borders, and fill our nights with security and safety, Lord of the worlds",
-]
-
-LINK_WARN_AR = " ⚠️ الستريمر لازم يربط تويتش من الموقع عشان يشتغل"
-LINK_WARN_EN = " ⚠️ The streamer must link Twitch from the site for this to work"
-WELCOME_EN = "Wa alaikum assalam wa rahmatullahi wa barakatuh"
-
-EN_REPLIES = [
-    (r"(@\S+) وعليكم السلام ورحمة الله وبركاته، ومساء النور نورت البث", r"\1 " + WELCOME_EN + ", and good evening! Welcome to the stream"),
-    (r"(@\S+) وعليكم السلام ورحمة الله وبركاته، نورت البث", r"\1 " + WELCOME_EN + ", welcome to the stream"),
-    (r"(@\S+) مساء النور", r"\1 Good evening!"),
-    (r"(@\S+) ولكم باك", r"\1 Welcome back!"),
-    (r"(@\S+) خذ راحتك بس لا تطول علينا", r"\1 Take your time, but don't be too long!"),
-    (r"(@\S+) كل كوماندات القناة هنا: (.+)", r"\1 All channel commands are here: \2"),
-    (r"(@\S+) الكوماندات: (.+)", r"\1 Commands: \2"),
-    (r"(@\S+) ما فيه كوماندات مضافة للحين", r"\1 No commands added yet"),
-    (r"(@\S+) الصيغة: !delcmd !اسم_الكوماند", r"\1 Usage: !delcmd !command_name"),
-    (r"(@\S+) تم حذف الكوماند (.+) ✅", r"\1 Command \2 deleted ✅"),
-    (r"(@\S+) ما لقيت كوماند باسم (.+)", r"\1 I couldn't find a command named \2"),
-    (r"(@\S+) الصيغة: !(addcmd|editcmd) اسم_الكوماند الرد \(.*\)", r"\1 Usage: !\2 command_name reply (put ! before the name to trigger it with !)"),
-    (r"(@\S+) هذا الاسم ما ينفع للكوماند", r"\1 That command name isn't allowed"),
-    (r"(@\S+) اسم الكوماند ما ينفع", r"\1 That command name isn't allowed"),
-    (r"(@\S+) الكوماند بدون ! لازم يكون حروف وأرقام بس", r"\1 A command without ! can only use letters and numbers"),
-    (r"(@\S+) الكوماند (.+) موجود، استخدم !editcmd للتعديل", r"\1 Command \2 already exists, use !editcmd to edit it"),
-    (r"(@\S+) تمت إضافة الكوماند (\S+) ✅", r"\1 Command \2 added ✅"),
-    (r"(@\S+) ما لقيت (.+)، استخدم !addcmd للإضافة", r"\1 I couldn't find \2, use !addcmd to add it"),
-    (r"(@\S+) تم تعديل الكوماند (\S+) ✅", r"\1 Command \2 updated ✅"),
-    (r"(@\S+) الصيغة: !addgame .*", r"\1 Usage: !addgame !command_name game_name  e.g. !addgame !f fortnite"),
-    (r"(@\S+) تغيير اللعبة غير مفعّل( من المطوّر)?", r"\1 Game changing isn't enabled by the developer"),
-    (r"(@\S+) (\S+) كوماند عادي موجود، احذفه أول بـ !delcmd", r"\1 \2 is an existing text command, delete it first with !delcmd"),
-    (r"(@\S+) ما لقيت لعبة أو كاتيقوري باسم (.+) في تويتش", r"\1 I couldn't find a game or category named \2 on Twitch"),
-    (r"(@\S+) تمت إضافة الكوماند (\S+) ← (.+) 🎮( ⚠️ .*)?", r"\1 Game command \2 added → \3 🎮\4"),
-    (r"(@\S+) تم تعديل الكوماند (\S+) ← (.+) 🎮( ⚠️ .*)?", r"\1 Game command \2 updated → \3 🎮\4"),
-    (r"(@\S+) اكتب اسم اللعبة", r"\1 Enter the game name"),
-    (r"(@\S+) اكتب رد الكوماند", r"\1 Enter the command reply"),
-    (r"(@\S+) الستريمر ما ربط تويتش من موقع الستريمر", r"\1 The streamer hasn't linked Twitch on the streamer site"),
-    (r"(@\S+) انتهى الربط مع تويتش، الستريمر يعيد الربط من الموقع", r"\1 The Twitch link expired, the streamer needs to relink on the site"),
-    (r"(@\S+) ما لقيت لعبة باسم (.+)", r"\1 I couldn't find a game named \2"),
-    (r"(@\S+) تويتش رفض تغيير اللعبة، حاول مرة ثانية", r"\1 Twitch refused the game change, try again"),
-    (r"تم تغيير اللعبة إلى (.+) 🎮", r"Game changed to \1 🎮"),
-]
-
-
-def to_english(text):
-  text = text.replace(LINK_WARN_AR, LINK_WARN_EN)
-  for pat, rep in EN_REPLIES:
-    m = re.fullmatch(pat, text, re.S)
-    if m:
-      return m.expand(rep)
-  return text
-
-
 
 # ============================================================
 # أدوات مساعدة
@@ -254,7 +184,6 @@ class Store:
         "editors": {},  # قناة -> قائمة مودات مصرّح لهم يعدلون الكوماندات
         "tokens": {},  # قناة -> ربط تويتش لتغيير اللعبة
         "banned": [],  # قنوات محظورة من استخدام البوت
-        "lang": {},  # قناة -> "en" إذا الستريمر حوّل البوت للإنجليزي
     }
 
   @property
@@ -291,7 +220,6 @@ class Store:
       self.data["editors"] = loaded.get("editors", {})
       self.data["tokens"] = loaded.get("tokens", {})
       self.data["banned"] = loaded.get("banned", [])
-      self.data["lang"] = loaded.get("lang", {})
       self.data["channels"] = [c for c in self.data["channels"] if c not in self.data["banned"]]
     except Exception as e:
       print(f"تعذر تحميل البيانات: {e}")
@@ -964,7 +892,6 @@ main{flex:1;min-width:0}
             <div class="acts">
               <button class="btn plus" id="ovnew">كوماند جديد</button>
               <a class="btn line" id="pubbtn" target="_blank">فتح صفحة الكوماندات العامة</a>
-              <button class="btn line own" id="langtoggle"></button>
             </div>
           </div>
           <div class="grid4">
@@ -1062,8 +989,7 @@ Object.assign(EN,{
 "كوماندات الشات السريعة":"Quick chat commands","إضافة كوماند رد":"Add a text command",
 "إضافة اختصار لعبة":"Add a game shortcut","حذف كوماند":"Delete a command",
 "رابط الكوماندات للجميع":"Public commands link","فتح صفحة الكوماندات العامة":"Open public commands page",
-"إلغاء":"Cancel","ستريمر":"Streamer","مود":"Mod","ما فيه كوماندات تطابق بحثك":"No commands match your search",
-"🌐 لغة البوت:":"🌐 Bot language:","تم تغيير لغة البوت":"Bot language changed"
+"إلغاء":"Cancel","ستريمر":"Streamer","مود":"Mod","ما فيه كوماندات تطابق بحثك":"No commands match your search"
 });
 for(const k in EN)AR[EN[k]]=k;
 let ME=null,CH=null,PG="ov",FILT="all",Q="";
@@ -1121,7 +1047,6 @@ function render(){
   $("#livepill").textContent=t(c.live?"لايف":"أوفلاين");
   $("#curgame").textContent=c.game?t("🎮 اللعبة الحالية:")+" "+c.game:"";
   $("#pubbtn").href="/c/"+encodeURIComponent(c.name);
-  $("#langtoggle").textContent=t("🌐 لغة البوت:")+" "+(c.lang==="en"?"English":"العربية");
   $("#role").textContent=t(own?"ستريمر":"مود");
   $("#s-text").textContent=names.length-games;$("#s-game").textContent=games;
   $("#s-mods").textContent=own?c.editors.length:"—";
@@ -1207,7 +1132,6 @@ $("#simcmd").onchange=runSim;$("#simuser").oninput=runSim;$("#simarg").oninput=r
 const newCmd=()=>{cmdFormClear();openModal()};
 $("#newcmd").onclick=newCmd;
 $("#ovnew").onclick=()=>{go("cmd");newCmd()};
-$("#langtoggle").onclick=()=>act(()=>api("POST",base()+"/lang",{lang:CH.lang==="en"?"ar":"en"}),"تم تغيير لغة البوت");
 $("#cancelcmd").onclick=closeModal;
 $("#modal").onclick=e=>{if(e.target.id==="modal")closeModal()};
 $("#savecmd").onclick=()=>act(async()=>{
@@ -1599,7 +1523,6 @@ def make_web_app(bot):
         "commands": store.data["commands"].get(ch, {}),
         "editors": store.data["editors"].get(ch, []) if role == "owner" else [],
         "usage": bot.usage.get(ch, {}),
-        "lang": store.data["lang"].get(ch, "ar"),
     })
 
   async def s_save_cmd(request):
@@ -1683,18 +1606,6 @@ def make_web_app(bot):
       print(f"تعذر الخروج من {ch}: {e}")
     return web.json_response({"ok": True})
 
-  async def s_lang(request):
-    a, err = access(request, owner_only=True)
-    if err:
-      return err
-    _, ch, _ = a
-    lang = (await jbody(request)).get("lang")
-    if lang not in ("ar", "en"):
-      return jerr("صار خطأ")
-    store.data["lang"][ch] = lang
-    await store.save()
-    return web.json_response({"ok": True})
-
   app = web.Application(middlewares=[auth_mw])
   r = app.router
   r.add_get("/", index)
@@ -1728,7 +1639,6 @@ def make_web_app(bot):
   r.add_delete("/s/api/channel/{channel}/editors/{name}", s_del_editor)
   r.add_post("/s/api/channel/{channel}/unlink", s_unlink)
   r.add_post("/s/api/channel/{channel}/leave", s_leave)
-  r.add_post("/s/api/channel/{channel}/lang", s_lang)
   return app
 
 
@@ -1801,21 +1711,18 @@ class Bot(commands.Bot):
     while True:
       await asyncio.sleep(1800)
       if step == 0:
-        i = self.pick(SAUDI_PRAYERS, "last_saudi_prayer")
-        ar = f"اللهم صلِّ وسلم على نبينا محمد، {SAUDI_PRAYERS[i]}"
-        en = f"Peace and blessings upon our Prophet Muhammad. {SAUDI_PRAYERS_EN[i]}"
+        message_text = f"اللهم صلِّ وسلم على نبينا محمد، {self.get_random_saudi_prayer()}"
       elif step == 1:
-        i = self.pick(DHIKR_LIST, "last_dhikr")
-        ar, en = DHIKR_LIST[i], DHIKR_EN[i]
+        message_text = self.get_random_dhikr()
       else:
-        ar, en = "اشربوا ماااااااي", "Drink some water! 💧"
+        message_text = "اشربوا ماااااااي"
 
       for channel_name in list(self.store.data["channels"]):
         if await self.is_channel_live(channel_name):
           channel = self.get_channel(channel_name)
           if channel:
             try:
-              await channel.send(en if self.lang(channel_name) == "en" else ar)
+              await channel.send(message_text)
             except Exception as e:
               print(f"تعذر إرسال التذكير في {channel_name}: {e}")
 
@@ -1832,7 +1739,7 @@ class Bot(commands.Bot):
       return False
 
     is_mod = level >= PERMS["mod"]
-    send = self.sender(message.channel, channel_name)
+    send = message.channel.send
     mention = f"@{message.author.name}"
     channel_cmds = self.store.data["commands"].setdefault(channel_name, {})
 
@@ -1874,7 +1781,7 @@ class Bot(commands.Bot):
           shown = disp_cmd(name, channel_cmds[name])
           del channel_cmds[name]
           await self.store.save()
-          await send(f"{mention} تم حذف الكوماند {shown} ✅")
+          await send(f"{mention} -> The command {shown} has been deleted successfully")
         else:
           await send(f"{mention} ما لقيت كوماند باسم {parts[1]}")
         return True
@@ -1900,14 +1807,14 @@ class Bot(commands.Bot):
         channel_cmds[name] = norm_cmd(reply)
         channel_cmds[name]["bang"] = bang
         await self.store.save()
-        await send(f"{mention} تمت إضافة الكوماند {disp_cmd(name, channel_cmds[name])} ✅")
+        await send(f"{mention} -> The command {disp_cmd(name, channel_cmds[name])} has been added successfully")
       else:
         if name not in channel_cmds:
           await send(f"{mention} ما لقيت {parts[1]}، استخدم !addcmd للإضافة")
           return True
         channel_cmds[name]["reply"] = reply
         await self.store.save()
-        await send(f"{mention} تم تعديل الكوماند {disp_cmd(name, channel_cmds[name])} ✅")
+        await send(f"{mention} -> The command {disp_cmd(name, channel_cmds[name])} has been edited successfully")
       return True
 
     # ---------- !addgame: اختصار يغيّر كاتيقوري البث ----------
@@ -1948,8 +1855,8 @@ class Bot(commands.Bot):
         entry["reply"] = existing.get("reply") or entry["reply"]
       channel_cmds[name] = entry
       await self.store.save()
-      verb = "تم تعديل" if updated else "تمت إضافة"
-      text = f"{mention} {verb} الكوماند {disp_cmd(name, entry)} ← {game['name']} 🎮"
+      verb = "edited" if updated else "added"
+      text = f"{mention} -> The game command {disp_cmd(name, entry)} has been {verb} successfully ({game['name']}) 🎮"
       if channel_name not in self.store.data["tokens"]:
         text += " ⚠️ الستريمر لازم يربط تويتش من الموقع عشان يشتغل"
       await send(text[:490])
@@ -2013,29 +1920,12 @@ class Bot(commands.Bot):
     parts[0] = word
     return await self.run_custom(message, word, entry, parts, channel_name, level)
 
-  def lang(self, ch):
-    return self.store.data.get("lang", {}).get(ch, "ar")
-
-  def sender(self, channel, ch):
-    en = self.lang(ch) == "en"
-
-    async def _send(text):
-      await channel.send(to_english(text) if en else text)
-
-    return _send
-
-  def pick(self, items, attr):
-    last = getattr(self, attr)
-    i = random.choice([k for k in range(len(items)) if k != last])
-    setattr(self, attr, i)
-    return i
-
   def count_use(self, channel_name, cmd):
     d = self.usage.setdefault(channel_name, {})
     d[cmd] = d.get(cmd, 0) + 1
 
   async def run_custom(self, message, cmd, entry, parts, channel_name, level):
-    send = self.sender(message.channel, channel_name)
+    send = message.channel.send
     mention = f"@{message.author.name}"
 
     # الصلاحية: اللي ما يملكها ما يرد عليه البوت
@@ -2105,7 +1995,7 @@ class Bot(commands.Bot):
 
   async def auto_replies(self, message, content, username, channel_name):
     current_time = time.time()
-    send = self.sender(message.channel, channel_name)
+    send = message.channel.send
 
     if username in user_reply_time and current_time - user_reply_time[username] < USER_COOLDOWN:
       return
