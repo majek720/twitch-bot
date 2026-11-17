@@ -50,7 +50,7 @@ PERMS = {"everyone": 0, "sub": 1, "vip": 2, "mod": 3, "broadcaster": 4}
 
 # كوماندات البوت الأساسية (ما تنفع كأسماء لكوماندات مخصصة)
 BUILTIN = {
-    "addcmd", "editcmd", "delcmd", "removecmd", "cmds",
+    "addcmd", "editcmd", "delcmd", "removecmd", "cmds", "addgame",
     "addchannel", "removechannel", "channels", "commands",
 }
 
@@ -1587,6 +1587,51 @@ class Bot(commands.Bot):
         channel_cmds[name]["reply"] = reply
         await self.store.save()
         await send(f"{mention} تم تعديل الكوماند {disp_cmd(name, channel_cmds[name])} ✅")
+      return True
+
+    # ---------- !addgame: اختصار يغيّر كاتيقوري البث ----------
+    # مثال: !addgame !f fortnite  ← بعدها !f يغيّر الكاتيقوري إلى Fortnite
+    # أي لعبة أو كاتيقوري موجود في تويتش تنفع (Just Chatting, Valorant, ...)
+    if cmd == "addgame":
+      if not is_mod:
+        return True
+      if len(parts) < 3:
+        await send(f"{mention} الصيغة: !addgame !اسم_الكوماند اسم_اللعبة  مثال: !addgame !f fortnite")
+        return True
+      if not self.twitch.enabled:
+        await send(f"{mention} تغيير اللعبة غير مفعّل من المطوّر")
+        return True
+      raw_name = parts[1]
+      bang = raw_name.startswith("!")
+      key_name = raw_name.lstrip("!").lower()
+      existing = channel_cmds.get(key_name)
+      if existing and existing.get("type") != "game":
+        await send(f"{mention} {disp_cmd(key_name, existing)} كوماند عادي موجود، احذفه أول بـ !delcmd")
+        return True
+      query = parts[2].strip()
+      game = await self.twitch.find_game(query)
+      if not game:
+        await send(f"{mention} ما لقيت لعبة أو كاتيقوري باسم {query} في تويتش")
+        return True
+      try:
+        name, entry = build_command({
+            "type": "game", "name": raw_name, "bang": bang,
+            "game": game["name"], "perm": "mod",
+        })
+      except ValueError as e:
+        await send(f"{mention} {e}")
+        return True
+      updated = existing is not None
+      if updated:
+        entry["perm"] = existing.get("perm", "mod")
+        entry["reply"] = existing.get("reply") or entry["reply"]
+      channel_cmds[name] = entry
+      await self.store.save()
+      verb = "تم تعديل" if updated else "تمت إضافة"
+      text = f"{mention} {verb} الكوماند {disp_cmd(name, entry)} ← {game['name']} 🎮"
+      if channel_name not in self.store.data["tokens"]:
+        text += " ⚠️ الستريمر لازم يربط تويتش من الموقع عشان يشتغل"
+      await send(text[:490])
       return True
 
     # ---------- كوماندات الأونر (إدارة القنوات) ----------
