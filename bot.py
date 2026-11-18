@@ -145,7 +145,7 @@ def default_timers():
 
 
 # إعدادات طلبات الأغاني والفلاتر الافتراضية (لكل قناة)
-SR_DEFAULT = {"on": False, "per_user": 3, "max_queue": 30, "max_minutes": 10, "perm": "everyone"}
+SR_DEFAULT = {"volume": 100, "on": False, "per_user": 3, "max_queue": 30, "max_minutes": 10, "perm": "everyone"}
 FILTER_DEFAULT = {
     "links": False, "caps": False, "symbols": False, "repeat": False, "long": False,
     "words": [], "allowed": [], "timeout": 10, "warn": True, "exempt_sub": True, "exempt_vip": True,
@@ -241,6 +241,10 @@ MSG = {
     "skipped": ("تم تخطي الأغنية ⏭", "Song skipped ⏭"),
     "wrong_ok": ("شلت أغنيتك {s}", "Removed your song {s}"),
     "wrong_none": ("ما عندك أغاني بالطابور", "You have no songs in the queue"),
+    "vol_now": ("صوت الأغاني الحين {v}%", "Song volume is {v}%"),
+    "vol_set": ("تم تغيير صوت الأغاني إلى {v}% 🔊", "Song volume set to {v}% 🔊"),
+    "vol_usage": ("الصيغة: !volume 30 أو !volume +10 أو !volume -10",
+                  "Usage: !volume 30, !volume +10 or !volume -10"),
     "sr_cleared": ("تم مسح الطابور ✅", "The queue has been cleared"),
     # الحماية من السبام
     "permit_ok": ("{u} يقدر ينشر روابط لمدة دقيقة", "{u} can post links for one minute"),
@@ -1824,6 +1828,7 @@ const BUILTIN_CMDS=[
  ["!song","الأغنية الحالية","The current song"],
  ["!queue","الأغاني اللي بالطابور","The songs in the queue"],
  ["!wrongsong","يشيل آخر أغنية طلبتها","Removes your last requested song"],
+ ["!volume 30","يغيّر صوت الأغاني: رقم من 0 إلى 100 أو +10 / -10 (مود)","Set the song volume: 0-100 or +10 / -10 (mod)"],
  ["!skip","تخطي الأغنية (مود)","Skip the song (mod)"],
  ["!permit اسم","يسمح لشخص بروابط دقيقة (مود)","Lets a viewer post links for a minute (mod)"]
 ];
@@ -2355,6 +2360,7 @@ function ensureApi(){
   loadScript("https://www.youtube.com/iframe_api",()=>showMsg("تعذر تحميل مشغّل يوتيوب"));
 }
 function apply(s){
+  syncVol(s.volume);
   const c=s.current;
   $("ttl").textContent=c?c.title:"ما فيه أغنية الحين";
   $("by").textContent=c?c.by:"";
@@ -2374,12 +2380,19 @@ async function poll(){
     if(!s.current&&s.queue.length)await next();else apply(s);
   }catch(e){}
 }
-let VOL=100;
-try{const v=parseInt(localStorage.getItem("vol"),10);if(v>=0&&v<=100)VOL=v}catch(e){}
+let VOL=100,volTouch=0,volT=null;
 $("vol").value=VOL;
+function syncVol(v){
+  if(typeof v!=="number"||Date.now()-volTouch<4000||v===VOL)return;
+  VOL=v;$("vol").value=v;applyVol();
+}
 function applyVol(){try{if(ytReady)yt.setVolume(VOL)}catch(e){}}
 function volUi(){}
-$("vol").oninput=()=>{VOL=parseInt($("vol").value,10);try{localStorage.setItem("vol",VOL)}catch(e){}applyVol()};
+$("vol").oninput=()=>{
+  VOL=parseInt($("vol").value,10);volTouch=Date.now();applyVol();
+  clearTimeout(volT);
+  volT=setTimeout(()=>{fetch(url("volume"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({volume:VOL})}).catch(()=>{})},300);
+};
 $("sk").onclick=next;
 poll();
 setInterval(poll,3000);
@@ -2441,7 +2454,7 @@ URL_RE = re.compile(
     re.I)
 NEW_CMDS = {
     "followage", "accountage", "uptime", "game", "title", "sr", "songrequest", "song",
-    "queue", "playlist", "skip", "wrongsong", "srclear", "permit",
+    "queue", "playlist", "skip", "wrongsong", "srclear", "permit", "volume", "vol",
 }
 
 
@@ -3314,6 +3327,18 @@ def make_web_app(bot):
       return jerr("forbidden", 403)
     return web.json_response(bot.sr_view(ch))
 
+  async def player_volume(request):
+    ch = request.match_info["channel"].lower()
+    if not player_ok(request, ch):
+      return jerr("forbidden", 403)
+    try:
+      v = int((await jbody(request)).get("volume"))
+    except (TypeError, ValueError):
+      return jerr("bad volume")
+    store.sr(ch)["volume"] = max(0, min(100, v))
+    await store.save()
+    return web.json_response({"ok": True})
+
   async def player_next(request):
     ch = request.match_info["channel"].lower()
     if not player_ok(request, ch):
@@ -3413,6 +3438,7 @@ def make_web_app(bot):
   r.add_get("/player/{channel}", player_page)
   r.add_get("/player/api/{channel}/state", player_state)
   r.add_post("/player/api/{channel}/next", player_next)
+  r.add_post("/player/api/{channel}/volume", player_volume)
   return app
 
 
@@ -3613,7 +3639,8 @@ class Bot:
 
   def sr_view(self, ch):
     s = self.songs_of(ch)
-    return {"current": s["current"], "queue": list(s["queue"])}
+    return {"current": s["current"], "queue": list(s["queue"]),
+            "volume": self.store.sr(ch)["volume"]}
 
   def sr_next(self, ch):
     s = self.songs_of(ch)
@@ -3923,7 +3950,8 @@ class Bot:
     async def say(key, extra="", **kw):
       await self.say(message, ch, key, extra, **kw)
 
-    if cmd not in ("skip", "srclear", "permit"):
+    if cmd not in ("skip", "srclear", "permit") and not (
+        cmd in ("volume", "vol") and level >= PERMS["mod"]):
       ck = (ch, cmd, user)
       if now - self.cmd_cooldown.get(ck, 0) < 8:
         return True
@@ -3999,6 +4027,24 @@ class Bot:
     if not sr["on"]:
       return True  # الطلبات متوقفة: البوت ما يرد على أي كوماند أغاني
     s = self.songs_of(ch)
+
+    if cmd in ("volume", "vol"):
+      cur = sr["volume"]
+      if not arg:
+        await say("vol_now", v=cur)
+        return True
+      if level < PERMS["mod"]:
+        return True
+      m = re.fullmatch(r"([+-]?)(\d{1,3})%?", arg.split()[0])
+      if not m:
+        await say("vol_usage")
+        return True
+      n = int(m.group(2))
+      new = cur + n if m.group(1) == "+" else cur - n if m.group(1) == "-" else n
+      sr["volume"] = max(0, min(100, new))
+      await self.store.save()
+      await say("vol_set", v=sr["volume"])
+      return True
 
     if cmd in ("sr", "songrequest"):
       need = {"everyone": 0, "sub": 1, "vip": 2, "mod": 3}.get(sr["perm"], 0)
