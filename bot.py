@@ -268,12 +268,13 @@ def valid_channel(name):
 def norm_cmd(v):
   """يحوّل الكوماند القديم (نص) للشكل الجديد."""
   if isinstance(v, str):
-    return {"type": "text", "reply": v, "game": "", "perm": "everyone", "bang": True}
+    return {"type": "text", "reply": v, "game": "", "perm": "everyone", "bang": True, "cd": None}
   v = dict(v)
   v.setdefault("type", "text")
   v.setdefault("reply", "")
   v.setdefault("game", "")
   v.setdefault("bang", True)
+  v.setdefault("cd", None)
   if v.get("perm") not in PERMS:
     v["perm"] = "everyone"
   return v
@@ -289,6 +290,16 @@ def build_command(b):
     raise ValueError("الكوماند بدون ! لازم يكون حروف وأرقام بس")
   perm = b.get("perm") if b.get("perm") in PERMS else "everyone"
   reply = str(b.get("reply", "")).strip()[:450]
+  cd = b.get("cd")
+  if cd is None or str(cd).strip() == "":
+    cd = None  # الافتراضي
+  else:
+    try:
+      cd = int(cd)
+    except (TypeError, ValueError):
+      raise ValueError("اكتب الكول داون بالثواني")
+    if cd < 0 or cd > 3600:
+      raise ValueError("الكول داون لازم يكون من 0 إلى 3600 ثانية")
   if b.get("type") == "clip":
     try:
       secs = int(b.get("secs") or 30)
@@ -297,7 +308,7 @@ def build_command(b):
     if secs < 5 or secs > 60:
       raise ValueError("مدة الكليب لازم تكون من 5 إلى 60 ثانية")
     return name, {
-        "type": "clip", "game": "", "secs": secs, "perm": perm, "bang": bang,
+        "type": "clip", "game": "", "secs": secs, "perm": perm, "bang": bang, "cd": cd,
         "reply": reply or "تم إنشاء الكليب 🎬 $(url)",
     }
   if b.get("type") == "game":
@@ -305,12 +316,12 @@ def build_command(b):
     if not game:
       raise ValueError("اكتب اسم اللعبة")
     return name, {
-        "type": "game", "game": game, "perm": perm, "bang": bang,
+        "type": "game", "game": game, "perm": perm, "bang": bang, "cd": cd,
         "reply": reply or "تم تغيير اللعبة إلى $(game) 🎮",
     }
   if not reply:
     raise ValueError("اكتب رد الكوماند")
-  return name, {"type": "text", "game": "", "perm": perm, "reply": reply, "bang": bang}
+  return name, {"type": "text", "game": "", "perm": perm, "reply": reply, "bang": bang, "cd": cd}
 
 
 def disp_cmd(name, c):
@@ -922,6 +933,7 @@ const BASIC=[
  {c:"!settitle عنوان البث الجديد",ce:"!settitle New stream title",ar:"تغيير عنوان البث",en:"Change the stream title",p:"mod"},
  {c:"!commands",ce:"!commands",ar:"رابط صفحة كل الكوماندات",en:"Link to the page with all commands",p:"everyone"}
 ];
+const cdTxt=c=>c.cd==null?"":(c.cd===0?" • ⏱ "+t("بدون كول داون"):" • ⏱ "+c.cd+(LANG==="en"?"s":"ث"));
 function copyText(s){
   try{navigator.clipboard.writeText(s).then(()=>toast("تم النسخ"),()=>{})}catch(e){}
 }
@@ -1008,7 +1020,7 @@ const EN={
 "تم النسخ":"Copied","نسخ":"Copy","اضغط للنسخ":"Click to copy","كوماند":"commands",
 "الأساسية":"Basics","كوماندات البوت الأساسية":"Core bot commands","كوماندات الشات الأساسية":"Core chat commands",
 "للستريمر والمودات. اضغط 📋 للنسخ":"For the streamer and mods. Press 📋 to copy",
-"كل الأنواع":"All types","ردود":"Replies","ألعاب":"Games","كليبات":"Clips","كليب":"Clip","بحث في الكوماندات":"Search commands",
+"كل الأنواع":"All types","ردود":"Replies","ألعاب":"Games","كليبات":"Clips","كليب":"Clip","الكول داون بالثواني":"Cooldown in seconds","الافتراضي":"Default","بدون كول داون":"No cooldown","اتركه فاضي للافتراضي (5 ثواني للردود والألعاب، 30 للكليب). اكتب 0 لإلغاء الكول داون.":"Leave empty for the default (5 seconds for replies and games, 30 for clips). Enter 0 to turn the cooldown off.","اكتب الكول داون بالثواني":"Enter the cooldown in seconds","الكول داون لازم يكون من 0 إلى 3600 ثانية":"The cooldown must be between 0 and 3600 seconds","بحث في الكوماندات":"Search commands",
 "ما فيه كوماندات تطابق بحثك":"No commands match your search",
 "عنوان البث":"Stream title","العنوان الجديد":"New title","تغيير العنوان":"Change title",
 "📝 العنوان الحالي:":"📝 Current title:","تم تغيير عنوان البث":"Stream title changed","اكتب العنوان":"Enter the title",
@@ -1078,14 +1090,14 @@ function cmdFormInit(){
   $("#chips").onclick=e=>{if(e.target.tagName==="SPAN"){const ta=$("#creply");ta.value+=e.target.textContent;ta.focus()}};
   cmdFormSync();
 }
-function cmdFormGet(){return{type:$("#ctype").value,bang:$("#cbang").value!=="no",name:$("#cname").value,game:$("#cgame").value,secs:parseInt($("#csecs").value,10)||30,reply:$("#creply").value,perm:$("#cperm").value}}
+function cmdFormGet(){return{type:$("#ctype").value,bang:$("#cbang").value!=="no",name:$("#cname").value,game:$("#cgame").value,secs:parseInt($("#csecs").value,10)||30,cd:$("#ccd").value,reply:$("#creply").value,perm:$("#cperm").value}}
 function cmdFormClear(){
   $("#ctype").value="text";$("#cperm").value="everyone";$("#cbang").value="yes";
-  $("#cname").value="";$("#cgame").value="";$("#csecs").value=30;$("#creply").value="";cmdFormSync();
+  $("#cname").value="";$("#cgame").value="";$("#csecs").value=30;$("#ccd").value="";$("#creply").value="";cmdFormSync();
 }
 function cmdFormFill(n,c){
   $("#ctype").value=c.type||"text";$("#cperm").value=c.perm||"everyone";$("#cbang").value=c.bang===false?"no":"yes";
-  $("#cname").value=n;$("#cgame").value=c.game||"";$("#csecs").value=c.secs||30;$("#creply").value=c.reply||"";
+  $("#cname").value=n;$("#cgame").value=c.game||"";$("#csecs").value=c.secs||30;$("#ccd").value=c.cd==null?"":c.cd;$("#creply").value=c.reply||"";
   cmdFormSync();window.scrollTo({top:0,behavior:"smooth"});
 }
 function renderCmdList(box,cmds,onDel){
@@ -1095,7 +1107,7 @@ function renderCmdList(box,cmds,onDel){
     const c=cmds[n],d=document.createElement("div");d.className="row col";
     d.innerHTML='<div class="top"><b dir="ltr" data-nt></b><span><button class="ic ed">✏️</button><button class="ic del">🗑</button></span></div><div class="meta" data-nt></div><p data-nt></p>';
     d.querySelector("b").textContent=(c.bang===false?"":"!")+n;
-    d.querySelector(".meta").textContent=(c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:c.type==="clip"?"🎬 "+t("كليب")+" "+(c.secs||30)+(LANG==="en"?"s":"ث"):t("💬 رد عادي"))+" • "+t(PERMS[c.perm]||"الكل");
+    d.querySelector(".meta").textContent=(c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:c.type==="clip"?"🎬 "+t("كليب")+" "+(c.secs||30)+(LANG==="en"?"s":"ث"):t("💬 رد عادي"))+" • "+t(PERMS[c.perm]||"الكل")+cdTxt(c);
     d.querySelector("p").textContent=c.reply||"";
     d.querySelector(".ed").onclick=()=>cmdFormFill(n,c);
     d.querySelector(".del").onclick=()=>{if(ask("تحذف !{n}؟",n))onDel(n)};
@@ -1135,6 +1147,9 @@ CMD_FORM = r"""
     <option value="mod">المودات فقط</option>
     <option value="broadcaster">الستريمر فقط</option>
   </select>
+  <label>الكول داون بالثواني</label>
+  <input id="ccd" type="number" min="0" max="3600" dir="ltr" placeholder="الافتراضي">
+  <p class="hint">اتركه فاضي للافتراضي (5 ثواني للردود والألعاب، 30 للكليب). اكتب 0 لإلغاء الكول داون.</p>
   <button class="btn" id="savecmd">حفظ الكوماند</button>
 </div>
 """
@@ -1944,7 +1959,7 @@ function renderCmds(){
     d.querySelector("b").textContent=dn(n,c);
     const bt=d.querySelector(".bd.t");bt.textContent=c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:c.type==="clip"?"🎬 "+t("كليب")+" "+(c.secs||30)+(LANG==="en"?"s":"ث"):t("💬 رد عادي");
     if(c.type==="game"||c.type==="clip")bt.classList.add("g");
-    d.querySelectorAll(".bd")[1].textContent=t(PERMS[c.perm]||"الكل");
+    d.querySelectorAll(".bd")[1].textContent=t(PERMS[c.perm]||"الكل")+cdTxt(c);
     d.querySelector("p").textContent=c.reply||"";
     d.querySelector(".ed").onclick=()=>{cmdFormFill(n,c);openModal()};
     d.querySelector(".del").onclick=()=>{if(ask("تحذف !{n}؟",n))act(()=>api("DELETE",base()+"/commands/"+encodeURIComponent(n)),"تم حذف الكوماند")};
@@ -3612,6 +3627,7 @@ class Bot:
     self.songs = {}  # قناة -> {"queue": [...], "current": {...}} (في الذاكرة)
     self.permits = {}  # (قناة، يوزر) -> وقت انتهاء السماح بالروابط
     self.sent_texts = {}  # (قناة، نص) -> وقت الإرسال: يمنع البوت يتعامل مع رسائله إذا كان بحساب الستريمر
+    self.clipping = set()  # قنوات فيها كليب قيد الإنشاء الحين
     self.warned = {}  # (قناة، يوزر) -> آخر تنبيه من الفلاتر
 
   def run(self):
@@ -4275,6 +4291,7 @@ class Bot:
       updated = existing is not None
       if updated:
         entry["perm"] = existing.get("perm", "mod")
+        entry["cd"] = existing.get("cd")
         entry["reply"] = existing.get("reply") or entry["reply"]
       channel_cmds[name] = entry
       await self.store.save()
@@ -4383,6 +4400,8 @@ class Bot:
         await self.say(message, channel_name, "e_" + result, q="")
     except Exception as e:
       print(f"خطأ كليب في {channel_name}: {e}")
+    finally:
+      self.clipping.discard(channel_name)
 
   async def run_custom(self, message, cmd, entry, parts, channel_name, level):
     send = message.channel.send
@@ -4394,22 +4413,29 @@ class Bot:
 
     key = (channel_name, cmd)
     now = time.time()
+    cd = entry.get("cd")
+    if cd is None:
+      cd = COMMAND_COOLDOWN
 
     target = parts[1].lstrip("@") if len(parts) > 1 else ""
 
     # كليب: يشتغل بالخلفية (ياخذ كم ثانية) وما يعطّل باقي الشات
     if entry["type"] == "clip":
       ck = (channel_name, "!clip")
-      if now - self.cmd_cooldown.get(ck, 0) < CLIP_COOLDOWN:
+      ccd = entry.get("cd")
+      if ccd is None:
+        ccd = CLIP_COOLDOWN
+      if channel_name in self.clipping or now - self.cmd_cooldown.get(ck, 0) < ccd:
         return True
       self.cmd_cooldown[ck] = now
+      self.clipping.add(channel_name)
       self.count_use(channel_name, cmd)
       asyncio.create_task(self._do_clip(message, channel_name, entry, target))
       return True
 
     # اختصار لعبة: يشتغل حتى لو القناة أوفلاين
     if entry["type"] == "game":
-      if now - self.cmd_cooldown.get(key, 0) < COMMAND_COOLDOWN:
+      if now - self.cmd_cooldown.get(key, 0) < cd:
         return True
       self.cmd_cooldown[key] = now
       self.count_use(channel_name, cmd)
@@ -4425,7 +4451,7 @@ class Bot:
     if not await self.channel_active(channel_name):
       return True
 
-    if now - self.cmd_cooldown.get(key, 0) < COMMAND_COOLDOWN:
+    if now - self.cmd_cooldown.get(key, 0) < cd:
       return True
     self.cmd_cooldown[key] = now
     self.count_use(channel_name, cmd)
