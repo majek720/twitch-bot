@@ -358,6 +358,7 @@ class Store:
         "tokens": {},  # قناة -> ربط تويتش لتغيير اللعبة
         "banned": [],  # قنوات محظورة من استخدام البوت
         "lang": {},  # قناة -> "ar" أو "en" للغة ردود الكوماندات الأساسية
+        "always": {},  # قناة -> True: البوت يشتغل حتى لو القناة أوفلاين (الافتراضي: فقط وهي لايف)
         "reminders": {c: True for c in DEFAULT_CHANNELS},  # قناة -> الرسائل الدورية شغالة؟
         "timers": {},  # قناة -> قائمة الرسائل المجدولة (أدعية، تذكيرات...)
         "autos": {},  # قناة -> تعديلات الردود التلقائية (السلام، باك، برب...)
@@ -427,6 +428,7 @@ class Store:
       self.data["tokens"] = loaded.get("tokens", {})
       self.data["banned"] = loaded.get("banned", [])
       self.data["lang"] = loaded.get("lang", {})
+      self.data["always"] = loaded.get("always", {})
       self.data["timers"] = loaded.get("timers", {})
       self.data["autos"] = loaded.get("autos", {})
       for k in ("botacct", "bot_auth", "report_bans", "sr", "filters", "counts"):
@@ -1389,8 +1391,8 @@ main{flex:1;min-width:0}
 .tool{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .tool input{flex:1;min-width:160px;margin:0}
 .tool .btn{width:auto}
-.chip,.lchip,.rchip,.srchip{background:#111827;border:1px solid #1c2438;color:var(--mut);padding:8px 14px;border-radius:20px;font:inherit;cursor:pointer;font-size:13px}
-.chip.on,.lchip.on,.rchip.on,.srchip.on{background:var(--pc);border-color:var(--pc);color:#fff}
+.chip,.lchip,.rchip,.srchip,.achip{background:#111827;border:1px solid #1c2438;color:var(--mut);padding:8px 14px;border-radius:20px;font:inherit;cursor:pointer;font-size:13px}
+.chip.on,.lchip.on,.rchip.on,.srchip.on,.achip.on{background:var(--pc);border-color:var(--pc);color:#fff}
 .cmd{display:flex;gap:12px;padding:14px;margin-bottom:10px;align-items:flex-start;border-inline-start:4px solid var(--pc)}
 .cmd.off{opacity:.55}
 .cmd.col{flex-direction:column;align-items:stretch}
@@ -1674,6 +1676,15 @@ main{flex:1;min-width:0}
 
         <section class="pg own" id="p-set" hidden>
           <div class="panel" style="margin-bottom:14px">
+            <h3>متى يشتغل البوت في قناتي؟</h3>
+            <p class="mut">يتحكم في الكوماندات والردود التلقائية والرسائل المجدولة. كوماندات الإدارة (مثل !addcmd) وتغيير اللعبة والعنوان تشتغل دائماً.</p>
+            <div class="tool" style="margin:12px 0 10px">
+              <button class="achip" data-al="live">🟢 فقط وأنا لايف</button>
+              <button class="achip" data-al="always">♾️ دائماً (حتى لو أوفلاين)</button>
+            </div>
+            <p class="hint" id="alwayshint" style="margin:0"></p>
+          </div>
+          <div class="panel" style="margin-bottom:14px">
             <h3>لغة ردود البوت</h3>
             <p class="mut">تتحكم في لغة رسائل الكوماندات الأساسية (إضافة، تعديل، حذف، اللعبة، العنوان)</p>
             <div class="tool" style="margin:12px 0 10px">
@@ -1817,6 +1828,8 @@ function render(){
   $("#curtitle").hidden=!c.title;
   $("#titlehint").hidden=!!c.linked;
   document.querySelectorAll(".lchip").forEach(x=>x.classList.toggle("on",x.dataset.bl===(c.lang==="en"?"en":"ar")));
+  document.querySelectorAll(".achip").forEach(x=>x.classList.toggle("on",x.dataset.al===(c.always?"always":"live")));
+  $("#alwayshint").textContent=t(c.always?"الحين: البوت يشتغل دائماً في قناتك، حتى لو أوفلاين.":"الحين: البوت يشتغل بس وقت ما تكون لايف.");
   document.querySelectorAll(".rchip").forEach(x=>x.classList.toggle("on",x.dataset.rm===(c.reminders?"on":"off")));
   $("#langprev").textContent=c.lang==="en"?"@viewer -> The command !hi has been added successfully":"@viewer تمت إضافة الكوماند !hi بنجاح ✅";
   renderBasic($("#basiclist"));
@@ -2028,6 +2041,9 @@ $("#savetitle").onclick=()=>act(async()=>{
   await api("POST",base()+"/title",{title:$("#newtitle").value});$("#newtitle").value="";
 },"تم تغيير عنوان البث");
 document.querySelectorAll(".lchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/lang",{lang:b.dataset.bl}),"تم تغيير لغة ردود البوت"));
+document.querySelectorAll(".achip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/active",{always:b.dataset.al==="always"}),"تم الحفظ"));
+Object.assign(EN,{"متى يشتغل البوت في قناتي؟":"When does the bot run in my channel?","🟢 فقط وأنا لايف":"🟢 Only while I'm live","♾️ دائماً (حتى لو أوفلاين)":"♾️ Always (even when offline)","يتحكم في الكوماندات والردود التلقائية والرسائل المجدولة. كوماندات الإدارة (مثل !addcmd) وتغيير اللعبة والعنوان تشتغل دائماً.":"Controls commands, auto replies and scheduled messages. Management commands (like !addcmd) and game/title changes always work.","الحين: البوت يشتغل دائماً في قناتك، حتى لو أوفلاين.":"Now: the bot runs in your channel at all times, even when offline.","الحين: البوت يشتغل بس وقت ما تكون لايف.":"Now: the bot only runs while you're live."});
+for(const k in EN)AR[EN[k]]=k;
 document.querySelectorAll(".rchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/reminders",{on:b.dataset.rm==="on"}),"تم الحفظ"));
 $("#tmnew").onclick=()=>tmOpen(null);
 $("#tmcancel").onclick=()=>{$("#tmform").hidden=true};
@@ -2941,6 +2957,7 @@ def make_web_app(bot):
         "editors": store.data["editors"].get(ch, []) if own else [],
         "usage": bot.usage.get(ch, {}),
         "lang": store.data["lang"].get(ch, "ar"),
+        "always": bool(store.data["always"].get(ch, False)),
         "reminders": bool(store.data["reminders"].get(ch, False)),
         "timers": timers_view(ch) if own else [],
         "autos": autos_view(ch) if own else [],
@@ -3045,6 +3062,15 @@ def make_web_app(bot):
     if lang not in ("ar", "en"):
       return jerr("صار خطأ")
     store.data["lang"][ch] = lang
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_active(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    store.data["always"][ch] = bool((await jbody(request)).get("always"))
     await store.save()
     return web.json_response({"ok": True})
 
@@ -3308,6 +3334,7 @@ def make_web_app(bot):
   r.add_post("/s/api/channel/{channel}/unlink", s_unlink)
   r.add_post("/s/api/channel/{channel}/leave", s_leave)
   r.add_post("/s/api/channel/{channel}/lang", s_lang)
+  r.add_post("/s/api/channel/{channel}/active", s_active)
   r.add_post("/s/api/channel/{channel}/reminders", s_reminders)
   r.add_post("/s/api/channel/{channel}/title", s_title)
   r.add_post("/s/api/channel/{channel}/timers", s_timer_save)
@@ -3712,6 +3739,12 @@ class Bot:
     except Exception as e:
       print(f"خطأ في معالجة رسالة: {e}")
 
+  async def channel_active(self, channel_name):
+    """البوت يشتغل دائماً إذا الستريمر اختار كذا، وإلا فقط وهي لايف."""
+    if self.store.data["always"].get(channel_name):
+      return True
+    return await self.is_channel_live(channel_name)
+
   async def is_channel_live(self, channel_name):
     now = time.time()
     cached = self.live_cache.get(channel_name)
@@ -3768,7 +3801,7 @@ class Bot:
             self.timer_next[key] = now + every
             if not t.get("on", True) or not self.store.data["reminders"].get(ch, False):
               continue
-            if not await self.is_channel_live(ch):
+            if not await self.channel_active(ch):
               continue
             text = self.timer_text(t)
             channel = self.get_channel(ch)
@@ -4258,8 +4291,8 @@ class Bot:
         await self.say(message, channel_name, "e_" + result, q=entry["game"])
       return True
 
-    # الكوماندات العادية ما ترد إلا إذا القناة لايف
-    if not await self.is_channel_live(channel_name):
+    # الكوماندات العادية: لايف فقط، أو دائماً إذا الستريمر فعّل «يشتغل دائماً»
+    if not await self.channel_active(channel_name):
       return True
 
     if now - self.cmd_cooldown.get(key, 0) < COMMAND_COOLDOWN:
@@ -4370,7 +4403,7 @@ class Bot:
     if username in user_reply_time and current_time - user_reply_time[username] < USER_COOLDOWN:
       return
 
-    if not await self.is_channel_live(channel_name):
+    if not await self.channel_active(channel_name):
       return
 
     content = content.lower()
