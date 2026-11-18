@@ -966,7 +966,7 @@ const AR={};for(const k in EN)AR[EN[k]]=k;
 let LANG="ar";
 try{if(localStorage.getItem("lang")==="en")LANG="en"}catch(e){}
 const nz=s=>s.replace(/\s+/g," ").trim();
-const t=s=>LANG==="en"&&EN[s]?EN[s]:s;
+const t=s=>{if(LANG!=="en")return s;if(EN[s])return EN[s];const m=/^المدة لازم تكون من (\d+) إلى (\d+) دقيقة$/.exec(s);return m?"The interval must be between "+m[1]+" and "+m[2]+" minutes":s};
 const ask=(s,v)=>confirm(t(s).replace("{n}",v));
 let onAuth=()=>{},onLang=()=>{};
 function walk(n){
@@ -1284,7 +1284,7 @@ load();
 # ---------------- زر البلاغات (يظهر في موقع الستريمر وصفحة الكوماندات العامة) ----------------
 REPORT_HTML = r"""
 <style>
-#repbtn{position:fixed;bottom:18px;inset-inline-start:18px;z-index:60;background:#ef4444;color:#fff;border:0;border-radius:30px;padding:11px 16px;font:inherit;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(239,68,68,.35)}
+#repbtn{position:fixed;bottom:18px;inset-inline-end:18px;z-index:60;background:#ef4444;color:#fff;border:0;border-radius:30px;padding:11px 16px;font:inherit;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(239,68,68,.35)}
 #repmodal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:grid;place-items:center;z-index:70;padding:16px}
 #repmodal .rsheet{background:#111827;border:1px solid #1c2438;border-top:3px solid #ef4444;border-radius:18px;padding:20px;width:100%;max-width:460px}
 #repmodal h3{margin:0 0 6px}
@@ -1293,7 +1293,7 @@ REPORT_HTML = r"""
 #repmodal .rr .btn{flex:1}
 #repmodal .btn.sendr{background:#ef4444}
 </style>
-<button id="repbtn" data-nt>🚩 بلاغ</button>
+<button id="repbtn">🚩 بلاغ</button>
 <div id="repmodal" hidden>
   <div class="rsheet">
     <h3>إرسال بلاغ عن مشكلة</h3>
@@ -1606,6 +1606,9 @@ main{flex:1;min-width:0}
               <button class="btn sm" id="sr-copy">نسخ</button>
               <a class="btn sm" id="sr-open" target="_blank">فتح</a>
             </div>
+            <div class="tool" style="margin-top:12px"><button class="btn sm" id="sr-play">▶ تشغيل الأغاني من الموقع</button></div>
+            <p class="hint" style="margin:6px 0 0">يشغّل الأغاني هنا داخل الموقع نفسه. لا تشغّل مشغّل ثاني (مثل OBS) بنفس الوقت وإلا بيشتغلون مرتين.</p>
+            <div id="srplayer" hidden style="margin-top:12px;border:1px solid #1c2438;border-radius:12px;overflow:hidden"></div>
           </div>
           <div class="panel">
             <h3>الطابور</h3>
@@ -1734,6 +1737,8 @@ Object.assign(EN,{
 });
 for(const k in EN)AR[EN[k]]=k;
 let ME=null,CH=null,PG="ov",FILT="all",Q="";
+Object.assign(EN,{"تشتغل مباشرة بدون إضافة. وإذا سوّيت كوماند بنفس الاسم يشتغل كوماندك بدلها": "These work out of the box. If you create a command with the same name, yours replaces the built-in one", "أدعية وأذكار وتذكيرات تنكتب تلقائياً بالفاصل اللي تحدده. تقدر تعدل الافتراضية أو تحذفها وتضيف رسائلك.": "Prayers, adhkar and reminders are posted automatically at the interval you set. You can edit the defaults or delete them and add your own messages.", "مثال: اللهم صلِّ وسلم على نبينا محمد": "Example: Peace and blessings upon our Prophet Muhammad", "اتركه فاضي وتبقى الرسالة تختار عشوائي من القائمة الجاهزة، أو اكتب نص خاص فيه عشان يستبدلها.": "Leave it empty and the message picks at random from the ready-made list, or write your own text to replace it.", "ردود البوت على السلام ومساء الخير وباك وبرب. تقدر تعدل النص أو تحذف الرد. الرد يبدأ دائماً بمنشن للمشاهد، وتقدر تستخدم $(user).": "Bot replies to salam, good evening, back and brb. You can edit the text or delete the reply. The reply always starts by mentioning the viewer, and you can use $(user).", "المشاهدين يطلبون أغاني من يوتيوب بالشات: !sr رابط أو اسم الأغنية": "Viewers request songs from YouTube in chat: !sr link or song name", "أقصى طلبات لكل مشاهد": "Max requests per viewer", "أقصى طول للطابور": "Max queue length", "أقصى مدة للأغنية (دقائق)": "Max song length (minutes)", "مين يقدر يطلب؟": "Who can request?", "البحث بالاسم والحد الأقصى للمدة يحتاجون YOUTUBE_API_KEY في Render. بدونه يشتغل بالروابط فقط.": "Searching by name and the max length limit need YOUTUBE_API_KEY in Render. Without it only links work.", "افتح الرابط في تبويب، أو حطه Browser Source في OBS. لا تشاركه مع أحد.": "Open the link in a tab, or use it as a Browser Source in OBS. Don't share it with anyone.", "🔗 منع الروابط": "🔗 Block links", "🔠 منع الحروف الكبيرة الكثيرة (إنجليزي)": "🔠 Block excessive capital letters (English)", "⚠️ منع الرموز الكثيرة": "⚠️ Block excessive symbols", "🔁 منع تكرار الحرف الواحد (مثل: هههههههههه)": "🔁 Block repeated characters (e.g. hahahahaha)", "📏 منع الرسائل الطويلة (فوق 300 حرف)": "📏 Block long messages (over 300 characters)", "كلمات ممنوعة (كلمة أو جملة في كل سطر)": "Banned words (a word or phrase per line)", "روابط مسموحة (دومين في كل سطر، مثل: youtube.com)": "Allowed links (one domain per line, e.g. youtube.com)", "مدة الكتم بالثواني (0 = حذف الرسالة فقط)": "Timeout duration in seconds (0 = delete the message only)", "أرسل تنبيه للمشاهد المخالف": "Send a warning to the offending viewer", "استثناء المشتركين من الفلاتر": "Exempt subscribers from the filters", "استثناء الـ VIP من الفلاتر": "Exempt VIPs from the filters", "المودات والستريمر مستثنون دائماً. والمود يقدر يسمح لشخص بروابط لمدة دقيقة بـ !permit اسم_المشاهد": "Mods and the streamer are always exempt. A mod can allow someone to post links for a minute with !permit viewer_name", "الحساب اللي يكتب فيه البوت بقناتك:": "The account the bot writes with in your channel:", "«حسابي أنا»: البوت يكتب باسمك. «حساب ثاني»: سجّل دخول بحساب البوت اللي تبيه (حساب جديد تسوّيه للبوت أحسن) ووافق على الصلاحيات. بعدها يستقبل ويرد البوت بهذا الحساب بقناتك فقط.": "“My account”: the bot writes under your name. “Another account”: log in with the bot account you want (a new account made for the bot is better) and approve the permissions. After that the bot reads and replies with this account in your channel only.", "ترجع الرسائل المجدولة الافتراضية؟ الرسائل اللي أضفتها تنحذف.": "Reset the default scheduled messages? The messages you added will be deleted.", "تم ربط حساب البوت ✅": "Bot account linked ✅", "لازم تدخل بنفس حسابك": "You need to log in with your own account", "اكتب المدة بالدقائق": "Enter the duration in minutes", "اكتب نص الرسالة": "Enter the message text", "الرسالة ما تبدأ بـ / أو .": "The message can't start with / or .", "وصلت الحد الأقصى للرسائل المجدولة": "You've reached the maximum number of scheduled messages", "▶ تشغيل الأغاني من الموقع": "▶ Play songs on the site", "⏹ إيقاف المشغّل": "⏹ Stop the player", "تشغيل الآن": "Play now", "يشغّل الأغاني هنا داخل الموقع نفسه. لا تشغّل مشغّل ثاني (مثل OBS) بنفس الوقت وإلا بيشتغلون مرتين.": "Plays the songs right here on the site. Don't run another player (like OBS) at the same time or songs will play twice."});
+for(const k in EN)AR[EN[k]]=k;
 const TITLES={ov:"الرئيسية",cmd:"الكوماندات",auto:"الرسائل التلقائية",songs:"طلبات الأغاني",spam:"الحماية من السبام",bot:"حساب البوت",mods:"المودات",set:"الإعدادات"};
 const COLORS={ov:"#9146ff",cmd:"#3b82f6",auto:"#f59e0b",songs:"#ec4899",spam:"#ef4444",bot:"#14b8a6",mods:"#22c55e",set:"#94a3b8"};
 const OWNPG=["auto","songs","spam","bot","mods","set"];
@@ -1843,7 +1848,7 @@ function runSim(){
   const c=CH&&CH.commands[$("#simcmd").value],o=$("#simout");
   if(!c){o.textContent="…";return}
   const user=$("#simuser").value.trim()||"viewer",arg=$("#simarg").value.trim().replace(/^@/,"");
-  const rep=(c.reply||"").split("$(user)").join(user).split("$(touser)").join(arg||user).split("$(channel)").join(CH.name).split("$(game)").join(c.game||"");
+  const r0=(LANG==="en"&&c.reply==="تم تغيير اللعبة إلى $(game) 🎮")?"Game changed to $(game) 🎮":(c.reply||""),rep=r0.split("$(user)").join(user).split("$(touser)").join(arg||user).split("$(channel)").join(CH.name).split("$(game)").join(c.game||"");
   o.textContent=(c.type==="game"?t("🎮 سيتغيّر كاتيقوري البث إلى:")+" "+c.game+"\n":"")+rep;
 }
 function renderCmds(){
@@ -1953,17 +1958,37 @@ function renderSongs(){
   $("#sr-nokey").hidden=!!c.yt_key;
   const url=location.origin+c.player_path;
   $("#sr-playerurl").value=url;$("#sr-open").href=url;
-  const box=$("#srlist");box.innerHTML="";
+  renderQueue();
+  if(SRP&&SRC!==c.player_path)srPlayer(true);
+  $("#sr-play").textContent=t(SRP?"⏹ إيقاف المشغّل":"▶ تشغيل الأغاني من الموقع");
+}
+let SRP=false,SRT=null,SRC="";
+function renderQueue(){
+  const q=CH.songs,box=$("#srlist");box.innerHTML="";
   const add=(m,now)=>{
     const d=document.createElement("div");d.className="song"+(now?" now":"");
-    d.innerHTML='<span>'+(now?"▶️":"🎵")+'</span><b data-nt></b><small data-nt></small>'+(now?"":'<button class="ic">✖</button>');
+    d.innerHTML='<span>'+(now?"▶️":"🎵")+'</span><b data-nt></b><small data-nt></small>'+(now?"":'<button class="ic pl" title="'+t("تشغيل الآن")+'">▶</button><button class="ic dl">✖</button>');
     d.querySelector("b").textContent=m.title;d.querySelector("small").textContent=m.by;
-    const b=d.querySelector("button");if(b)b.onclick=()=>act(()=>api("DELETE",base()+"/sr/"+encodeURIComponent(m.qid)),"تمت الإزالة");
+    const dl=d.querySelector(".dl");if(dl)dl.onclick=()=>act(()=>api("DELETE",base()+"/sr/"+encodeURIComponent(m.qid)),"تمت الإزالة");
+    const pl=d.querySelector(".pl");if(pl)pl.onclick=()=>act(()=>api("POST",base()+"/sr/"+encodeURIComponent(m.qid)+"/play"),"تم الحفظ");
     box.appendChild(d);
   };
   if(q.current)add(q.current,true);
   q.queue.forEach(m=>add(m,false));
   if(!q.current&&!q.queue.length)box.innerHTML='<p class="empty">'+t("ما فيه أغاني بالطابور")+'</p>';
+}
+async function srRefresh(){try{const c=await api("GET",base2());CH.songs=c.songs;renderQueue()}catch(e){}}
+function srPlayer(on){
+  SRP=on;clearInterval(SRT);
+  const box=$("#srplayer");box.innerHTML="";box.hidden=!on;
+  if(on){
+    SRC=CH.player_path;
+    const f=document.createElement("iframe");f.src=location.origin+SRC;
+    f.allow="autoplay; encrypted-media; fullscreen";f.style.cssText="width:100%;height:380px;border:0;display:block";
+    box.appendChild(f);
+    SRT=setInterval(()=>{if(PG==="songs")srRefresh()},4000);
+  }
+  $("#sr-play").textContent=t(on?"⏹ إيقاف المشغّل":"▶ تشغيل الأغاني من الموقع");
 }
 /* ---------- الحماية ---------- */
 function renderSpam(){
@@ -2013,6 +2038,7 @@ $("#sr-save").onclick=()=>act(()=>api("POST",base()+"/sr/settings",{per_user:par
 $("#sr-copy").onclick=()=>copyText($("#sr-playerurl").value);
 $("#sr-skip").onclick=()=>act(()=>api("POST",base()+"/sr/skip"),"تم الحفظ");
 $("#sr-clear").onclick=()=>act(()=>api("POST",base()+"/sr/clear"),"تم الحفظ");
+$("#sr-play").onclick=()=>srPlayer(!SRP);
 $("#savespam").onclick=()=>act(()=>api("POST",base()+"/filters",{
   links:$("#f-links").checked,caps:$("#f-caps").checked,symbols:$("#f-symbols").checked,repeat:$("#f-repeat").checked,long:$("#f-long").checked,
   words:$("#f-words").value,allowed:$("#f-allowed").value,timeout:parseInt($("#f-timeout").value,10)||0,
@@ -3096,6 +3122,18 @@ def make_web_app(bot):
     s["queue"][:] = [x for x in s["queue"] if x["qid"] != qid]
     return web.json_response({"ok": True})
 
+  async def s_sr_play(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    s = bot.songs_of(a[1])
+    qid = request.match_info["qid"]
+    for i, x in enumerate(s["queue"]):
+      if x["qid"] == qid:
+        s["current"] = s["queue"].pop(i)
+        break
+    return web.json_response({"ok": True})
+
   def player_ok(request, ch):
     k = request.query.get("k", "")
     return ch in store.data["channels"] and hmac.compare_digest(k.encode(), player_key(ch).encode())
@@ -3204,6 +3242,7 @@ def make_web_app(bot):
   r.add_post("/s/api/channel/{channel}/sr/skip", s_sr_skip)
   r.add_post("/s/api/channel/{channel}/sr/clear", s_sr_clear)
   r.add_delete("/s/api/channel/{channel}/sr/{qid}", s_sr_del)
+  r.add_post("/s/api/channel/{channel}/sr/{qid}/play", s_sr_play)
   r.add_post("/s/api/channel/{channel}/filters", s_filters)
   r.add_post("/s/api/channel/{channel}/botacct/reset", s_botacct_reset)
   # مشغّل الأغاني
