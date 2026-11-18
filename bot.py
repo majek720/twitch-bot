@@ -1643,6 +1643,7 @@ main{flex:1;min-width:0}
               <button class="srchip" data-sr="on">مفعّلة</button>
               <button class="srchip" data-sr="off">متوقفة</button>
             </div>
+            <p class="hint" style="margin:-4px 0 12px">إذا أوقفتها، البوت ما يرد على !sr وباقي كوماندات الأغاني لين تشغّلها من جديد.</p>
             <div class="grid3">
               <div><label>أقصى طلبات لكل مشاهد</label><input id="sr-user" type="number" min="1" max="20" dir="ltr"></div>
               <div><label>أقصى طول للطابور</label><input id="sr-queue" type="number" min="1" max="100" dir="ltr"></div>
@@ -1975,7 +1976,7 @@ function renderOwn(){
 /* ---------- الرسائل التلقائية ---------- */
 let TM_ID="";
 const KINDN={saudi:"🤲 دعاء للسعودية (عشوائي من قائمة جاهزة)",dhikr:"📿 ذكر (عشوائي من قائمة جاهزة)"};
-Object.assign(EN,{"🎬 كليب (يسوي كليب للبث)":"🎬 Clip (creates a clip of the stream)","مدة الكليب بالثواني (من 5 إلى 60)":"Clip length in seconds (5 to 60)","لازم الستريمر يربط تويتش (أو يعيد الربط) من تبويب الإعدادات عشان صلاحية الكليب تتفعّل. الكليب يشتغل بس وأنت لايف.":"The streamer must link (or relink) Twitch from the Settings tab to enable the clip permission. Clips only work while live.","✅ مربوط: كوماندات اللعبة والكليب جاهزة.":"✅ Linked: game and clip commands are ready.","⚠️ مربوط، لكن صلاحية الكليب ناقصة: اضغط «إعادة الربط» عشان تتفعّل.":"⚠️ Linked, but the clip permission is missing: press “Relink” to enable it.","مدة الكليب لازم تكون من 5 إلى 60 ثانية":"Clip length must be 5 to 60 seconds","اكتب مدة الكليب بالثواني":"Enter the clip length in seconds","🤲 دعاء للسعودية (عشوائي من قائمة جاهزة)":"🤲 Prayer for Saudi Arabia (random from a ready list)","📿 ذكر (عشوائي من قائمة جاهزة)":"📿 Dhikr (random from a ready list)",
+Object.assign(EN,{"إذا أوقفتها، البوت ما يرد على !sr وباقي كوماندات الأغاني لين تشغّلها من جديد.":"If you turn it off, the bot won't respond to !sr or the other song commands until you turn it back on.","🎬 كليب (يسوي كليب للبث)":"🎬 Clip (creates a clip of the stream)","مدة الكليب بالثواني (من 5 إلى 60)":"Clip length in seconds (5 to 60)","لازم الستريمر يربط تويتش (أو يعيد الربط) من تبويب الإعدادات عشان صلاحية الكليب تتفعّل. الكليب يشتغل بس وأنت لايف.":"The streamer must link (or relink) Twitch from the Settings tab to enable the clip permission. Clips only work while live.","✅ مربوط: كوماندات اللعبة والكليب جاهزة.":"✅ Linked: game and clip commands are ready.","⚠️ مربوط، لكن صلاحية الكليب ناقصة: اضغط «إعادة الربط» عشان تتفعّل.":"⚠️ Linked, but the clip permission is missing: press “Relink” to enable it.","مدة الكليب لازم تكون من 5 إلى 60 ثانية":"Clip length must be 5 to 60 seconds","اكتب مدة الكليب بالثواني":"Enter the clip length in seconds","🤲 دعاء للسعودية (عشوائي من قائمة جاهزة)":"🤲 Prayer for Saudi Arabia (random from a ready list)","📿 ذكر (عشوائي من قائمة جاهزة)":"📿 Dhikr (random from a ready list)",
 "رد السلام":"Reply to salam","رد مساء الخير":"Reply to good evening","رد السلام ومساء الخير معاً":"Reply to salam + good evening","رد باك":"Reply to back","رد برب":"Reply to brb"});
 for(const k in EN)AR[EN[k]]=k;
 const fmtEvery=n=>LANG==="en"?(n%60===0?"every "+n/60+" h":"every "+n+" min"):(n%60===0?"كل "+n/60+(n/60===1?" ساعة":" ساعات"):"كل "+n+" دقيقة");
@@ -3996,8 +3997,7 @@ class Bot:
     # ---------- طلبات الأغاني ----------
     sr = self.store.sr(ch)
     if not sr["on"]:
-      await say("sr_off")
-      return True
+      return True  # الطلبات متوقفة: البوت ما يرد على أي كوماند أغاني
     s = self.songs_of(ch)
 
     if cmd in ("sr", "songrequest"):
