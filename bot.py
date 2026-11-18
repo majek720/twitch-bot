@@ -83,11 +83,13 @@ EVENTSUB_SECRET = hashlib.sha256(b"eventsub:" + SECRET).hexdigest()
 
 # الصلاحيات حسب نوع الدخول: s/c = ستريمر، b = حساب البوت نفسه
 FOLLOWERS_SCOPE = "moderator:read:followers"  # لكوماند !followage
+CLIPS_SCOPE = "clips:edit"  # لكوماند الكليب
+CLIP_COOLDOWN = 30  # أقل فاصل بين كليبين في نفس القناة (ثواني)
 BOT_MOD_SCOPES = "moderator:manage:chat_messages moderator:manage:banned_users"  # للحماية من السبام
 BOT_SCOPES = "user:bot user:read:chat user:write:chat " + BOT_MOD_SCOPES
 SCOPES = {
-    "s": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE}",
-    "c": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE}",
+    "s": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE} {CLIPS_SCOPE}",
+    "c": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE} {CLIPS_SCOPE}",
     "b": BOT_SCOPES,  # حساب البوت الافتراضي
     "m": BOT_SCOPES,  # حساب بوت يختاره الستريمر لقناته
 }
@@ -195,6 +197,10 @@ MSG = {
                   "The Twitch link expired, the streamer needs to relink on the site"),
     "e_not_found": ("ما لقيت لعبة باسم {q}", "I couldn't find a game named {q}"),
     "e_refused": ("تويتش رفض التغيير، حاول مرة ثانية", "Twitch refused the change, try again"),
+    "e_no_scope": ("الستريمر لازم يعيد ربط تويتش من الموقع عشان يشتغل الكليب",
+                   "The streamer must relink Twitch on the site for clips to work"),
+    "e_offline": ("ما أقدر أسوي كليب والقناة أوفلاين", "I can't clip while the channel is offline"),
+    "e_failed": ("ما قدرت أسوي الكليب، حاول بعد شوي", "I couldn't create the clip, try again in a moment"),
     "bot_info": ("ماجيك بوت: كوماندات مخصصة وتغيير اللعبة والعنوان من الشات. فعّله لقناتك: {u}",
                  "Majek Bot: custom commands and game/title changes from chat. Add it to your channel: {u}"),
     "rem_usage": ("الصيغة: !reminders on أو !reminders off",
@@ -279,6 +285,17 @@ def build_command(b):
     raise ValueError("الكوماند بدون ! لازم يكون حروف وأرقام بس")
   perm = b.get("perm") if b.get("perm") in PERMS else "everyone"
   reply = str(b.get("reply", "")).strip()[:450]
+  if b.get("type") == "clip":
+    try:
+      secs = int(b.get("secs") or 30)
+    except (TypeError, ValueError):
+      raise ValueError("اكتب مدة الكليب بالثواني")
+    if secs < 5 or secs > 60:
+      raise ValueError("مدة الكليب لازم تكون من 5 إلى 60 ثانية")
+    return name, {
+        "type": "clip", "game": "", "secs": secs, "perm": perm, "bang": bang,
+        "reply": reply or "تم إنشاء الكليب 🎬 $(url)",
+    }
   if b.get("type") == "game":
     game = str(b.get("game", "")).strip()[:100]
     if not game:
@@ -309,13 +326,14 @@ def user_level(author, is_owner):
   return 0
 
 
-def format_response(text, user, channel, target, game=""):
+def format_response(text, user, channel, target, game="", url=""):
   """المتغيرات المدعومة: $(user) $(touser) $(channel) $(game)"""
   return (
       text.replace("$(user)", user)
       .replace("$(touser)", target or user)
       .replace("$(channel)", channel)
       .replace("$(game)", game)
+      .replace("$(url)", url)
   )
 
 
@@ -615,6 +633,38 @@ class TwitchAPI:
     title = title.strip()[:140]
     ok, err = await self._patch_channel(channel, {"title": title})
     return (True, title) if ok else (False, err)
+
+  async def create_clip(self, channel, secs):
+    """يسوي كليب لآخر secs ثانية. يرجع (نجح؟، رابط الكليب أو كود الخطأ)."""
+    if not self.enabled:
+      return False, "disabled"
+    info = self.store.data["tokens"].get(channel)
+    if not info:
+      return False, "not_linked"
+    if not info.get("clips"):
+      return False, "no_scope"
+    token = await self.user_token(channel)
+    if not token:
+      return False, "expired"
+    st, d = await self.call("POST", "clips", token, params={
+        "broadcaster_id": info["user_id"], "duration": str(int(secs))})
+    if st == 404:
+      return False, "offline"
+    if st == 401:
+      return False, "no_scope" if "scope" in str(d.get("message", "")).lower() else "expired"
+    if st == 403:
+      return False, "refused"
+    if st not in (200, 202) or not d.get("data"):
+      print(f"فشل إنشاء كليب في {channel}: {st} {d}")
+      return False, "failed"
+    clip_id = d["data"][0]["id"]
+    # الكليب ياخذ كم ثانية يتجهز: نتأكد إنه موجود قبل ما نرسل الرابط
+    for _ in range(8):
+      await asyncio.sleep(2)
+      st2, d2 = await self.call("GET", "clips", await self.get_app_token(), params={"id": clip_id})
+      if st2 == 200 and d2.get("data"):
+        return True, d2["data"][0].get("url") or f"https://clips.twitch.tv/{clip_id}"
+    return False, "failed"
 
   # ---------- الشات عبر EventSub + Send Chat Message API ----------
   async def is_live(self, login):
@@ -954,7 +1004,7 @@ const EN={
 "تم النسخ":"Copied","نسخ":"Copy","اضغط للنسخ":"Click to copy","كوماند":"commands",
 "الأساسية":"Basics","كوماندات البوت الأساسية":"Core bot commands","كوماندات الشات الأساسية":"Core chat commands",
 "للستريمر والمودات. اضغط 📋 للنسخ":"For the streamer and mods. Press 📋 to copy",
-"كل الأنواع":"All types","ردود":"Replies","ألعاب":"Games","بحث في الكوماندات":"Search commands",
+"كل الأنواع":"All types","ردود":"Replies","ألعاب":"Games","كليبات":"Clips","كليب":"Clip","بحث في الكوماندات":"Search commands",
 "ما فيه كوماندات تطابق بحثك":"No commands match your search",
 "عنوان البث":"Stream title","العنوان الجديد":"New title","تغيير العنوان":"Change title",
 "📝 العنوان الحالي:":"📝 Current title:","تم تغيير عنوان البث":"Stream title changed","اكتب العنوان":"Enter the title",
@@ -1011,26 +1061,27 @@ async function api(method,path,body){
   return d;
 }
 function cmdFormSync(){
-  const g=$("#ctype").value==="game";
+  const g=$("#ctype").value==="game",cl=$("#ctype").value==="clip";
   $("#cgame").hidden=!g;$("#gamehint").hidden=!g;
-  $("#creply").placeholder=t(g?"رد البوت بعد تغيير اللعبة (اختياري)":"رد البوت");
+  $("#csecs").hidden=!cl;$("#clabel").hidden=!cl;$("#cliphint").hidden=!cl;
+  $("#creply").placeholder=t(g?"رد البوت بعد تغيير اللعبة (اختياري)":cl?"رد البوت بعد الكليب (اختياري، استخدم $(url) للرابط)":"رد البوت");
 }
 function cmdFormInit(){
   $("#ctype").onchange=()=>{
-    if($("#ctype").value==="game"&&$("#cperm").value==="everyone")$("#cperm").value="mod";
+    if(["game","clip"].includes($("#ctype").value)&&$("#cperm").value==="everyone")$("#cperm").value="mod";
     cmdFormSync();
   };
   $("#chips").onclick=e=>{if(e.target.tagName==="SPAN"){const ta=$("#creply");ta.value+=e.target.textContent;ta.focus()}};
   cmdFormSync();
 }
-function cmdFormGet(){return{type:$("#ctype").value,bang:$("#cbang").value!=="no",name:$("#cname").value,game:$("#cgame").value,reply:$("#creply").value,perm:$("#cperm").value}}
+function cmdFormGet(){return{type:$("#ctype").value,bang:$("#cbang").value!=="no",name:$("#cname").value,game:$("#cgame").value,secs:parseInt($("#csecs").value,10)||30,reply:$("#creply").value,perm:$("#cperm").value}}
 function cmdFormClear(){
   $("#ctype").value="text";$("#cperm").value="everyone";$("#cbang").value="yes";
-  $("#cname").value="";$("#cgame").value="";$("#creply").value="";cmdFormSync();
+  $("#cname").value="";$("#cgame").value="";$("#csecs").value=30;$("#creply").value="";cmdFormSync();
 }
 function cmdFormFill(n,c){
   $("#ctype").value=c.type||"text";$("#cperm").value=c.perm||"everyone";$("#cbang").value=c.bang===false?"no":"yes";
-  $("#cname").value=n;$("#cgame").value=c.game||"";$("#creply").value=c.reply||"";
+  $("#cname").value=n;$("#cgame").value=c.game||"";$("#csecs").value=c.secs||30;$("#creply").value=c.reply||"";
   cmdFormSync();window.scrollTo({top:0,behavior:"smooth"});
 }
 function renderCmdList(box,cmds,onDel){
@@ -1040,7 +1091,7 @@ function renderCmdList(box,cmds,onDel){
     const c=cmds[n],d=document.createElement("div");d.className="row col";
     d.innerHTML='<div class="top"><b dir="ltr" data-nt></b><span><button class="ic ed">✏️</button><button class="ic del">🗑</button></span></div><div class="meta" data-nt></div><p data-nt></p>';
     d.querySelector("b").textContent=(c.bang===false?"":"!")+n;
-    d.querySelector(".meta").textContent=(c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:t("💬 رد عادي"))+" • "+t(PERMS[c.perm]||"الكل");
+    d.querySelector(".meta").textContent=(c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:c.type==="clip"?"🎬 "+t("كليب")+" "+(c.secs||30)+(LANG==="en"?"s":"ث"):t("💬 رد عادي"))+" • "+t(PERMS[c.perm]||"الكل");
     d.querySelector("p").textContent=c.reply||"";
     d.querySelector(".ed").onclick=()=>cmdFormFill(n,c);
     d.querySelector(".del").onclick=()=>{if(ask("تحذف !{n}؟",n))onDel(n)};
@@ -1057,6 +1108,7 @@ CMD_FORM = r"""
   <select id="ctype">
     <option value="text">💬 رد عادي</option>
     <option value="game">🎮 اختصار لعبة (يغيّر لعبة البث)</option>
+    <option value="clip">🎬 كليب (يسوي كليب للبث)</option>
   </select>
   <input id="cname" dir="ltr" placeholder="اسم الكوماند بدون ! مثل: fortnite">
   <label>طريقة التفعيل</label>
@@ -1066,8 +1118,11 @@ CMD_FORM = r"""
   </select>
   <input id="cgame" dir="ltr" placeholder="اسم اللعبة مثل: Fortnite" hidden>
   <p class="hint" id="gamehint" hidden>لازم الستريمر يربط تويتش من تبويب الإعدادات في موقع الستريمر عشان تغيير اللعبة يشتغل.</p>
+  <label id="clabel" hidden>مدة الكليب بالثواني (من 5 إلى 60)</label>
+  <input id="csecs" type="number" min="5" max="60" value="30" dir="ltr" hidden>
+  <p class="hint" id="cliphint" hidden>لازم الستريمر يربط تويتش (أو يعيد الربط) من تبويب الإعدادات عشان صلاحية الكليب تتفعّل. الكليب يشتغل بس وأنت لايف.</p>
   <textarea id="creply" placeholder="رد البوت"></textarea>
-  <div class="chips" id="chips"><span>$(user)</span><span>$(touser)</span><span>$(channel)</span><span>$(game)</span><span>$(count)</span><span>$(uptime)</span></div>
+  <div class="chips" id="chips"><span>$(user)</span><span>$(touser)</span><span>$(channel)</span><span>$(game)</span><span>$(count)</span><span>$(uptime)</span><span>$(url)</span></div>
   <label>مين يقدر يستخدم الكوماند؟</label>
   <select id="cperm">
     <option value="everyone">الكل</option>
@@ -1532,6 +1587,7 @@ main{flex:1;min-width:0}
             <button class="chip on" data-f="all">كل الأنواع</button>
             <button class="chip" data-f="text">ردود</button>
             <button class="chip" data-f="game">ألعاب</button>
+            <button class="chip" data-f="clip">كليبات</button>
             <button class="btn plus" id="newcmd">كوماند جديد</button>
           </div>
           <div id="cmdlist"></div>
@@ -1723,7 +1779,7 @@ main{flex:1;min-width:0}
 //COMMON_JS
 Object.assign(EN,{
 "الرئيسية":"Overview","المودات":"Mods","كوماند جديد":"New command","بحث في الكوماندات":"Search commands",
-"كل الأنواع":"All types","ردود":"Replies","ألعاب":"Games","اختصارات الألعاب":"Game shortcuts",
+"كل الأنواع":"All types","ردود":"Replies","ألعاب":"Games","كليبات":"Clips","كليب":"Clip","اختصارات الألعاب":"Game shortcuts",
 "كوماندات عادية":"Text commands","حالة الربط":"Twitch link","مربوط":"Linked","غير مربوط":"Not linked",
 "الأكثر استخداماً":"Most used","الاستخدام يُحسب من آخر تشغيل للبوت":"Usage is counted since the bot's last restart",
 "ما فيه استخدام للحين":"No usage yet","محاكي الكوماند":"Command simulator",
@@ -1865,7 +1921,7 @@ function runSim(){
   const c=CH&&CH.commands[$("#simcmd").value],o=$("#simout");
   if(!c){o.textContent="…";return}
   const user=$("#simuser").value.trim()||"viewer",arg=$("#simarg").value.trim().replace(/^@/,"");
-  const r0=(LANG==="en"&&c.reply==="تم تغيير اللعبة إلى $(game) 🎮")?"Game changed to $(game) 🎮":(c.reply||""),rep=r0.split("$(user)").join(user).split("$(touser)").join(arg||user).split("$(channel)").join(CH.name).split("$(game)").join(c.game||"");
+  const r0=(LANG==="en"&&c.reply==="تم تغيير اللعبة إلى $(game) 🎮")?"Game changed to $(game) 🎮":(c.reply||""),rep=r0.split("$(user)").join(user).split("$(touser)").join(arg||user).split("$(channel)").join(CH.name).split("$(game)").join(c.game||"").split("$(url)").join("https://clips.twitch.tv/Example");
   o.textContent=(c.type==="game"?t("🎮 سيتغيّر كاتيقوري البث إلى:")+" "+c.game+"\n":"")+rep;
 }
 function renderCmds(){
@@ -1880,8 +1936,8 @@ function renderCmds(){
     const c=cmds[n],d=document.createElement("div");d.className="cmd";
     d.innerHTML='<div class="cbody"><div class="chead"><b dir="ltr" data-nt></b><span class="bd t" data-nt></span><span class="bd" data-nt></span></div><p data-nt></p></div><div><button class="ic ed">✏️</button><button class="ic del">🗑</button></div>';
     d.querySelector("b").textContent=dn(n,c);
-    const bt=d.querySelector(".bd.t");bt.textContent=c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:t("💬 رد عادي");
-    if(c.type==="game")bt.classList.add("g");
+    const bt=d.querySelector(".bd.t");bt.textContent=c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:c.type==="clip"?"🎬 "+t("كليب")+" "+(c.secs||30)+(LANG==="en"?"s":"ث"):t("💬 رد عادي");
+    if(c.type==="game"||c.type==="clip")bt.classList.add("g");
     d.querySelectorAll(".bd")[1].textContent=t(PERMS[c.perm]||"الكل");
     d.querySelector("p").textContent=c.reply||"";
     d.querySelector(".ed").onclick=()=>{cmdFormFill(n,c);openModal()};
@@ -1902,7 +1958,7 @@ function renderBuiltin(){
 }
 function renderOwn(){
   const c=CH;
-  $("#linkstate").textContent=t(!c.twitch?"الربط غير مفعّل من المطوّر.":c.linked?"✅ مربوط: كوماندات اختصار اللعبة تقدر تغيّر لعبة بثك.":"غير مربوط: اربط تويتش عشان كوماندات تغيير اللعبة تشتغل.");
+  $("#linkstate").textContent=t(!c.twitch?"الربط غير مفعّل من المطوّر.":c.linked?(c.clips?"✅ مربوط: كوماندات اللعبة والكليب جاهزة.":"⚠️ مربوط، لكن صلاحية الكليب ناقصة: اضغط «إعادة الربط» عشان تتفعّل."):"غير مربوط: اربط تويتش عشان كوماندات تغيير اللعبة تشتغل.");
   $("#connect").hidden=!c.twitch;
   $("#connect").textContent=t(c.linked?"إعادة الربط":"ربط تويتش");
   $("#unlink").hidden=!c.linked;
@@ -1919,7 +1975,7 @@ function renderOwn(){
 /* ---------- الرسائل التلقائية ---------- */
 let TM_ID="";
 const KINDN={saudi:"🤲 دعاء للسعودية (عشوائي من قائمة جاهزة)",dhikr:"📿 ذكر (عشوائي من قائمة جاهزة)"};
-Object.assign(EN,{"🤲 دعاء للسعودية (عشوائي من قائمة جاهزة)":"🤲 Prayer for Saudi Arabia (random from a ready list)","📿 ذكر (عشوائي من قائمة جاهزة)":"📿 Dhikr (random from a ready list)",
+Object.assign(EN,{"🎬 كليب (يسوي كليب للبث)":"🎬 Clip (creates a clip of the stream)","مدة الكليب بالثواني (من 5 إلى 60)":"Clip length in seconds (5 to 60)","لازم الستريمر يربط تويتش (أو يعيد الربط) من تبويب الإعدادات عشان صلاحية الكليب تتفعّل. الكليب يشتغل بس وأنت لايف.":"The streamer must link (or relink) Twitch from the Settings tab to enable the clip permission. Clips only work while live.","✅ مربوط: كوماندات اللعبة والكليب جاهزة.":"✅ Linked: game and clip commands are ready.","⚠️ مربوط، لكن صلاحية الكليب ناقصة: اضغط «إعادة الربط» عشان تتفعّل.":"⚠️ Linked, but the clip permission is missing: press “Relink” to enable it.","مدة الكليب لازم تكون من 5 إلى 60 ثانية":"Clip length must be 5 to 60 seconds","اكتب مدة الكليب بالثواني":"Enter the clip length in seconds","🤲 دعاء للسعودية (عشوائي من قائمة جاهزة)":"🤲 Prayer for Saudi Arabia (random from a ready list)","📿 ذكر (عشوائي من قائمة جاهزة)":"📿 Dhikr (random from a ready list)",
 "رد السلام":"Reply to salam","رد مساء الخير":"Reply to good evening","رد السلام ومساء الخير معاً":"Reply to salam + good evening","رد باك":"Reply to back","رد برب":"Reply to brb"});
 for(const k in EN)AR[EN[k]]=k;
 const fmtEvery=n=>LANG==="en"?(n%60===0?"every "+n/60+" h":"every "+n+" min"):(n%60===0?"كل "+n/60+(n/60===1?" ساعة":" ساعات"):"كل "+n+" دقيقة");
@@ -2145,6 +2201,7 @@ PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
       <button class="chip on" data-f="all">كل الأنواع</button>
       <button class="chip" data-f="text">ردود</button>
       <button class="chip" data-f="game">ألعاب</button>
+      <button class="chip" data-f="clip">كليبات</button>
     </div>
     <div class="grid" id="list"></div>
     <div class="card sec">
@@ -2193,7 +2250,7 @@ function render(){
     b.textContent=nm;b.title=t("اضغط للنسخ");b.onclick=()=>copyText(nm);
     const bd=d.querySelector(".bd");bd.textContent=t(PERMS[c.perm]||"الكل");
     if(c.perm&&c.perm!=="everyone")bd.classList.add("p-"+c.perm);
-    d.querySelector(".meta").textContent=c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:t("💬 رد عادي");
+    d.querySelector(".meta").textContent=c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:c.type==="clip"?"🎬 "+t("كليب")+" "+(c.secs||30)+(LANG==="en"?"s":"ث"):t("💬 رد عادي");
     d.querySelector("p").textContent=c.type==="game"?"":(c.reply||"");
     box.appendChild(d);
   });
@@ -2887,7 +2944,9 @@ def make_web_app(bot):
       elif GAME_SCOPE not in scopes or not tok.get("refresh_token"):
         dest = "/s?err=scope"
       else:
-        store.data["tokens"][login_name] = {"refresh": tok["refresh_token"], "user_id": user["id"]}
+        store.data["tokens"][login_name] = {
+            "refresh": tok["refresh_token"], "user_id": user["id"],
+            "clips": CLIPS_SCOPE in scopes}
         twitch.user_access[login_name] = (tok["access_token"], time.time() + tok.get("expires_in", 3600))
         await store.save()
         try:
@@ -2953,6 +3012,7 @@ def make_web_app(bot):
         "title": title,
         "twitch": twitch.enabled,
         "linked": ch in store.data["tokens"],
+        "clips": bool(store.data["tokens"].get(ch, {}).get("clips")),
         "commands": store.data["commands"].get(ch, {}),
         "editors": store.data["editors"].get(ch, []) if own else [],
         "usage": bot.usage.get(ch, {}),
@@ -4264,6 +4324,20 @@ class Bot:
     d = self.usage.setdefault(channel_name, {})
     d[cmd] = d.get(cmd, 0) + 1
 
+  async def _do_clip(self, message, channel_name, entry, target):
+    try:
+      ok, result = await self.twitch.create_clip(channel_name, entry.get("secs", 30))
+      if ok:
+        text = format_response(entry["reply"], message.author.name, channel_name, target, "", result)
+        if "$(url)" not in entry["reply"] and result not in text:
+          text += " " + result
+        await message.channel.send(text[:490])
+      else:
+        self.cmd_cooldown.pop((channel_name, "!clip"), None)
+        await self.say(message, channel_name, "e_" + result, q="")
+    except Exception as e:
+      print(f"خطأ كليب في {channel_name}: {e}")
+
   async def run_custom(self, message, cmd, entry, parts, channel_name, level):
     send = message.channel.send
     mention = f"@{message.author.name}"
@@ -4276,6 +4350,16 @@ class Bot:
     now = time.time()
 
     target = parts[1].lstrip("@") if len(parts) > 1 else ""
+
+    # كليب: يشتغل بالخلفية (ياخذ كم ثانية) وما يعطّل باقي الشات
+    if entry["type"] == "clip":
+      ck = (channel_name, "!clip")
+      if now - self.cmd_cooldown.get(ck, 0) < CLIP_COOLDOWN:
+        return True
+      self.cmd_cooldown[ck] = now
+      self.count_use(channel_name, cmd)
+      asyncio.create_task(self._do_clip(message, channel_name, entry, target))
+      return True
 
     # اختصار لعبة: يشتغل حتى لو القناة أوفلاين
     if entry["type"] == "game":
