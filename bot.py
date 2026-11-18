@@ -8,7 +8,7 @@ import re
 import secrets
 import sys
 import time
-import uuid
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 import aiohttp
@@ -30,18 +30,18 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")  # اختياري: لحفظ الب
 GIST_ID = os.environ.get("GIST_ID")  # اختياري: معرف الـ Gist
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")  # لوحة الأونر
 
-# موقع الستريمرز (تسجيل دخول بتويتش + تغيير اللعبة) + EventSub
+# موقع الستريمرز (تسجيل دخول بتويتش + تغيير اللعبة) + EventSub (كلها مطلوبة الحين)
 CLIENT_ID = os.environ.get("TWITCH_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("TWITCH_CLIENT_SECRET", "")
 SITE_URL = (os.environ.get("SITE_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").rstrip("/")
-SELF_JOIN = os.environ.get("SELF_JOIN", "1") != "0"
+SELF_JOIN = os.environ.get("SELF_JOIN", "1") != "0"  # الستريمر يفعّل البوت بنفسه (ضع 0 لإيقافه)
 SECRET = (os.environ.get("SESSION_SECRET") or CLIENT_SECRET or "").encode()
 
 OWNER = "majek113"
 IGNORED_USERS = set()
 DEFAULT_CHANNELS = ["majek113", "teamiik", "iz0yi", "vul1_", "lyorll"]
 
-# بوتات معروفة: البوت ما يرد عليها أبداً
+# بوتات معروفة: البوت ما يرد عليها أبداً (يمنع حلقات الردود بين البوتات)
 KNOWN_BOTS = {
     "nightbot", "streamelements", "streamlabs", "moobot", "fossabot", "wizebot",
     "soundalerts", "pretzelrocks", "commanderroot", "anotherttvviewer",
@@ -53,19 +53,19 @@ USER_COOLDOWN = 15
 COMMAND_COOLDOWN = 5
 LIVE_CACHE_SECONDS = 60
 
-# الرسائل المجدولة (الأدعية والتذكيرات)
+# الرسائل المجدولة (الأدعية والتذكيرات): أقل مدة وأكثر مدة بالدقائق، وأقصى عدد لكل قناة
 MIN_TIMER_MINUTES = 5
 MAX_TIMER_MINUTES = 1440
 MAX_TIMERS = 20
 
-# حدود الإرسال
-SEND_MIN_GAP = 1.2
+# حدود الإرسال (تويتش: 20 رسالة كل 30 ثانية لكل قناة، نبقى تحتها بمسافة أمان)
+SEND_MIN_GAP = 1.2  # أقل فاصل بين رسالتين في نفس القناة (ثواني)
 SEND_WINDOW = 30
 SEND_MAX_PER_WINDOW = 15
-SEND_QUEUE_MAX = 15
-SEND_STALE = 45
+SEND_QUEUE_MAX = 15  # لو تكدست أكثر من كذا، الرسائل الجديدة تنتجاهل
+SEND_STALE = 45  # رسالة علقت في الطابور أكثر من كذا ما تنرسل (قديمة)
 
-# احتياطي IRC
+# احتياطي IRC: للقنوات اللي ما أعطت البوت صلاحية (بدون شارة بوت). اختياري: ضع TWITCH_TOKEN في Render
 IRC_TOKEN = (os.environ.get("TWITCH_TOKEN") or "").strip()
 IRC_HOST = "irc.chat.twitch.tv"
 IRC_PORT = 6697
@@ -81,19 +81,24 @@ MOD_SCOPE = "channel:manage:moderators"
 CHANNEL_BOT_SCOPE = "channel:bot"
 EVENTSUB_SECRET = hashlib.sha256(b"eventsub:" + SECRET).hexdigest()
 
+# الصلاحيات حسب نوع الدخول: s/c = ستريمر، b = حساب البوت نفسه
+FOLLOWERS_SCOPE = "moderator:read:followers"  # لكوماند !followage
+BOT_MOD_SCOPES = "moderator:manage:chat_messages moderator:manage:banned_users"  # للحماية من السبام
+BOT_SCOPES = "user:bot user:read:chat user:write:chat " + BOT_MOD_SCOPES
 SCOPES = {
-    "s": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE}",
-    "c": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE}",
-    "b": "user:bot user:read:chat user:write:chat",
+    "s": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE}",
+    "c": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE}",
+    "b": BOT_SCOPES,  # حساب البوت الافتراضي
+    "m": BOT_SCOPES,  # حساب بوت يختاره الستريمر لقناته
 }
 
+# مستويات الصلاحيات: كل مستوى يشمل اللي فوقه
 PERMS = {"everyone": 0, "sub": 1, "vip": 2, "mod": 3, "broadcaster": 4}
 
+# كوماندات البوت الأساسية (ما تنفع كأسماء لكوماندات مخصصة)
 BUILTIN = {
     "addcmd", "editcmd", "delcmd", "removecmd", "cmds", "addgame", "settitle",
     "addchannel", "removechannel", "channels", "commands", "reminders",
-    "followage", "accountage", "uptime", "game", "title", "sr", "song",
-    "queue", "wrongsong", "skip", "permit"
 }
 
 DHIKR_LIST = [
@@ -114,6 +119,8 @@ SAUDI_PRAYERS = [
     "اللهم انصر قواتنا المرابطة واحفظ حدودنا وجد ليالينا بالأمن والأمان يا رب العالمين",
 ]
 
+# الردود التلقائية الافتراضية: المفتاح -> (الاسم، النص الافتراضي، متى يشتغل)
+# الستريمر يقدر يعدل النص أو يحذف الرد (تعطيله) من موقع الستريمر
 AUTO_DEFAULTS = {
     "salam": ("رد السلام", "وعليكم السلام ورحمة الله وبركاته، نورت البث",
               "لما أحد يكتب: السلام عليكم"),
@@ -127,6 +134,7 @@ AUTO_DEFAULTS = {
 
 
 def default_timers():
+  """الرسائل المجدولة الافتراضية (نفس سلوك البوت القديم: كل 90 دقيقة لكل نوع، بفاصل نصف ساعة بينها)."""
   return [
       {"id": "saudi", "kind": "saudi", "text": "", "every": 90, "on": True, "delay": 30},
       {"id": "dhikr", "kind": "dhikr", "text": "", "every": 90, "on": True, "delay": 60},
@@ -134,8 +142,18 @@ def default_timers():
   ]
 
 
+# إعدادات طلبات الأغاني والفلاتر الافتراضية (لكل قناة)
+SR_DEFAULT = {"on": False, "per_user": 3, "max_queue": 30, "max_minutes": 10, "perm": "everyone"}
+FILTER_DEFAULT = {
+    "links": False, "caps": False, "symbols": False, "repeat": False, "long": False,
+    "words": [], "allowed": [], "timeout": 10, "warn": True, "exempt_sub": True, "exempt_vip": True,
+}
+
 user_reply_time = {}
 
+# ============================================================
+# رسائل الكوماندات الأساسية: (عربي، إنجليزي) والستريمر يختار من الموقع
+# ============================================================
 MSG = {
     "no_cmds": ("ما فيه كوماندات مضافة للحين", "No commands have been added yet"),
     "cmds_list": ("الكوماندات: {n}", "Commands: {n}"),
@@ -183,6 +201,48 @@ MSG = {
                   "Usage: !reminders on or !reminders off"),
     "rem_on": ("تم تفعيل الرسائل الدورية ✅", "Periodic messages are now on"),
     "rem_off": ("تم إيقاف الرسائل الدورية ✅", "Periodic messages are now off"),
+    # followage / accountage / uptime / game / title
+    "fa": ("تتابع {c} من {d}", "You've been following {c} for {d}"),
+    "fa_other": ("{u} يتابع {c} من {d}", "{u} has been following {c} for {d}"),
+    "fa_none": ("ما تتابع القناة", "You don't follow this channel"),
+    "fa_none_other": ("{u} ما يتابع القناة", "{u} doesn't follow this channel"),
+    "fa_streamer": ("هذا صاحب القناة 😄", "That's the channel owner 😄"),
+    "aa": ("عمر حسابك في تويتش {d}", "Your Twitch account is {d} old"),
+    "aa_other": ("عمر حساب {u} في تويتش {d}", "{u}'s Twitch account is {d} old"),
+    "up": ("البث شغال من {d}", "The stream has been live for {d}"),
+    "up_off": ("القناة أوفلاين الحين", "The channel is offline right now"),
+    "game_now": ("اللعبة الحالية: {g}", "Current game: {g}"),
+    "game_none": ("ما قدرت أعرف المعلومة الحين", "I couldn't get that right now"),
+    "title_now": ("عنوان البث: {t}", "Stream title: {t}"),
+    "no_user": ("ما لقيت مستخدم باسم {u}", "I couldn't find a user named {u}"),
+    # طلبات الأغاني
+    "sr_off": ("طلبات الأغاني مو مفعّلة في هذي القناة", "Song requests aren't enabled in this channel"),
+    "sr_usage": ("الصيغة: !sr رابط يوتيوب أو اسم الأغنية", "Usage: !sr YouTube link or song name"),
+    "sr_need_link": ("اكتب رابط يوتيوب للأغنية", "Please send a YouTube link"),
+    "sr_nf": ("ما لقيت الأغنية أو ما تنفع", "I couldn't find that song or it can't be played"),
+    "sr_full": ("الطابور ممتلئ", "The queue is full"),
+    "sr_user_max": ("وصلت الحد الأقصى من الطلبات ({n})", "You've reached the request limit ({n})"),
+    "sr_long": ("الأغنية طويلة، الحد الأقصى {n} دقيقة", "That song is too long, the max is {n} minutes"),
+    "sr_dup": ("الأغنية موجودة بالطابور", "That song is already in the queue"),
+    "sr_added": ("تمت إضافة {s} للطابور (رقم {p})", "{s} was added to the queue (#{p})"),
+    "sr_noperm": ("ما عندك صلاحية تطلب أغاني", "You can't request songs here"),
+    "song_now": ("الأغنية الحالية: {s} (طلب {u})", "Now playing: {s} (requested by {u})"),
+    "song_none": ("ما فيه أغنية تشتغل الحين", "Nothing is playing right now"),
+    "queue_list": ("القادم: {l} | الطابور كامل: {u}", "Up next: {l} | Full queue: {u}"),
+    "queue_empty": ("الطابور فاضي", "The queue is empty"),
+    "skipped": ("تم تخطي الأغنية ⏭", "Song skipped ⏭"),
+    "wrong_ok": ("شلت أغنيتك {s}", "Removed your song {s}"),
+    "wrong_none": ("ما عندك أغاني بالطابور", "You have no songs in the queue"),
+    "sr_cleared": ("تم مسح الطابور ✅", "The queue has been cleared"),
+    # الحماية من السبام
+    "permit_ok": ("{u} يقدر ينشر روابط لمدة دقيقة", "{u} can post links for one minute"),
+    "permit_usage": ("الصيغة: !permit اسم_المشاهد", "Usage: !permit username"),
+    "f_links": ("ممنوع نشر الروابط", "Links aren't allowed"),
+    "f_caps": ("خفّف الحروف الكبيرة", "Please ease up on caps"),
+    "f_symbols": ("خفّف الرموز", "Too many symbols"),
+    "f_repeat": ("لا تكرر الحروف", "Don't repeat characters"),
+    "f_long": ("الرسالة طويلة", "Message too long"),
+    "f_words": ("كلمة ممنوعة في هذي القناة", "That word isn't allowed here"),
 }
 
 
@@ -194,6 +254,7 @@ def valid_channel(name):
 
 
 def norm_cmd(v):
+  """يحوّل الكوماند القديم (نص) للشكل الجديد."""
   if isinstance(v, str):
     return {"type": "text", "reply": v, "game": "", "perm": "everyone", "bang": True}
   v = dict(v)
@@ -207,6 +268,7 @@ def norm_cmd(v):
 
 
 def build_command(b):
+  """يتحقق من بيانات كوماند جاية من الواجهة ويرجع (الاسم، الكوماند)."""
   name = str(b.get("name", "")).strip().lstrip("!").lower()
   if not name or len(name) > 30 or re.search(r"\s", name) or name in BUILTIN:
     raise ValueError("اسم الكوماند ما ينفع")
@@ -246,6 +308,7 @@ def user_level(author, is_owner):
 
 
 def format_response(text, user, channel, target, game=""):
+  """المتغيرات المدعومة: $(user) $(touser) $(channel) $(game)"""
   return (
       text.replace("$(user)", user)
       .replace("$(touser)", target or user)
@@ -281,7 +344,7 @@ def read_session(tok):
 
 
 # ============================================================
-# التخزين
+# التخزين: Gist (دائم) أو ملف محلي (يتصفر مع كل إعادة تشغيل في Render)
 # ============================================================
 class Store:
 
@@ -289,16 +352,20 @@ class Store:
     self.data = {
         "channels": list(DEFAULT_CHANNELS),
         "commands": {},
-        "editors": {},
-        "tokens": {},
-        "banned": [],
-        "lang": {},
-        "reminders": {c: True for c in DEFAULT_CHANNELS},
-        "timers": {},
-        "autos": {},
-        "sr": {},
-        "filters": {},
-        "reports": [],
+        "editors": {},  # قناة -> قائمة مودات مصرّح لهم يعدلون الكوماندات
+        "tokens": {},  # قناة -> ربط تويتش لتغيير اللعبة
+        "banned": [],  # قنوات محظورة من استخدام البوت
+        "lang": {},  # قناة -> "ar" أو "en" للغة ردود الكوماندات الأساسية
+        "reminders": {c: True for c in DEFAULT_CHANNELS},  # قناة -> الرسائل الدورية شغالة؟
+        "timers": {},  # قناة -> قائمة الرسائل المجدولة (أدعية، تذكيرات...)
+        "autos": {},  # قناة -> تعديلات الردود التلقائية (السلام، باك، برب...)
+        "botacct": {},  # قناة -> حساب بوت اختاره الستريمر {login, id, refresh}
+        "bot_auth": {},  # توكن حساب البوت الافتراضي (لحذف الرسائل والكتم)
+        "reports": [],  # البلاغات اللي توصل من الموقع
+        "report_bans": {},  # ممنوعين من إرسال البلاغات: هوية -> اسم
+        "sr": {},  # قناة -> إعدادات طلبات الأغاني
+        "filters": {},  # قناة -> إعدادات الحماية من السبام
+        "counts": {},  # قناة -> عدادات $(count)
     }
 
   @property
@@ -306,6 +373,7 @@ class Store:
     return bool(GITHUB_TOKEN and GIST_ID)
 
   def timers(self, ch):
+    """الرسائل المجدولة للقناة. أول مرة تنبني من الرسائل الافتراضية."""
     d = self.data["timers"]
     if ch not in d:
       d[ch] = default_timers()
@@ -313,6 +381,18 @@ class Store:
 
   def autos(self, ch):
     return self.data["autos"].setdefault(ch, {})
+
+  def sr(self, ch):
+    d = self.data["sr"].setdefault(ch, {})
+    for k, v in SR_DEFAULT.items():
+      d.setdefault(k, v)
+    return d
+
+  def filters(self, ch):
+    d = self.data["filters"].setdefault(ch, {})
+    for k, v in FILTER_DEFAULT.items():
+      d.setdefault(k, list(v) if isinstance(v, list) else v)
+    return d
 
   def _headers(self):
     return {
@@ -347,12 +427,13 @@ class Store:
       self.data["lang"] = loaded.get("lang", {})
       self.data["timers"] = loaded.get("timers", {})
       self.data["autos"] = loaded.get("autos", {})
-      self.data["sr"] = loaded.get("sr", {})
-      self.data["filters"] = loaded.get("filters", {})
+      for k in ("botacct", "bot_auth", "report_bans", "sr", "filters", "counts"):
+        self.data[k] = loaded.get(k, {})
       self.data["reports"] = loaded.get("reports", [])
       if "reminders" in loaded:
         self.data["reminders"] = loaded["reminders"]
       else:
+        # أول تشغيل بعد الترقية: القنوات الحالية تبقى على وضعها (شغالة)، والجديدة تبدأ متوقفة
         self.data["reminders"] = {c: True for c in self.data["channels"]}
       self.data["channels"] = [c for c in self.data["channels"] if c not in self.data["banned"]]
     except Exception as e:
@@ -379,7 +460,7 @@ class Store:
 
 
 # ============================================================
-# Twitch API
+# Twitch API (تغيير اللعبة + تسجيل دخول الستريمرز + الشات عبر EventSub)
 # ============================================================
 class TwitchAPI:
 
@@ -387,9 +468,10 @@ class TwitchAPI:
     self.store = store
     self.app_token = None
     self.app_exp = 0
-    self.user_access = {}
+    self.user_access = {}  # قناة -> (access_token, وقت الانتهاء)
     self.user_ids = {}
     self.lock = asyncio.Lock()
+    self.sent_ids = {}  # معرفات رسائل البوت اللي أرسلها (عشان ما يرد على نفسه)
 
   @property
   def enabled(self):
@@ -472,6 +554,7 @@ class TwitchAPI:
     return None
 
   async def channel_info(self, login):
+    """يرجع (اللعبة الحالية، عنوان البث)."""
     uid = await self.user_id(login)
     if not uid:
       return None, None
@@ -494,6 +577,7 @@ class TwitchAPI:
     return items[0]
 
   async def _patch_channel(self, channel, body):
+    """يرجع (نجح؟، كود الخطأ): disabled / not_linked / expired / refused"""
     if not self.enabled:
       return False, "disabled"
     info = self.store.data["tokens"].get(channel)
@@ -511,6 +595,7 @@ class TwitchAPI:
     return False, "refused"
 
   async def set_game(self, channel, game_name):
+    """يرجع (نجح؟، اسم اللعبة أو كود الخطأ)."""
     if not self.enabled:
       return False, "disabled"
     if channel not in self.store.data["tokens"]:
@@ -522,10 +607,12 @@ class TwitchAPI:
     return (True, game["name"]) if ok else (False, err)
 
   async def set_title(self, channel, title):
+    """يرجع (نجح؟، العنوان الجديد أو كود الخطأ)."""
     title = title.strip()[:140]
     ok, err = await self._patch_channel(channel, {"title": title})
     return (True, title) if ok else (False, err)
 
+  # ---------- الشات عبر EventSub + Send Chat Message API ----------
   async def is_live(self, login):
     if not self.enabled:
       return False
@@ -534,11 +621,12 @@ class TwitchAPI:
     return st == 200 and bool(d.get("data"))
 
   async def chat_send(self, channel, text):
+    """يرسل رسالة بالـ API (بتوكن التطبيق) عشان تظهر شارة البوت."""
     if not self.enabled:
       return False, "disabled"
     token = await self.get_app_token()
     bid = await self.user_id(channel)
-    sid = await self.user_id(BOT_LOGIN)
+    _, sid = await self.bot_ident(channel)
     if not (token and bid and sid):
       return False, "ids"
     st, d = await self.call("POST", "chat/messages", token, body={
@@ -546,6 +634,8 @@ class TwitchAPI:
     if st == 401:
       self.app_token = None
     if st == 200 and d.get("data") and d["data"][0].get("is_sent"):
+      if d["data"][0].get("message_id"):
+        self.sent_ids[d["data"][0]["message_id"]] = time.time()
       return True, ""
     drop = ""
     if st == 200 and d.get("data"):
@@ -553,11 +643,12 @@ class TwitchAPI:
     return False, f"{st} {d.get('message') or drop or d.get('data')}"
 
   async def subscribe_chat(self, channel):
+    """يشترك في رسائل شات القناة (EventSub) باسم البوت."""
     if not self.enabled:
       return False, "disabled"
     token = await self.get_app_token()
     bid = await self.user_id(channel)
-    sid = await self.user_id(BOT_LOGIN)
+    _, sid = await self.bot_ident(channel)
     if not (token and bid and sid):
       return False, "ids"
     st, d = await self.call("POST", "eventsub/subscriptions", token, body={
@@ -599,6 +690,7 @@ class TwitchAPI:
         await self.drop_sub(s["id"])
 
   async def make_bot_mod(self, channel, bot_login):
+    """يخلي البوت مود في القناة (400 = مود أو VIP من قبل)."""
     info = self.store.data["tokens"].get(channel)
     if not info:
       return False
@@ -610,6 +702,97 @@ class TwitchAPI:
         "POST", "moderation/moderators", token,
         params={"broadcaster_id": info["user_id"], "user_id": bot_id})
     return st in (204, 400)
+
+  # ---------- حساب البوت لكل قناة (الافتراضي أو حساب اختاره الستريمر) ----------
+  def bot_login(self, channel):
+    a = self.store.data["botacct"].get(channel)
+    return a["login"] if a else BOT_LOGIN
+
+  async def bot_ident(self, channel):
+    """يرجع (يوزر البوت، آيدي البوت) للقناة."""
+    a = self.store.data["botacct"].get(channel)
+    if a:
+      return a["login"], a["id"]
+    return BOT_LOGIN, await self.user_id(BOT_LOGIN)
+
+  async def bot_user_token(self, channel):
+    """توكن حساب البوت نفسه (لحذف الرسائل والكتم). يحتاج ربط حساب البوت بالصلاحيات الجديدة."""
+    a = self.store.data["botacct"].get(channel)
+    info = a if a else self.store.data["bot_auth"]
+    refresh = (info or {}).get("refresh")
+    if not refresh:
+      return None
+    key = "bot:" + (a["login"] if a else BOT_LOGIN)
+    cached = self.user_access.get(key)
+    if cached and time.time() < cached[1] - 60:
+      return cached[0]
+    async with self.lock:
+      cached = self.user_access.get(key)
+      if cached and time.time() < cached[1] - 60:
+        return cached[0]
+      st, d = await self.form(TOKEN_URL, {
+          "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET,
+          "grant_type": "refresh_token", "refresh_token": refresh,
+      })
+      if st != 200 or "access_token" not in d:
+        return None
+      self.user_access[key] = (d["access_token"], time.time() + d.get("expires_in", 3600))
+      if d.get("refresh_token") and d["refresh_token"] != refresh:
+        info["refresh"] = d["refresh_token"]
+        await self.store.save()
+      return d["access_token"]
+
+  async def user_info(self, login):
+    st, d = await self.call("GET", "users", await self.get_app_token(), params={"login": login})
+    if st == 200 and d.get("data"):
+      return d["data"][0]
+    return None
+
+  async def stream_info(self, login):
+    st, d = await self.call("GET", "streams", await self.get_app_token(), params={"user_login": login})
+    if st == 200 and d.get("data"):
+      return d["data"][0]
+    return None
+
+  async def followed_at(self, channel, user_id):
+    """يرجع (تاريخ المتابعة، كود الخطأ): not_linked / expired / refused / not_following"""
+    info = self.store.data["tokens"].get(channel)
+    if not info:
+      return None, "not_linked"
+    token = await self.user_token(channel)
+    if not token:
+      return None, "expired"
+    st, d = await self.call("GET", "channels/followers", token, params={
+        "broadcaster_id": info["user_id"], "user_id": user_id})
+    if st == 200:
+      if d.get("data"):
+        return d["data"][0].get("followed_at"), ""
+      return None, "not_following"
+    if st in (401, 403):
+      return None, "expired"
+    return None, "refused"
+
+  async def delete_message(self, channel, message_id):
+    token = await self.bot_user_token(channel)
+    bid = await self.user_id(channel)
+    _, sid = await self.bot_ident(channel)
+    if not (token and bid and sid and message_id):
+      return False
+    st, _ = await self.call("DELETE", "moderation/chat", token, params={
+        "broadcaster_id": bid, "moderator_id": sid, "message_id": message_id})
+    return st == 204
+
+  async def timeout_user(self, channel, user_id, seconds, reason):
+    token = await self.bot_user_token(channel)
+    bid = await self.user_id(channel)
+    _, sid = await self.bot_ident(channel)
+    if not (token and bid and sid and user_id):
+      return False
+    st, _ = await self.call("POST", "moderation/bans", token,
+                            params={"broadcaster_id": bid, "moderator_id": sid},
+                            body={"data": {"user_id": user_id, "duration": int(seconds),
+                                           "reason": reason[:100]}})
+    return st == 200
 
 
 # ============================================================
@@ -627,7 +810,10 @@ header h1{font-size:18px;margin:0}header small{color:var(--mut);display:block}
 header .sp{flex:1}
 .tabs{display:flex;gap:6px;background:var(--card);padding:5px;border-radius:14px;margin-bottom:16px}
 .tabs button{flex:1;padding:10px;border:0;border-radius:10px;background:none;color:var(--mut);font:inherit;font-weight:500;cursor:pointer}
-.tabs button.on{background:var(--acc);color:#fff}
+.tabs button.on{background:var(--c,var(--acc));color:#fff}
+.tabs button{white-space:nowrap}
+.tabs{overflow-x:auto}
+.cnt{background:#ef4444;color:#fff;border-radius:20px;font-size:11px;padding:1px 7px;margin-inline-start:4px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
 h2{font-size:15px;margin:0 0 12px;color:var(--mut);font-weight:500}
 label{display:block;font-size:13px;color:var(--mut);margin:2px 0 6px}
@@ -877,7 +1063,7 @@ CMD_FORM = r"""
   <input id="cgame" dir="ltr" placeholder="اسم اللعبة مثل: Fortnite" hidden>
   <p class="hint" id="gamehint" hidden>لازم الستريمر يربط تويتش من تبويب الإعدادات في موقع الستريمر عشان تغيير اللعبة يشتغل.</p>
   <textarea id="creply" placeholder="رد البوت"></textarea>
-  <div class="chips" id="chips"><span>$(user)</span><span>$(touser)</span><span>$(channel)</span><span>$(game)</span></div>
+  <div class="chips" id="chips"><span>$(user)</span><span>$(touser)</span><span>$(channel)</span><span>$(game)</span><span>$(count)</span><span>$(uptime)</span></div>
   <label>مين يقدر يستخدم الكوماند؟</label>
   <select id="cperm">
     <option value="everyone">الكل</option>
@@ -929,10 +1115,11 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
     <button class="btn ghost" id="logout">خروج</button>
   </header>
   <div class="tabs">
-    <button class="on" data-t="ch">القنوات</button>
-    <button data-t="cmd">الكوماندات</button>
-    <button data-t="msg">إرسال رسالة</button>
-    <button data-t="basic">الأساسية</button>
+    <button class="on" data-t="ch" style="--c:#9146ff">القنوات</button>
+    <button data-t="cmd" style="--c:#3b82f6">الكوماندات</button>
+    <button data-t="msg" style="--c:#14b8a6">إرسال رسالة</button>
+    <button data-t="basic" style="--c:#f59e0b">الأساسية</button>
+    <button data-t="rep" style="--c:#ef4444">🚩 البلاغات<span class="cnt" id="repn" hidden></span></button>
   </div>
 
   <section id="t-ch">
@@ -963,6 +1150,19 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
     </div>
   </section>
 
+  <section id="t-rep" hidden>
+    <div class="card" style="border-top:3px solid #ef4444">
+      <h2>البلاغات</h2>
+      <div id="replist"></div>
+    </div>
+    <div class="card" style="border-top:3px solid #f59e0b">
+      <h2>ممنوعين من إرسال البلاغات</h2>
+      <input id="repban" dir="ltr" placeholder="يوزر تويتش">
+      <button class="btn red" id="repbanbtn">منع من البلاغات</button>
+      <div id="repbanlist" style="margin-top:10px"></div>
+    </div>
+  </section>
+
   <section id="t-msg" hidden>
     <div class="card">
       <h2>إرسال رسالة كأنك البوت</h2>
@@ -977,7 +1177,12 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
 
 <script>
 //COMMON_JS
-let S={channels:[],commands:{},bot:"",banned:[]};
+Object.assign(EN,{"البلاغات":"Reports","ممنوعين من إرسال البلاغات":"Blocked from sending reports","يوزر تويتش":"Twitch username",
+"منع من البلاغات":"Block from reports","ما فيه بلاغات":"No reports","ما فيه ممنوعين":"Nobody is blocked","رفع المنع":"Unblock",
+"تم منع المُبلّغ":"Reporter blocked","تم رفع الحظر":"Ban lifted","تمنع هذا المُبلّغ من إرسال البلاغات؟":"Block this reporter from sending reports?",
+"🚩 البلاغات":"🚩 Reports"});
+for(const k in EN)AR[EN[k]]=k;
+let S={channels:[],commands:{},bot:"",banned:[],reports:[],report_bans:[]};
 onAuth=()=>show(false);
 onLang=()=>{if(!$("#app").hidden)render()};
 function show(on){$("#login").hidden=on;$("#app").hidden=!on}
@@ -1013,6 +1218,34 @@ function render(){
   }
   renderCmds();
   renderBasic($("#basiclist"));
+  renderReports();
+}
+function renderReports(){
+  const open=S.reports.filter(r=>!r.done).length,n=$("#repn");
+  n.hidden=!open;n.textContent=open;
+  const box=$("#replist");box.innerHTML="";
+  if(!S.reports.length)box.innerHTML='<p class="empty">'+t("ما فيه بلاغات")+'</p>';
+  S.reports.forEach(r=>{
+    const d=document.createElement("div");d.className="row col";
+    if(r.done)d.style.opacity=".5";
+    d.innerHTML='<div class="top"><b dir="auto" data-nt></b><span><button class="ic dn">✅</button><button class="ic bn">🚫</button><button class="ic del">🗑</button></span></div><div class="meta" data-nt></div><p data-nt></p>';
+    d.querySelector("b").textContent=r.by+(r.channel?" • "+r.channel:"");
+    d.querySelector(".meta").textContent=new Date(r.ts*1000).toLocaleString()+(r.page?" • "+r.page:"");
+    d.querySelector("p").textContent=r.text;
+    d.querySelector(".dn").onclick=()=>act(()=>api("POST","/api/reports/"+r.id+"/done"));
+    d.querySelector(".bn").onclick=()=>{if(confirm(t("تمنع هذا المُبلّغ من إرسال البلاغات؟")))act(()=>api("POST","/api/report-ban",{report_id:r.id}),"تم منع المُبلّغ")};
+    d.querySelector(".del").onclick=()=>act(()=>api("DELETE","/api/reports/"+r.id));
+    box.appendChild(d);
+  });
+  const bl=$("#repbanlist");bl.innerHTML="";
+  if(!S.report_bans.length)bl.innerHTML='<p class="empty">'+t("ما فيه ممنوعين")+'</p>';
+  S.report_bans.forEach(x=>{
+    const d=document.createElement("div");d.className="row";
+    d.innerHTML='<b dir="ltr" data-nt></b><button class="btn ghost">'+t("رفع المنع")+'</button>';
+    d.querySelector("b").textContent=x.label+" ("+x.id+")";
+    d.querySelector("button").onclick=()=>act(()=>api("DELETE","/api/report-ban/"+encodeURIComponent(x.id)),"تم رفع الحظر");
+    bl.appendChild(d);
+  });
 }
 function renderCmds(){
   const ch=$("#cmdch").value;
@@ -1028,6 +1261,7 @@ $("#logout").onclick=async()=>{await api("POST","/api/logout");show(false)};
 $("#addch").onclick=()=>act(async()=>{await api("POST","/api/channels",{name:$("#newch").value});$("#newch").value=""},"تمت إضافة القناة");
 $("#banbtn").onclick=()=>act(async()=>{await api("POST","/api/ban",{name:$("#banch").value});$("#banch").value=""},"تم حظر القناة");
 $("#cmdch").onchange=renderCmds;
+$("#repbanbtn").onclick=()=>act(async()=>{await api("POST","/api/report-ban",{name:$("#repban").value});$("#repban").value=""},"تم منع المُبلّغ");
 $("#savecmd").onclick=()=>act(async()=>{
   await api("POST","/api/commands",Object.assign({channel:$("#cmdch").value},cmdFormGet()));
   cmdFormClear();
@@ -1037,7 +1271,7 @@ $("#sendmsg").onclick=()=>act(async()=>{
 },"تم الإرسال");
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{
   document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x===b));
-  for(const t of ["ch","cmd","msg","basic"])$("#t-"+t).hidden=t!==b.dataset.t;
+  for(const t of ["ch","cmd","msg","basic","rep"])$("#t-"+t).hidden=t!==b.dataset.t;
 });
 setInterval(()=>{if(!$("#app").hidden)load()},60000);
 initLang();
@@ -1047,7 +1281,7 @@ load();
 </html>
 """
 
-# ---------------- زر البلاغات ----------------
+# ---------------- زر البلاغات (يظهر في موقع الستريمر وصفحة الكوماندات العامة) ----------------
 REPORT_HTML = r"""
 <style>
 #repbtn{position:fixed;bottom:18px;inset-inline-start:18px;z-index:60;background:#ef4444;color:#fff;border:0;border-radius:30px;padding:11px 16px;font:inherit;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(239,68,68,.35)}
@@ -1932,7 +2166,7 @@ fetch("/pub/"+encodeURIComponent(CHN)).then(r=>r.ok?r.json():Promise.reject()).t
 </html>
 """
 
-# ---------------- مشغّل الأغاني ----------------
+# ---------------- مشغّل الأغاني (رابط خاص بالستريمر يُحط في OBS) ----------------
 PLAYER_HTML = r"""<!DOCTYPE html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2028,10 +2262,118 @@ def is_https(request):
   return request.headers.get("X-Forwarded-Proto") == "https"
 
 
+# ============================================================
+# أدوات: مدد زمنية + يوتيوب
+# ============================================================
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "").strip()  # اختياري: للبحث بالاسم وحد مدة الأغنية
+YT_ID_RE = re.compile(
+    r"(?:youtu\.be/|youtube\.com/(?:watch\?(?:[^\s]*&)?v=|shorts/|embed/|live/)"
+    r"|music\.youtube\.com/watch\?(?:[^\s]*&)?v=)([A-Za-z0-9_-]{11})")
+URL_RE = re.compile(
+    r"(?:https?://|www\.)\S+|\b[a-z0-9-]+\.(?:com|net|org|io|gg|tv|me|co|ly|xyz|info|sa|ae|app|dev|gl|be)\b(?:/\S*)?",
+    re.I)
+NEW_CMDS = {
+    "followage", "accountage", "uptime", "game", "title", "sr", "songrequest", "song",
+    "queue", "playlist", "skip", "wrongsong", "srclear", "permit",
+}
+
+
+def fmt_dur(sec, lang="ar"):
+  sec = int(max(0, sec))
+  y, sec = divmod(sec, 31536000)
+  mo, sec = divmod(sec, 2592000)
+  d, sec = divmod(sec, 86400)
+  h, sec = divmod(sec, 3600)
+  m = sec // 60
+  ar = lang != "en"
+  parts = []
+
+  def add(n, a1, a2, e1, e2):
+    if n:
+      parts.append(f"{n} {a1 if n == 1 else a2}" if ar else f"{n} {e1 if n == 1 else e2}")
+
+  add(y, "سنة", "سنوات", "year", "years")
+  add(mo, "شهر", "أشهر", "month", "months")
+  add(d, "يوم", "أيام", "day", "days")
+  add(h, "ساعة", "ساعات", "hour", "hours")
+  add(m, "دقيقة", "دقايق", "minute", "minutes")
+  if not parts:
+    return "أقل من دقيقة" if ar else "less than a minute"
+  parts = parts[:3]
+  return " و ".join(parts) if ar else ", ".join(parts)
+
+
+def parse_ts(s):
+  try:
+    return datetime.strptime(s[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+  except Exception:
+    return time.time()
+
+
+def yt_id(text):
+  m = YT_ID_RE.search(text)
+  return m.group(1) if m else None
+
+
+def iso_dur(s):
+  m = re.fullmatch(r"P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?", s or "")
+  if not m:
+    return None
+  d, h, mi, se = [int(x or 0) for x in m.groups()]
+  return d * 86400 + h * 3600 + mi * 60 + se
+
+
+async def yt_lookup(vid):
+  """يرجع (العنوان، المدة بالثواني أو None) أو None لو الفيديو ما ينفع."""
+  try:
+    async with aiohttp.ClientSession() as s:
+      if YOUTUBE_API_KEY:
+        async with s.get("https://www.googleapis.com/youtube/v3/videos", params={
+            "part": "snippet,contentDetails,status", "id": vid, "key": YOUTUBE_API_KEY}) as r:
+          d = await r.json()
+        items = d.get("items") or []
+        if not items:
+          return None
+        it = items[0]
+        if not (it.get("status") or {}).get("embeddable", True):
+          return None
+        return it["snippet"]["title"], iso_dur(it["contentDetails"].get("duration"))
+      async with s.get("https://www.youtube.com/oembed", params={
+          "url": f"https://www.youtube.com/watch?v={vid}", "format": "json"}) as r:
+        if r.status != 200:
+          return None
+        d = await r.json()
+        return (d.get("title") or vid), None
+  except Exception as e:
+    print(f"خطأ يوتيوب: {e}")
+    return None
+
+
+async def yt_search(q):
+  if not YOUTUBE_API_KEY:
+    return None
+  try:
+    async with aiohttp.ClientSession() as s:
+      async with s.get("https://www.googleapis.com/youtube/v3/search", params={
+          "part": "snippet", "type": "video", "maxResults": 1, "q": q,
+          "videoEmbeddable": "true", "key": YOUTUBE_API_KEY}) as r:
+        d = await r.json()
+    items = d.get("items") or []
+    return items[0]["id"]["videoId"] if items else None
+  except Exception as e:
+    print(f"خطأ بحث يوتيوب: {e}")
+    return None
+
+
+def player_key(ch):
+  return sign("player:" + ch)[:24]
+
+
 def make_web_app(bot):
   store = bot.store
   twitch = bot.twitch
   redirect_uri = SITE_URL + "/auth/callback"
+  report_times = {}  # بصمة المرسل -> أوقات آخر بلاغات
 
   # ---------------- لوحة الأونر ----------------
   def authed(request):
@@ -2081,6 +2423,8 @@ def make_web_app(bot):
         "channels": [{"name": n, "live": l} for n, l in zip(names, lives)],
         "commands": store.data["commands"],
         "banned": store.data["banned"],
+        "reports": store.data["reports"],
+        "report_bans": [{"id": k, "label": v} for k, v in store.data["report_bans"].items()],
     })
 
   async def add_channel(request):
@@ -2164,93 +2508,174 @@ def make_web_app(bot):
     await channel.send(text)
     return web.json_response({"ok": True})
 
-  async def submit_report(request):
+  # ---------------- البلاغات ----------------
+  def client_ids(request):
+    """هوية المرسل: يوزر تويتش (لو مسجل دخول) + بصمة مشفّرة من الـ IP."""
+    ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (request.remote or "")
+    ipid = "ip:" + hashlib.sha256((ip + "|" + SECRET.decode(errors="ignore")).encode()).hexdigest()[:12]
+    login_name = read_session(request.cookies.get("ssess", ""))
+    ids = [ipid]
+    if login_name:
+      ids.insert(0, "u:" + login_name)
+    return ids, (login_name or ipid)
+
+  async def send_report(request):
     b = await jbody(request)
-    txt = str(b.get("text", "")).strip()[:800]
-    if not txt:
+    text = str(b.get("text", "")).strip()[:800]
+    if not text:
       return jerr("اكتب وصف المشكلة")
-    login_name = read_session(request.cookies.get("ssess", "")) or "anonymous"
-    store.data["reports"].append({
-        "id": uuid.uuid4().hex[:8],
-        "user": login_name,
-        "channel": str(b.get("channel", "")),
-        "page": str(b.get("page", "")),
-        "text": txt,
-        "time": int(time.time()),
-    })
-    store.data["reports"] = store.data["reports"][-100:]
+    ids, label = client_ids(request)
+    bans = store.data["report_bans"]
+    if any(i in bans for i in ids):
+      return jerr("تم منعك من إرسال البلاغات", 403)
+    now = time.time()
+    ts = [x for x in report_times.get(ids[0], []) if now - x < 3600]
+    if len(ts) >= 5:
+      return jerr("أرسلت بلاغات كثيرة، حاول بعد شوي", 429)
+    ts.append(now)
+    report_times[ids[0]] = ts
+    rep = {
+        "id": secrets.token_hex(4), "ts": int(now), "by": label, "ids": ids,
+        "channel": str(b.get("channel", "")).strip().lower()[:25],
+        "page": str(b.get("page", ""))[:100], "text": text, "done": False,
+    }
+    reports = store.data["reports"]
+    reports.insert(0, rep)
+    del reports[300:]
+    await store.save()
+    return web.json_response({"ok": True})
+
+  def find_report(rid):
+    return next((r for r in store.data["reports"] if r["id"] == rid), None)
+
+  async def report_done(request):
+    rep = find_report(request.match_info["id"])
+    if not rep:
+      return jerr("الكوماند مو موجود", 404)
+    rep["done"] = not rep.get("done")
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def report_del(request):
+    rid = request.match_info["id"]
+    store.data["reports"] = [r for r in store.data["reports"] if r["id"] != rid]
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def report_ban(request):
+    b = await jbody(request)
+    if b.get("report_id"):
+      rep = find_report(str(b["report_id"]))
+      if not rep:
+        return jerr("الكوماند مو موجود", 404)
+      for i in rep.get("ids", []):
+        store.data["report_bans"][i] = rep.get("by", i)
+    else:
+      name = str(b.get("name", "")).strip().lstrip("@").lower()
+      if not valid_channel(name):
+        return jerr("اليوزر غير صحيح")
+      store.data["report_bans"]["u:" + name] = name
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def report_unban(request):
+    store.data["report_bans"].pop(request.match_info["ident"], None)
     await store.save()
     return web.json_response({"ok": True})
 
   # ---------------- موقع الستريمر ----------------
-  def role_of(login, ch):
+  def role_of(login_name, ch):
     if ch not in store.data["channels"]:
       return None
-    if login == ch:
+    if login_name == ch:
       return "owner"
-    if login in store.data["editors"].get(ch, []):
+    if login_name in store.data["editors"].get(ch, []):
       return "editor"
     return None
 
-  def channels_for(login):
+  def channels_for(login_name):
     out = []
     for ch in store.data["channels"]:
-      r = role_of(login, ch)
+      r = role_of(login_name, ch)
       if r:
         out.append({"name": ch, "role": r})
     return out
 
   def access(request, owner_only=False):
-    login = read_session(request.cookies.get("ssess", ""))
-    if not login:
+    login_name = read_session(request.cookies.get("ssess", ""))
+    if not login_name:
       return None, web.json_response({"error": "unauthorized", "enabled": twitch.enabled}, status=401)
     ch = request.match_info["channel"].lower()
-    r = role_of(login, ch)
+    r = role_of(login_name, ch)
     if not r or (owner_only and r != "owner"):
       return None, jerr("ما عندك صلاحية", 403)
-    return (login, ch, r), None
+    return (login_name, ch, r), None
+
+  def timers_view(ch):
+    return [{
+        "id": t["id"], "kind": t.get("kind", "text"), "text": t.get("text", ""),
+        "every": int(t.get("every", 30)), "on": bool(t.get("on", True)),
+    } for t in store.timers(ch)]
+
+  def autos_view(ch):
+    cfg = store.autos(ch)
+    out = []
+    for k, (label, default, hint) in AUTO_DEFAULTS.items():
+      c = cfg.get(k) or {}
+      out.append({
+          "key": k, "label": label, "hint": hint, "default": default,
+          "text": c.get("text") or default, "custom": bool(c.get("text")),
+          "on": c.get("on", True) is not False,
+      })
+    return out
 
   async def s_index(request):
     return web.Response(text=STREAMER_HTML, content_type="text/html")
 
-  async def auth_start(mode):
+  async def auth_start(mode, extra="", force=False):
     if not twitch.enabled:
       raise web.HTTPFound("/s")
-    state_val = mode + secrets.token_urlsafe(16)
-    url = AUTH_URL + "?" + urlencode({
+    state_val = mode + extra + secrets.token_urlsafe(16)
+    q = {
         "client_id": CLIENT_ID, "redirect_uri": redirect_uri,
         "response_type": "code", "state": state_val,
         "scope": SCOPES.get(mode, ""),
-    })
-    return state_val, url
+    }
+    if force:
+      q["force_verify"] = "true"
+    return state_val, AUTH_URL + "?" + urlencode(q)
+
+  def go_auth(request, state_val, url):
+    resp = web.HTTPFound(url)
+    resp.set_cookie("ostate", state_val, max_age=600, httponly=True,
+                    samesite="Lax", secure=is_https(request))
+    raise resp
 
   async def auth_login(request):
     state_val, url = await auth_start("l")
-    resp = web.HTTPFound(url)
-    resp.set_cookie("ostate", state_val, max_age=600, httponly=True,
-                    samesite="Lax", secure=is_https(request))
-    raise resp
+    go_auth(request, state_val, url)
 
   async def auth_streamer(request):
     state_val, url = await auth_start("s")
-    resp = web.HTTPFound(url)
-    resp.set_cookie("ostate", state_val, max_age=600, httponly=True,
-                    samesite="Lax", secure=is_https(request))
-    raise resp
+    go_auth(request, state_val, url)
 
   async def auth_connect(request):
     state_val, url = await auth_start("c")
-    resp = web.HTTPFound(url)
-    resp.set_cookie("ostate", state_val, max_age=600, httponly=True,
-                    samesite="Lax", secure=is_https(request))
-    raise resp
+    go_auth(request, state_val, url)
 
   async def auth_bot(request):
+    """ربط حساب البوت نفسه (مرة وحدة): افتحه من نافذة خاصة بحساب majek_bot."""
     state_val, url = await auth_start("b")
-    resp = web.HTTPFound(url)
-    resp.set_cookie("ostate", state_val, max_age=600, httponly=True,
-                    samesite="Lax", secure=is_https(request))
-    raise resp
+    go_auth(request, state_val, url)
+
+  async def auth_mybot(request):
+    """الستريمر يختار حساب البوت لقناته: حسابه هو (m=self) أو حساب ثاني (m=other)."""
+    sess = read_session(request.cookies.get("ssess", ""))
+    if not sess or role_of(sess, sess) != "owner":
+      raise web.HTTPFound("/s")
+    self_mode = request.query.get("m") == "self"
+    state_val, url = await auth_start("m", "s" if self_mode else "o", force=True)
+    go_auth(request, state_val, url)
 
   async def eventsub_hook(request):
     raw = await request.read()
@@ -2294,15 +2719,42 @@ def make_web_app(bot):
       raise web.HTTPFound("/s?err=fail")
     user = data["data"][0]
     login_name = user["login"].lower()
+    scopes = set(tok.get("scope") or [])
+
     if state_val[0] == "b":
       if login_name != BOT_LOGIN:
         resp = web.Response(
             text=f"دخلت بحساب {login_name}، لازم تدخل بحساب {BOT_LOGIN}", status=400)
         resp.del_cookie("ostate")
         return resp
-      resp = web.Response(text="تم ربط حساب البوت بنجاح ✅ تقدر تقفل الصفحة")
+      note = ""
+      if tok.get("refresh_token") and "moderator:manage:banned_users" in scopes:
+        store.data["bot_auth"] = {"refresh": tok["refresh_token"]}
+        twitch.user_access.pop("bot:" + BOT_LOGIN, None)
+        await store.save()
+        note = " (الحماية من السبام جاهزة)"
+      resp = web.Response(text="تم ربط حساب البوت بنجاح ✅" + note + " تقدر تقفل الصفحة")
       resp.del_cookie("ostate")
       return resp
+
+    if state_val[0] == "m":
+      # حساب البوت لقناة الستريمر: ما نغيّر جلسة الستريمر أبداً
+      sess = read_session(request.cookies.get("ssess", ""))
+      if not sess or role_of(sess, sess) != "owner":
+        raise web.HTTPFound("/s?err=fail")
+      if not {"user:bot", "user:read:chat", "user:write:chat"} <= scopes:
+        raise web.HTTPFound("/s?go=bot&err=scope")
+      if state_val[1] == "s" and login_name != sess:
+        raise web.HTTPFound("/s?go=bot&err=wrong")
+      try:
+        await bot.set_custom_bot(sess, login_name, user["id"], tok.get("refresh_token", ""))
+      except Exception as e:
+        print(f"تعذر ضبط حساب البوت لـ {sess}: {e}")
+        raise web.HTTPFound("/s?go=bot&err=fail")
+      resp = web.HTTPFound("/s?go=bot&msg=botset")
+      resp.del_cookie("ostate")
+      raise resp
+
     dest = "/s"
     if state_val[0] in ("c", "s") and login_name not in store.data["banned"]:
       if login_name not in store.data["channels"] and SELF_JOIN and valid_channel(login_name):
@@ -2314,14 +2766,14 @@ def make_web_app(bot):
           print(f"تعذر الدخول لقناة {login_name}: {e}")
       if login_name not in store.data["channels"]:
         dest = "/s?err=not_joined"
-      elif GAME_SCOPE not in (tok.get("scope") or []) or not tok.get("refresh_token"):
+      elif GAME_SCOPE not in scopes or not tok.get("refresh_token"):
         dest = "/s?err=scope"
       else:
         store.data["tokens"][login_name] = {"refresh": tok["refresh_token"], "user_id": user["id"]}
         twitch.user_access[login_name] = (tok["access_token"], time.time() + tok.get("expires_in", 3600))
         await store.save()
         try:
-          await twitch.make_bot_mod(login_name, bot.nick)
+          await twitch.make_bot_mod(login_name, twitch.bot_login(login_name))
           await bot.join_channels([login_name])
         except Exception as e:
           print(f"تعذر تجهيز القناة {login_name}: {e}")
@@ -2339,11 +2791,13 @@ def make_web_app(bot):
     ch = request.match_info["channel"].lower()
     if ch not in store.data["channels"]:
       return jerr("القناة غير موجودة", 404)
+    sr = store.sr(ch)
+    view = bot.sr_view(ch)
     return web.json_response({
         "name": ch,
         "live": await bot.is_channel_live(ch),
         "commands": store.data["commands"].get(ch, {}),
-        "songs": {"on": False, "current": None, "queue": []},
+        "songs": {"on": bool(sr["on"]), "current": view["current"], "queue": view["queue"]},
     })
 
   async def s_logout(request):
@@ -2370,27 +2824,10 @@ def make_web_app(bot):
         game, title = await twitch.channel_info(ch)
       except Exception:
         game = title = None
-
-    ch_autos = store.autos(ch)
-    autos_out = []
-    for k, (lbl, default_txt, hint) in AUTO_DEFAULTS.items():
-      cur = ch_autos.get(k, {})
-      autos_out.append({
-          "key": k,
-          "label": lbl,
-          "hint": hint,
-          "text": cur.get("text") if cur.get("text") else default_txt,
-          "on": cur.get("on", True),
-      })
-
-    sr_cfg = store.data["sr"].get(ch, {
-        "on": False, "per_user": 3, "max_queue": 25, "max_minutes": 10, "perm": "everyone"
-    })
-    flt_cfg = store.data["filters"].get(ch, {
-        "links": False, "caps": False, "symbols": False, "repeat": False, "long": False,
-        "words": [], "allowed": [], "timeout": 10, "warn": True, "exempt_sub": False, "exempt_vip": True
-    })
-
+    own = role == "owner"
+    acct = store.data["botacct"].get(ch)
+    sr = store.sr(ch)
+    f = store.filters(ch)
     return web.json_response({
         "name": ch, "role": role,
         "live": await bot.is_channel_live(ch),
@@ -2399,20 +2836,20 @@ def make_web_app(bot):
         "twitch": twitch.enabled,
         "linked": ch in store.data["tokens"],
         "commands": store.data["commands"].get(ch, {}),
-        "editors": store.data["editors"].get(ch, []) if role == "owner" else [],
+        "editors": store.data["editors"].get(ch, []) if own else [],
         "usage": bot.usage.get(ch, {}),
         "lang": store.data["lang"].get(ch, "ar"),
         "reminders": bool(store.data["reminders"].get(ch, False)),
-        "timers": store.timers(ch),
+        "timers": timers_view(ch) if own else [],
+        "autos": autos_view(ch) if own else [],
         "min_every": MIN_TIMER_MINUTES,
-        "autos": autos_out,
-        "sr": sr_cfg,
-        "songs": {"current": None, "queue": []},
-        "yt_key": bool(os.environ.get("YOUTUBE_API_KEY")),
-        "player_path": f"/player/{ch}",
-        "filters": flt_cfg,
-        "mod_ready": True,
-        "bot": {"login": bot.nick, "custom": False},
+        "sr": {k: sr[k] for k in SR_DEFAULT},
+        "songs": bot.sr_view(ch),
+        "yt_key": bool(YOUTUBE_API_KEY),
+        "player_path": f"/player/{ch}?k={player_key(ch)}" if own else "",
+        "filters": {k: f[k] for k in FILTER_DEFAULT},
+        "mod_ready": bool((acct or store.data["bot_auth"]).get("refresh")),
+        "bot": {"login": twitch.bot_login(ch), "custom": bool(acct)},
     })
 
   async def s_save_cmd(request):
@@ -2488,6 +2925,7 @@ def make_web_app(bot):
     if ch in store.data["channels"]:
       store.data["channels"].remove(ch)
     store.data["tokens"].pop(ch, None)
+    store.data["botacct"].pop(ch, None)
     twitch.user_access.pop(ch, None)
     await store.save()
     try:
@@ -2517,136 +2955,6 @@ def make_web_app(bot):
     await store.save()
     return web.json_response({"ok": True})
 
-  async def s_save_timer(request):
-    a, err = access(request, owner_only=True)
-    if err:
-      return err
-    _, ch, _ = a
-    b = await jbody(request)
-    tid = str(b.get("id", "")).strip()
-    txt = str(b.get("text", "")).strip()[:450]
-    try:
-      every = int(b.get("every", 30))
-    except Exception:
-      every = 30
-    every = max(MIN_TIMER_MINUTES, min(MAX_TIMER_MINUTES, every))
-    on = bool(b.get("on", True))
-    timers = store.timers(ch)
-
-    if tid:
-      for m in timers:
-        if m["id"] == tid:
-          if txt:
-            m["kind"] = "text"
-            m["text"] = txt
-          elif m["kind"] == "text":
-            return jerr("اكتب نص الرسالة")
-          m["every"] = every
-          m["on"] = on
-          break
-      else:
-        return jerr("الرسالة غير موجودة", 404)
-    else:
-      if len(timers) >= MAX_TIMERS:
-        return jerr(f"الحد الأقصى {MAX_TIMERS} رسالة")
-      if not txt:
-        return jerr("اكتب نص الرسالة")
-      timers.append({
-          "id": uuid.uuid4().hex[:8],
-          "kind": "text",
-          "text": txt,
-          "every": every,
-          "on": on,
-          "delay": every,
-      })
-    await store.save()
-    return web.json_response({"ok": True})
-
-  async def s_del_timer(request):
-    a, err = access(request, owner_only=True)
-    if err:
-      return err
-    _, ch, _ = a
-    tid = request.match_info["id"]
-    timers = store.timers(ch)
-    store.data["timers"][ch] = [m for m in timers if m["id"] != tid]
-    await store.save()
-    return web.json_response({"ok": True})
-
-  async def s_reset_timers(request):
-    a, err = access(request, owner_only=True)
-    if err:
-      return err
-    _, ch, _ = a
-    store.data["timers"][ch] = default_timers()
-    await store.save()
-    return web.json_response({"ok": True})
-
-  async def s_save_auto(request):
-    a, err = access(request, owner_only=True)
-    if err:
-      return err
-    _, ch, _ = a
-    b = await jbody(request)
-    key = str(b.get("key", ""))
-    if key not in AUTO_DEFAULTS:
-      return jerr("رد غير معروف")
-    txt = str(b.get("text", "")).strip()[:450]
-    on = bool(b.get("on", True))
-    autos = store.autos(ch)
-    if not txt and on:
-      autos.pop(key, None)
-    else:
-      autos[key] = {"text": txt, "on": on}
-    await store.save()
-    return web.json_response({"ok": True})
-
-  async def s_sr_settings(request):
-    a, err = access(request, owner_only=True)
-    if err:
-      return err
-    _, ch, _ = a
-    b = await jbody(request)
-    cur = store.data["sr"].setdefault(ch, {
-        "on": False, "per_user": 3, "max_queue": 25, "max_minutes": 10, "perm": "everyone"
-    })
-    if "on" in b:
-      cur["on"] = bool(b["on"])
-    if "per_user" in b:
-      cur["per_user"] = max(1, min(20, int(b["per_user"] or 3)))
-    if "max_queue" in b:
-      cur["max_queue"] = max(1, min(100, int(b["max_queue"] or 25)))
-    if "max_minutes" in b:
-      cur["max_minutes"] = max(1, min(60, int(b["max_minutes"] or 10)))
-    if b.get("perm") in PERMS:
-      cur["perm"] = b["perm"]
-    await store.save()
-    return web.json_response({"ok": True})
-
-  async def s_filters(request):
-    a, err = access(request, owner_only=True)
-    if err:
-      return err
-    _, ch, _ = a
-    b = await jbody(request)
-    words = [w.strip().lower() for w in str(b.get("words", "")).splitlines() if w.strip()]
-    allowed = [w.strip().lower() for w in str(b.get("allowed", "")).splitlines() if w.strip()]
-    store.data["filters"][ch] = {
-        "links": bool(b.get("links")),
-        "caps": bool(b.get("caps")),
-        "symbols": bool(b.get("symbols")),
-        "repeat": bool(b.get("repeat")),
-        "long": bool(b.get("long")),
-        "words": words[:100],
-        "allowed": allowed[:100],
-        "timeout": max(0, min(600, int(b.get("timeout") or 0))),
-        "warn": bool(b.get("warn")),
-        "exempt_sub": bool(b.get("exempt_sub")),
-        "exempt_vip": bool(b.get("exempt_vip")),
-    }
-    await store.save()
-    return web.json_response({"ok": True})
-
   async def s_title(request):
     a, err = access(request)
     if err:
@@ -2658,6 +2966,188 @@ def make_web_app(bot):
     ok, result = await twitch.set_title(ch, title)
     if not ok:
       return jerr(MSG["e_" + result][0].format(q=""))
+    return web.json_response({"ok": True})
+
+  # ---------- الرسائل المجدولة ----------
+  async def s_timer_save(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    timers = store.timers(ch)
+    tid = str(b.get("id") or "")
+    cur = next((x for x in timers if x["id"] == tid), None) if tid else None
+    text = str(b.get("text", "")).strip()[:450]
+    try:
+      every = int(b.get("every"))
+    except (TypeError, ValueError):
+      return jerr("اكتب المدة بالدقائق")
+    if every < MIN_TIMER_MINUTES or every > MAX_TIMER_MINUTES:
+      return jerr(f"المدة لازم تكون من {MIN_TIMER_MINUTES} إلى {MAX_TIMER_MINUTES} دقيقة")
+    if text.startswith(("/", ".")):
+      return jerr("الرسالة ما تبدأ بـ / أو .")
+    if text:
+      kind = "text"
+    elif cur and cur.get("kind") in ("saudi", "dhikr"):
+      kind = cur["kind"]
+    else:
+      return jerr("اكتب نص الرسالة")
+    if cur is None:
+      if len(timers) >= MAX_TIMERS:
+        return jerr("وصلت الحد الأقصى للرسائل المجدولة")
+      cur = {"id": secrets.token_hex(3)}
+      timers.append(cur)
+      store.data["reminders"][ch] = True  # الستريمر أضاف رسالة بنفسه، فنشغّل المفتاح العام
+    cur.update({"kind": kind, "text": text if kind == "text" else "",
+                "every": every, "on": bool(b.get("on", True))})
+    cur.pop("delay", None)
+    bot.timer_next.pop((ch, cur["id"]), None)
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_timer_del(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    tid = request.match_info["id"]
+    timers = store.timers(ch)
+    timers[:] = [x for x in timers if x["id"] != tid]
+    bot.timer_next.pop((ch, tid), None)
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_timer_reset(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    store.data["timers"][ch] = default_timers()
+    for k in [k for k in bot.timer_next if k[0] == ch]:
+      del bot.timer_next[k]
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_auto_save(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    key = b.get("key")
+    if key not in AUTO_DEFAULTS:
+      return jerr("صار خطأ")
+    text = str(b.get("text", "")).strip()[:300]
+    if text.startswith(("/", ".")):
+      return jerr("الرسالة ما تبدأ بـ / أو .")
+    if text == AUTO_DEFAULTS[key][1]:
+      text = ""
+    on = bool(b.get("on", True))
+    cfg = store.autos(ch)
+    if on and not text:
+      cfg.pop(key, None)
+    else:
+      cfg[key] = {"on": on, "text": text}
+    await store.save()
+    return web.json_response({"ok": True})
+
+  # ---------- طلبات الأغاني ----------
+  async def s_sr_settings(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    s = store.sr(ch)
+    if "on" in b:
+      s["on"] = bool(b["on"])
+    for k, lo, hi in (("per_user", 1, 20), ("max_queue", 1, 100), ("max_minutes", 1, 60)):
+      if k in b:
+        try:
+          s[k] = max(lo, min(hi, int(b[k])))
+        except (TypeError, ValueError):
+          return jerr("صار خطأ")
+    if b.get("perm") in ("everyone", "sub", "vip", "mod"):
+      s["perm"] = b["perm"]
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_sr_skip(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    bot.sr_next(a[1])
+    return web.json_response({"ok": True})
+
+  async def s_sr_clear(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    bot.songs_of(a[1])["queue"].clear()
+    return web.json_response({"ok": True})
+
+  async def s_sr_del(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    s = bot.songs_of(a[1])
+    qid = request.match_info["qid"]
+    s["queue"][:] = [x for x in s["queue"] if x["qid"] != qid]
+    return web.json_response({"ok": True})
+
+  def player_ok(request, ch):
+    k = request.query.get("k", "")
+    return ch in store.data["channels"] and hmac.compare_digest(k.encode(), player_key(ch).encode())
+
+  async def player_page(request):
+    ch = request.match_info["channel"].lower()
+    if not player_ok(request, ch):
+      return web.Response(text="403", status=403)
+    html = PLAYER_HTML.replace("__CH__", json.dumps(ch)).replace("__KEY__", json.dumps(player_key(ch)))
+    return web.Response(text=html, content_type="text/html")
+
+  async def player_state(request):
+    ch = request.match_info["channel"].lower()
+    if not player_ok(request, ch):
+      return jerr("forbidden", 403)
+    return web.json_response(bot.sr_view(ch))
+
+  async def player_next(request):
+    ch = request.match_info["channel"].lower()
+    if not player_ok(request, ch):
+      return jerr("forbidden", 403)
+    bot.sr_next(ch)
+    return web.json_response(bot.sr_view(ch))
+
+  # ---------- الحماية + حساب البوت ----------
+  async def s_filters(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    f = store.filters(ch)
+    for k in ("links", "caps", "symbols", "repeat", "long", "warn", "exempt_sub", "exempt_vip"):
+      if k in b:
+        f[k] = bool(b[k])
+    if "words" in b:
+      f["words"] = [w.strip().lower()[:60] for w in str(b["words"]).splitlines() if w.strip()][:100]
+    if "allowed" in b:
+      f["allowed"] = [d.strip().lower()[:60] for d in str(b["allowed"]).splitlines() if d.strip()][:50]
+    if "timeout" in b:
+      try:
+        f["timeout"] = max(0, min(600, int(b["timeout"])))
+      except (TypeError, ValueError):
+        return jerr("صار خطأ")
+    await store.save()
+    return web.json_response({"ok": True})
+
+  async def s_botacct_reset(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    await bot.reset_bot(a[1])
     return web.json_response({"ok": True})
 
   app = web.Application(middlewares=[auth_mw])
@@ -2676,7 +3166,12 @@ def make_web_app(bot):
   r.add_post("/api/commands", save_command)
   r.add_delete("/api/commands/{channel}/{name}", del_command)
   r.add_post("/api/send", send_msg)
-  r.add_post("/report", submit_report)
+  # البلاغات
+  r.add_post("/report", send_report)
+  r.add_post("/api/reports/{id}/done", report_done)
+  r.add_delete("/api/reports/{id}", report_del)
+  r.add_post("/api/report-ban", report_ban)
+  r.add_delete("/api/report-ban/{ident}", report_unban)
   # EventSub
   r.add_post("/eventsub", eventsub_hook)
   # موقع الستريمر
@@ -2687,6 +3182,7 @@ def make_web_app(bot):
   r.add_get("/auth/streamer", auth_streamer)
   r.add_get("/auth/connect", auth_connect)
   r.add_get("/auth/bot", auth_bot)
+  r.add_get("/auth/mybot", auth_mybot)
   r.add_get("/auth/callback", auth_callback)
   r.add_post("/s/api/logout", s_logout)
   r.add_get("/s/api/me", s_me)
@@ -2699,13 +3195,21 @@ def make_web_app(bot):
   r.add_post("/s/api/channel/{channel}/leave", s_leave)
   r.add_post("/s/api/channel/{channel}/lang", s_lang)
   r.add_post("/s/api/channel/{channel}/reminders", s_reminders)
-  r.add_post("/s/api/channel/{channel}/timers", s_save_timer)
-  r.add_delete("/s/api/channel/{channel}/timers/{id}", s_del_timer)
-  r.add_post("/s/api/channel/{channel}/timers/reset", s_reset_timers)
-  r.add_post("/s/api/channel/{channel}/autos", s_save_auto)
-  r.add_post("/s/api/channel/{channel}/sr/settings", s_sr_settings)
-  r.add_post("/s/api/channel/{channel}/filters", s_filters)
   r.add_post("/s/api/channel/{channel}/title", s_title)
+  r.add_post("/s/api/channel/{channel}/timers", s_timer_save)
+  r.add_post("/s/api/channel/{channel}/timers/reset", s_timer_reset)
+  r.add_delete("/s/api/channel/{channel}/timers/{id}", s_timer_del)
+  r.add_post("/s/api/channel/{channel}/autos", s_auto_save)
+  r.add_post("/s/api/channel/{channel}/sr/settings", s_sr_settings)
+  r.add_post("/s/api/channel/{channel}/sr/skip", s_sr_skip)
+  r.add_post("/s/api/channel/{channel}/sr/clear", s_sr_clear)
+  r.add_delete("/s/api/channel/{channel}/sr/{qid}", s_sr_del)
+  r.add_post("/s/api/channel/{channel}/filters", s_filters)
+  r.add_post("/s/api/channel/{channel}/botacct/reset", s_botacct_reset)
+  # مشغّل الأغاني
+  r.add_get("/player/{channel}", player_page)
+  r.add_get("/player/api/{channel}/state", player_state)
+  r.add_post("/player/api/{channel}/next", player_next)
   return app
 
 
@@ -2721,6 +3225,7 @@ async def start_web_server(bot):
 # البوت (EventSub للقراءة + Send Chat Message API للإرسال)
 # ============================================================
 class IRCClient:
+  """اتصال IRC بسيط بحساب البوت: يخدم القنوات اللي ما أعطت صلاحية EventSub (بدون شارة بوت)."""
 
   def __init__(self, bot, token):
     self.bot = bot
@@ -2742,7 +3247,7 @@ class IRCClient:
       except Exception as e:
         print(f"IRC: انقطع الاتصال ({e})")
         if "auth" in str(e):
-          delay = 300
+          delay = 300  # التوكن غلط: لا نكرر المحاولة بسرعة
       self.ready.clear()
       self.writer = None
       await asyncio.sleep(delay)
@@ -2763,7 +3268,7 @@ class IRCClient:
   async def _rejoin(self):
     for c in list(self.channels):
       self._raw("JOIN #" + c)
-      await asyncio.sleep(0.6)
+      await asyncio.sleep(0.6)  # حد تويتش: 20 دخول كل 10 ثواني
 
   async def _handle(self, line):
     tags = {}
@@ -2799,6 +3304,7 @@ class IRCClient:
           "chatter_user_id": tags.get("user-id", ""),
           "broadcaster_user_login": chan,
           "broadcaster_user_id": tags.get("room-id", ""),
+          "message_id": tags.get("id", ""),
           "message": {"text": text},
           "badges": [{"set_id": b.split("/")[0]} for b in tags.get("badges", "").split(",") if b],
       }
@@ -2823,11 +3329,13 @@ class IRCClient:
 
 
 class Author:
+  """مرسل الرسالة (مبني من حدث EventSub)."""
 
   def __init__(self, ev):
     self.name = (ev.get("chatter_user_login") or "").lower()
+    self.uid = ev.get("chatter_user_id") or ""
     ids = {b.get("set_id") for b in ev.get("badges") or []}
-    same_id = bool(ev.get("chatter_user_id")) and ev.get("chatter_user_id") == ev.get("broadcaster_user_id")
+    same_id = bool(self.uid) and self.uid == ev.get("broadcaster_user_id")
     self.is_broadcaster = "broadcaster" in ids or same_id
     self.is_mod = "moderator" in ids
     self.is_vip = "vip" in ids
@@ -2851,6 +3359,7 @@ class ChatMessage:
     self.author = Author(ev)
     self.channel = ChatChannel(bot, (ev.get("broadcaster_user_login") or "").lower())
     self.content = (ev.get("message") or {}).get("text", "")
+    self.id = ev.get("message_id") or ""
     self.echo = False
 
 
@@ -2864,13 +3373,17 @@ class Bot:
     self.last_saudi_prayer = None
     self.live_cache = {}
     self.cmd_cooldown = {}
-    self.usage = {}
-    self.seen = {}
-    self.queues = {}
-    self.paused = set()
-    self.timer_last = {}  # (channel, timer_id) -> timestamp
+    self.usage = {}  # قناة -> {كوماند: عدد الاستخدام} من آخر تشغيل
+    self.seen = {}  # معرفات أحداث EventSub لمنع التكرار
+    self.queues = {}  # قناة -> طابور الإرسال
+    self.paused = set()  # قنوات الستريمر سحب منها الصلاحية: ما نعيد الاشتراك لين يعيد الربط
     self.irc = IRCClient(self, IRC_TOKEN) if IRC_TOKEN else None
-    self.irc_channels = set()
+    self.irc_channels = set()  # قنوات تشتغل بالـ IRC لأن ما فيها صلاحية EventSub
+    self.timer_next = {}  # (قناة، رقم الرسالة) -> وقت الإرسال القادم
+    self.songs = {}  # قناة -> {"queue": [...], "current": {...}} (في الذاكرة)
+    self.permits = {}  # (قناة، يوزر) -> وقت انتهاء السماح بالروابط
+    self.sent_texts = {}  # (قناة، نص) -> وقت الإرسال: يمنع البوت يتعامل مع رسائله إذا كان بحساب الستريمر
+    self.warned = {}  # (قناة، يوزر) -> آخر تنبيه من الفلاتر
 
   def run(self):
     loop = asyncio.get_event_loop()
@@ -2891,7 +3404,55 @@ class Bot:
     else:
       print("ملاحظة: ما فيه TWITCH_TOKEN، فالقنوات اللي ما أعطت صلاحية ما راح يرد فيها البوت")
 
+  # ---------- طلبات الأغاني ----------
+  def songs_of(self, ch):
+    return self.songs.setdefault(ch, {"queue": [], "current": None})
+
+  def sr_view(self, ch):
+    s = self.songs_of(ch)
+    return {"current": s["current"], "queue": list(s["queue"])}
+
+  def sr_next(self, ch):
+    s = self.songs_of(ch)
+    s["current"] = s["queue"].pop(0) if s["queue"] else None
+    return s["current"]
+
+  # ---------- حساب البوت المخصص لكل قناة ----------
+  async def set_custom_bot(self, ch, login, uid, refresh):
+    if login == BOT_LOGIN:
+      await self.reset_bot(ch)
+      return
+    self.store.data["botacct"][ch] = {"login": login, "id": uid, "refresh": refresh}
+    self.twitch.user_access.pop("bot:" + login, None)
+    await self.store.save()
+    await self.switch_bot(ch)
+
+  async def reset_bot(self, ch):
+    if self.store.data["botacct"].pop(ch, None) is not None:
+      await self.store.save()
+    await self.switch_bot(ch)
+
+  async def switch_bot(self, ch):
+    """يغيّر الحساب اللي يقرأ ويكتب في القناة: يلغي الاشتراك القديم ويشترك من جديد."""
+    try:
+      await self.twitch.unsubscribe_chat(ch)
+    except Exception as e:
+      print(f"تعذر إلغاء الاشتراك القديم في {ch}: {e}")
+    if ch in self.irc_channels:
+      self.irc_channels.discard(ch)
+      if self.irc:
+        self.irc.part(ch)
+    login = self.twitch.bot_login(ch)
+    if login != ch:
+      try:
+        await self.twitch.make_bot_mod(ch, login)
+      except Exception as e:
+        print(f"تعذر جعل {login} مود في {ch}: {e}")
+    await self.join_channels([ch])
+
+  # ---------- الاشتراك في شات القنوات ----------
   async def resub_all(self):
+    # احذف الاشتراكات المعطلة (تويتش يعطلها لو السيرفر نام) وأعد الاشتراك
     for s in await self.twitch.list_subs():
       if s.get("status") not in ("enabled", "webhook_callback_verification_pending"):
         await self.twitch.drop_sub(s["id"])
@@ -2901,7 +3462,7 @@ class Bot:
     ])
 
   async def resub_loop(self):
-    await asyncio.sleep(10)
+    await asyncio.sleep(10)  # لين يشتغل السيرفر ويقدر يرد على تحقق تويتش
     while True:
       try:
         await self.resub_all()
@@ -2911,15 +3472,15 @@ class Bot:
 
   async def join_channels(self, names):
     for n in names:
-      self.paused.discard(n)
+      self.paused.discard(n)  # الاستدعاء الصريح (إضافة أو إعادة ربط) يرفع الإيقاف
       ok, why = await self.twitch.subscribe_chat(n)
       if ok:
         print(f"اشتراك الشات {n}: ✅")
-        if n in self.irc_channels:
+        if n in self.irc_channels:  # صارت تشتغل بـ EventSub، نطلع من IRC عشان ما يتكرر الرد
           self.irc_channels.discard(n)
           if self.irc:
             self.irc.part(n)
-      elif self.irc:
+      elif self.irc and n not in self.store.data["botacct"]:
         print(f"اشتراك الشات {n}: ❌ {why} ← يشتغل بالـ IRC")
         self.irc_channels.add(n)
         self.irc.join(n)
@@ -2939,9 +3500,10 @@ class Bot:
         self.irc.part(n)
       q = self.queues.pop(n, None)
       if q is not None:
-        q.put_nowait(None)
+        q.put_nowait(None)  # يوقف عامل الإرسال
 
   async def on_revocation(self, sub):
+    """تويتش ألغى الاشتراك: لو الستريمر سحب الصلاحية نوقف المحاولات لين يعيد الربط."""
     status = sub.get("status")
     print(f"تويتش ألغى اشتراك: {status}")
     if status not in ("authorization_revoked", "user_removed"):
@@ -2955,6 +3517,7 @@ class Bot:
   def get_channel(self, name):
     return ChatChannel(self, name) if name in self.store.data["channels"] else None
 
+  # ---------- الإرسال: طابور لكل قناة مع حدود تحمي الحساب من السبام ----------
   async def send_chat(self, channel_name, text):
     if channel_name in self.store.data["banned"]:
       return
@@ -2976,7 +3539,7 @@ class Bot:
         return
       text, queued_at = item
       if time.time() - queued_at > SEND_STALE:
-        continue
+        continue  # رسالة قديمة، ما لها فايدة
       while True:
         now = time.time()
         times = [t for t in times if now - t < SEND_WINDOW]
@@ -2991,6 +3554,7 @@ class Bot:
       if ch in self.store.data["banned"] or ch not in self.store.data["channels"]:
         continue
       times.append(time.time())
+      self.sent_texts[(ch, text[:490])] = time.time()
       try:
         if ch in self.irc_channels and self.irc:
           ok = await self.irc.say(ch, text)
@@ -3009,12 +3573,26 @@ class Bot:
       now = time.time()
       for k in [k for k, v in self.seen.items() if now - v > 600]:
         del self.seen[k]
+      for k in [k for k, v in self.sent_texts.items() if now - v > 120]:
+        del self.sent_texts[k]
+      for k in [k for k, v in self.twitch.sent_ids.items() if now - v > 300]:
+        del self.twitch.sent_ids[k]
       if mid in self.seen:
         return
       self.seen[mid] = now
       who = (ev.get("chatter_user_login") or "").lower()
+      ch = (ev.get("broadcaster_user_login") or "").lower()
       if who == self.nick or who in KNOWN_BOTS:
         return
+      if ev.get("message_id") and ev["message_id"] in self.twitch.sent_ids:
+        return  # رسالة البوت نفسه
+      mine = self.twitch.bot_login(ch)
+      if who == mine:
+        # لو البوت بحساب الستريمر نفسه، رسائل الستريمر اليدوية لازم تمر: نتجاهل بس اللي أرسلها البوت
+        if who != ch:
+          return
+        if (ch, ((ev.get("message") or {}).get("text") or "")[:490]) in self.sent_texts:
+          return
       await self.event_message(ChatMessage(self, ev))
     except Exception as e:
       print(f"خطأ في معالجة رسالة: {e}")
@@ -3043,49 +3621,54 @@ class Bot:
     self.last_saudi_prayer = selected
     return selected
 
+  # ---------- الرسائل المجدولة (أدعية، أذكار، تذكيرات) ----------
+  def timer_text(self, t):
+    if t.get("text"):
+      return t["text"]
+    if t.get("kind") == "saudi":
+      return f"اللهم صلِّ وسلم على نبينا محمد، {self.get_random_saudi_prayer()}"
+    if t.get("kind") == "dhikr":
+      return self.get_random_dhikr()
+    return ""
+
   async def periodic_reminders(self):
-    start_ts = time.time()
     while True:
-      await asyncio.sleep(60)
-      now = time.time()
-      for channel_name in list(self.store.data["channels"]):
-        if not self.store.data["reminders"].get(channel_name, False):
-          continue
-        if not await self.is_channel_live(channel_name):
-          continue
-        channel = self.get_channel(channel_name)
-        if not channel:
-          continue
-        for m in self.store.timers(channel_name):
-          if not m.get("on", True):
-            continue
-          key = (channel_name, m["id"])
-          interval = max(MIN_TIMER_MINUTES, int(m.get("every", 30))) * 60
-          last = self.timer_last.get(key)
-          if last is None:
-            delay = int(m.get("delay", m.get("every", 30))) * 60
-            if now - start_ts < delay:
-              continue
-          elif now - last < interval:
-            continue
-
-          self.timer_last[key] = now
-          kind = m.get("kind", "text")
-          if kind == "saudi":
-            msg_text = f"اللهم صلِّ وسلم على نبينا محمد، {self.get_random_saudi_prayer()}"
-          elif kind == "dhikr":
-            msg_text = self.get_random_dhikr()
-          else:
-            msg_text = m.get("text", "")
-
-          if msg_text:
+      await asyncio.sleep(20)
+      try:
+        now = time.time()
+        seen_keys = set()
+        for ch in list(self.store.data["channels"]):
+          for t in list(self.store.timers(ch)):
+            key = (ch, t["id"])
+            seen_keys.add(key)
             try:
-              await channel.send(msg_text)
-            except Exception as e:
-              print(f"تعذر إرسال التذكير في {channel_name}: {e}")
+              every = max(MIN_TIMER_MINUTES, int(t.get("every", 30))) * 60
+            except (TypeError, ValueError):
+              every = 30 * 60
+            if key not in self.timer_next:
+              self.timer_next[key] = now + (t.get("delay") or every / 60) * 60
+              continue
+            if now < self.timer_next[key]:
+              continue
+            self.timer_next[key] = now + every
+            if not t.get("on", True) or not self.store.data["reminders"].get(ch, False):
+              continue
+            if not await self.is_channel_live(ch):
+              continue
+            text = self.timer_text(t)
+            channel = self.get_channel(ch)
+            if text and channel:
+              try:
+                await channel.send(text[:490])
+              except Exception as e:
+                print(f"تعذر إرسال الرسالة المجدولة في {ch}: {e}")
+        for k in [k for k in self.timer_next if k not in seen_keys]:
+          del self.timer_next[k]
+      except Exception as e:
+        print(f"خطأ في الرسائل المجدولة: {e}")
 
   # ----------------------------------------------------------
-  # الكوماندات
+  # الكوماندات (إدارة + مخصصة)
   # ----------------------------------------------------------
   def lang_of(self, ch):
     return "en" if self.store.data["lang"].get(ch) == "en" else "ar"
@@ -3095,6 +3678,7 @@ class Bot:
     return (en if self.lang_of(ch) == "en" else ar).format(**kw)
 
   async def say(self, message, ch, key, extra="", **kw):
+    """يرد على المستخدم بلغة القناة: عربي «@user نص» أو إنجليزي «@user -> text»."""
     sep = " -> " if self.lang_of(ch) == "en" else " "
     text = self.tr(ch, key, **kw) + (self.tr(ch, extra) if extra else "")
     await message.channel.send(f"@{message.author.name}{sep}{text}"[:490])
@@ -3107,6 +3691,187 @@ class Bot:
     else:
       names = " ".join(disp_cmd(n, cmds[n]) for n in sorted(usable))
       await self.say(message, ch, "cmds_list", n=names)
+
+  async def expand(self, text, ch, cmd):
+    """متغيرات إضافية: $(count) عدد مرات استخدام الكوماند، $(uptime) مدة البث."""
+    if "$(count)" in text:
+      d = self.store.data["counts"].setdefault(ch, {})
+      d[cmd] = d.get(cmd, 0) + 1
+      text = text.replace("$(count)", str(d[cmd]))
+      await self.store.save()
+    if "$(uptime)" in text:
+      si = await self.twitch.stream_info(ch)
+      up = fmt_dur(time.time() - parse_ts(si["started_at"]), self.lang_of(ch)) if si else "—"
+      text = text.replace("$(uptime)", up)
+    return text
+
+  # ---------- كوماندات جاهزة: followage / uptime / أغاني ... ----------
+  async def run_builtin(self, message, cmd, content, ch, level):
+    user = message.author.name
+    lang = self.lang_of(ch)
+    now = time.time()
+
+    async def say(key, extra="", **kw):
+      await self.say(message, ch, key, extra, **kw)
+
+    if cmd not in ("skip", "srclear", "permit"):
+      ck = (ch, cmd, user)
+      if now - self.cmd_cooldown.get(ck, 0) < 8:
+        return True
+      self.cmd_cooldown[ck] = now
+
+    toks = content.split(None, 1)
+    arg = toks[1].strip() if len(toks) > 1 else ""
+    target = arg.split()[0].lstrip("@").lower() if arg else user.lower()
+    me = target == user.lower()
+
+    if cmd == "followage":
+      if target == ch:
+        await say("fa_streamer")
+        return True
+      if me and message.author.uid:
+        uid = message.author.uid
+      else:
+        info = await self.twitch.user_info(target)
+        if not info:
+          await say("no_user", u=target)
+          return True
+        uid = info["id"]
+      at, err = await self.twitch.followed_at(ch, uid)
+      if err == "not_following":
+        await say("fa_none" if me else "fa_none_other", u=target)
+      elif err:
+        await say({"not_linked": "e_not_linked", "refused": "e_refused"}.get(err, "e_expired"))
+      else:
+        d = fmt_dur(now - parse_ts(at), lang)
+        await say("fa" if me else "fa_other", c=ch, d=d, u=target)
+      return True
+
+    if cmd == "accountage":
+      info = await self.twitch.user_info(target)
+      if not info:
+        await say("no_user", u=target)
+        return True
+      d = fmt_dur(now - parse_ts(info.get("created_at", "")), lang)
+      await say("aa" if me else "aa_other", d=d, u=target)
+      return True
+
+    if cmd == "uptime":
+      si = await self.twitch.stream_info(ch)
+      if not si:
+        await say("up_off")
+      else:
+        await say("up", d=fmt_dur(now - parse_ts(si["started_at"]), lang))
+      return True
+
+    if cmd == "game":
+      g, _ = await self.twitch.channel_info(ch)
+      await say("game_now", g=g) if g else await say("game_none")
+      return True
+
+    if cmd == "title":
+      _, t = await self.twitch.channel_info(ch)
+      await say("title_now", t=t) if t else await say("game_none")
+      return True
+
+    if cmd == "permit":
+      if level < PERMS["mod"]:
+        return True
+      who = arg.split()[0].lstrip("@").lower() if arg else ""
+      if not who:
+        await say("permit_usage")
+        return True
+      self.permits[(ch, who)] = now + 60
+      await say("permit_ok", u=who)
+      return True
+
+    # ---------- طلبات الأغاني ----------
+    sr = self.store.sr(ch)
+    if not sr["on"]:
+      await say("sr_off")
+      return True
+    s = self.songs_of(ch)
+
+    if cmd in ("sr", "songrequest"):
+      need = {"everyone": 0, "sub": 1, "vip": 2, "mod": 3}.get(sr["perm"], 0)
+      if level < need:
+        await say("sr_noperm")
+        return True
+      if not arg:
+        await say("sr_usage")
+        return True
+      if len(s["queue"]) >= sr["max_queue"]:
+        await say("sr_full")
+        return True
+      mine = sum(1 for x in s["queue"] if x["by"] == user.lower())
+      if mine >= sr["per_user"] and level < PERMS["mod"]:
+        await say("sr_user_max", n=sr["per_user"])
+        return True
+      vid = yt_id(arg)
+      if not vid:
+        if not YOUTUBE_API_KEY:
+          await say("sr_need_link")
+          return True
+        vid = await yt_search(arg)
+        if not vid:
+          await say("sr_nf")
+          return True
+      if any(x["vid"] == vid for x in s["queue"]) or (s["current"] and s["current"]["vid"] == vid):
+        await say("sr_dup")
+        return True
+      info = await yt_lookup(vid)
+      if not info:
+        await say("sr_nf")
+        return True
+      title, dur = info
+      if dur and sr["max_minutes"] and dur > sr["max_minutes"] * 60:
+        await say("sr_long", n=sr["max_minutes"])
+        return True
+      if len(s["queue"]) >= sr["max_queue"]:
+        await say("sr_full")
+        return True
+      s["queue"].append({"qid": secrets.token_hex(4), "vid": vid, "title": title[:100],
+                         "by": user.lower(), "dur": dur})
+      await say("sr_added", s=title[:80], p=len(s["queue"]))
+      return True
+
+    if cmd == "song":
+      cur = s["current"]
+      await say("song_now", s=cur["title"][:80], u=cur["by"]) if cur else await say("song_none")
+      return True
+
+    if cmd in ("queue", "playlist"):
+      if not s["queue"]:
+        await say("queue_empty")
+      else:
+        nxt = " • ".join(x["title"][:40] for x in s["queue"][:3])
+        await say("queue_list", l=nxt, u=f"{SITE_URL}/c/{ch}" if SITE_URL else "")
+      return True
+
+    if cmd == "skip":
+      if level < PERMS["mod"]:
+        return True
+      self.sr_next(ch)
+      await say("skipped")
+      return True
+
+    if cmd == "srclear":
+      if level < PERMS["mod"]:
+        return True
+      s["queue"].clear()
+      await say("sr_cleared")
+      return True
+
+    if cmd == "wrongsong":
+      for i in range(len(s["queue"]) - 1, -1, -1):
+        if s["queue"][i]["by"] == user.lower():
+          gone = s["queue"].pop(i)
+          await say("wrong_ok", s=gone["title"][:80])
+          return True
+      await say("wrong_none")
+      return True
+
+    return False
 
   async def handle_command(self, message, content, username, channel_name,
                            is_owner, level):
@@ -3123,7 +3888,7 @@ class Bot:
     async def say(key, extra="", **kw):
       await self.say(message, channel_name, key, extra, **kw)
 
-    # ---------- !commands ----------
+    # ---------- !commands: رابط صفحة الكوماندات للجميع ----------
     if cmd == "commands":
       ckey = (channel_name, "!commands")
       now = time.time()
@@ -3136,7 +3901,7 @@ class Bot:
         await self.send_cmd_list(message, channel_name, level)
       return True
 
-    # ---------- !bot ----------
+    # ---------- !bot: تعريف بالبوت (يرد بس لما أحد يسأل، وإذا الستريمر ما سوّى كوماند بنفس الاسم) ----------
     if cmd == "bot" and "bot" not in channel_cmds:
       bkey = (channel_name, "!bot")
       now = time.time()
@@ -3147,7 +3912,7 @@ class Bot:
         await say("bot_info", u=f"{SITE_URL}/s")
       return True
 
-    # ---------- !reminders on/off ----------
+    # ---------- !reminders on/off: الرسائل الدورية ----------
     if cmd == "reminders":
       if not is_mod:
         return True
@@ -3183,6 +3948,7 @@ class Bot:
           await say("del_nf", c=parts[1])
         return True
 
+      # addcmd / editcmd
       if len(parts) < 3:
         await say("usage_add", cmd=cmd)
         return True
@@ -3213,7 +3979,9 @@ class Bot:
         await say("edited", c=disp_cmd(name, channel_cmds[name]))
       return True
 
-    # ---------- !addgame ----------
+    # ---------- !addgame: اختصار يغيّر كاتيقوري البث ----------
+    # مثال: !addgame !f fortnite  ← بعدها !f يغيّر الكاتيقوري إلى Fortnite
+    # أي لعبة أو كاتيقوري موجود في تويتش تنفع (Just Chatting, Valorant, ...)
     if cmd == "addgame":
       if not is_mod:
         return True
@@ -3254,7 +4022,7 @@ class Bot:
                 c=disp_cmd(name, entry), g=game["name"])
       return True
 
-    # ---------- !settitle ----------
+    # ---------- !settitle: تغيير عنوان البث ----------
     if cmd == "settitle":
       if not is_mod:
         return True
@@ -3275,7 +4043,7 @@ class Bot:
         await say("e_" + result, q="")
       return True
 
-    # ---------- كوماندات الأونر ----------
+    # ---------- كوماندات الأونر (إدارة القنوات) ----------
     if cmd in ("addchannel", "removechannel", "channels"):
       if not is_owner:
         return True
@@ -3313,6 +4081,10 @@ class Bot:
         await send(f"{mention} تم حذف القناة {target} ✅")
       return True
 
+    # ---------- كوماندات جاهزة (followage, sr, ...): كوماندات القناة المخصصة تغلب عليها ----------
+    if cmd in NEW_CMDS and cmd not in channel_cmds:
+      return await self.run_builtin(message, cmd, content, channel_name, level)
+
     # ---------- كوماند مخصص ----------
     entry = channel_cmds.get(cmd)
     if entry is None:
@@ -3320,6 +4092,7 @@ class Bot:
     return await self.run_custom(message, cmd, entry, parts, channel_name, level)
 
   async def handle_plain(self, message, content, channel_name, level):
+    """كوماندات بدون !: أول كلمة في الرسالة تطابق اسم الكوماند."""
     parts = content.split(maxsplit=2)
     if not parts:
       return False
@@ -3338,14 +4111,18 @@ class Bot:
 
   async def run_custom(self, message, cmd, entry, parts, channel_name, level):
     send = message.channel.send
+    mention = f"@{message.author.name}"
 
+    # الصلاحية: اللي ما يملكها ما يرد عليه البوت
     if level < PERMS[entry["perm"]]:
       return True
 
     key = (channel_name, cmd)
     now = time.time()
+
     target = parts[1].lstrip("@") if len(parts) > 1 else ""
 
+    # اختصار لعبة: يشتغل حتى لو القناة أوفلاين
     if entry["type"] == "game":
       if now - self.cmd_cooldown.get(key, 0) < COMMAND_COOLDOWN:
         return True
@@ -3359,6 +4136,7 @@ class Bot:
         await self.say(message, channel_name, "e_" + result, q=entry["game"])
       return True
 
+    # الكوماندات العادية ما ترد إلا إذا القناة لايف
     if not await self.is_channel_live(channel_name):
       return True
 
@@ -3367,7 +4145,66 @@ class Bot:
     self.cmd_cooldown[key] = now
     self.count_use(channel_name, cmd)
 
-    await send(format_response(entry["reply"], message.author.name, channel_name, target)[:490])
+    text = format_response(entry["reply"], message.author.name, channel_name, target)
+    text = await self.expand(text, channel_name, cmd)
+    await send(text[:490])
+    return True
+
+  # ----------------------------------------------------------
+  # الحماية من السبام (فلاتر): تحذف الرسالة وتكتم عن طريق حساب البوت
+  # ----------------------------------------------------------
+  async def check_filters(self, message, content, username, ch, level):
+    f = self.store.data["filters"].get(ch)
+    if not f:
+      return False
+    if level >= PERMS["mod"]:
+      return False
+    if level == PERMS["vip"] and f.get("exempt_vip", True):
+      return False
+    if level == PERMS["sub"] and f.get("exempt_sub", True):
+      return False
+
+    now = time.time()
+    low = content.lower()
+    reason = None
+    words = f.get("words") or []
+    if words and any(w in low for w in words):
+      reason = "f_words"
+    elif f.get("links"):
+      urls = URL_RE.findall(content)
+      if urls and self.permits.get((ch, username), 0) < now:
+        allowed = f.get("allowed") or []
+        if not all(any(a in u.lower() for a in allowed) for u in urls):
+          reason = "f_links"
+    if not reason and f.get("repeat") and re.search(r"(\S)\1{9,}", content):
+      reason = "f_repeat"
+    if not reason and f.get("caps"):
+      letters = [c for c in content if c.isascii() and c.isalpha()]
+      if len(letters) >= 10 and sum(c.isupper() for c in letters) / len(letters) > 0.7:
+        reason = "f_caps"
+    if not reason and f.get("symbols"):
+      compact = content.replace(" ", "")
+      if len(compact) >= 12:
+        sym = sum(1 for c in compact if not c.isalnum())
+        if sym / len(compact) > 0.5:
+          reason = "f_symbols"
+    if not reason and f.get("long") and len(content) > 300:
+      reason = "f_long"
+    if not reason:
+      return False
+
+    acted = False
+    if message.id and await self.twitch.delete_message(ch, message.id):
+      acted = True
+    secs = int(f.get("timeout", 10) or 0)
+    if secs > 0 and message.author.uid and await self.twitch.timeout_user(
+        ch, message.author.uid, secs, "spam filter"):
+      acted = True
+    if not acted:
+      return False  # ما عندنا صلاحية نتصرف، نخلي الرسالة تكمل عادي
+    if f.get("warn", True) and now - self.warned.get((ch, username), 0) > 15:
+      self.warned[(ch, username)] = now
+      await message.channel.send(f"@{message.author.name} {self.tr(ch, reason)}")
     return True
 
   # ----------------------------------------------------------
@@ -3385,6 +4222,11 @@ class Bot:
     is_owner = username == OWNER
     level = user_level(message.author, is_owner)
 
+    # الفلاتر أول شي: لو الرسالة مخالفة ما نكمل
+    if await self.check_filters(message, content, username, channel_name, level):
+      return
+
+    # الكوماندات تشتغل حتى للأونر
     if content.startswith("!"):
       if await self.handle_command(
           message, content, username, channel_name, is_owner, level
@@ -3393,6 +4235,7 @@ class Bot:
     elif await self.handle_plain(message, content, channel_name, level):
       return
 
+    # الردود التلقائية: تجاهل المستخدمين المتجاهلين فقط (الأونر يُرد عليه عادي)
     if username in IGNORED_USERS:
       return
 
@@ -3421,30 +4264,27 @@ class Bot:
     has_single_greeting = words[0] in ["السلام", "سلام"]
     has_greeting = has_full_greeting or has_single_greeting
 
-    ch_autos = self.store.autos(channel_name)
-
-    def get_auto(key):
-      cfg = ch_autos.get(key, {})
-      if not cfg.get("on", True):
-        return None
-      txt = cfg.get("text") or AUTO_DEFAULTS[key][1]
-      return format_response(txt, message.author.name, channel_name, "")
-
-    reply_txt = None
     if has_greeting and has_evening:
-      reply_txt = get_auto("both")
+      key = "both"
     elif has_evening:
-      reply_txt = get_auto("evening")
+      key = "evening"
     elif words[0] == "باك":
-      reply_txt = get_auto("back")
+      key = "back"
     elif words[0] in ["brb", "برب"]:
-      reply_txt = get_auto("brb")
+      key = "brb"
     elif has_greeting:
-      reply_txt = get_auto("salam")
+      key = "salam"
+    else:
+      return
 
-    if reply_txt:
-      await send(f"{author_mention} {reply_txt}"[:490])
-      user_reply_time[username] = current_time
+    # الستريمر يقدر يعدل نص الرد أو يحذفه (تعطيله) من موقع الستريمر
+    cfg = self.store.data["autos"].get(channel_name, {}).get(key) or {}
+    if cfg.get("on", True) is False:
+      return
+    text = cfg.get("text") or AUTO_DEFAULTS[key][1]
+    text = format_response(text, message.author.name, channel_name, "")
+    await send(f"{author_mention} {text}"[:490])
+    user_reply_time[username] = current_time
 
 
 if __name__ == "__main__":
