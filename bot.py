@@ -2218,6 +2218,8 @@ html,body{margin:0;height:100%;background:#0b0b10;color:#f1f1f5;font-family:Taja
 #bar b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #bar small{color:#9a9aab}
 button{background:#ec4899;color:#fff;border:0;border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer}
+#volwrap{display:flex;align-items:center;gap:6px;color:#9a9aab}
+#vol{width:90px;accent-color:#ec4899;margin:0}
 </style></head><body>
 <div id="wrap">
   <div id="stage">
@@ -2226,7 +2228,7 @@ button{background:#ec4899;color:#fff;border:0;border-radius:8px;padding:6px 12px
     <div id="msg" hidden></div>
   </div>
   <div id="note" hidden></div>
-  <div id="bar"><span>🎵</span><b id="ttl">...</b><small id="by"></small><button id="sk">⏭</button></div>
+  <div id="bar"><span>🎵</span><b id="ttl">...</b><small id="by"></small><span id="volwrap"><span>🔊</span><input type="range" id="vol" min="0" max="100" step="5" value="100"></span><button id="sk">⏭</button></div>
 </div>
 <script>
 const CH=__CH__,K=__KEY__;
@@ -2270,6 +2272,7 @@ function flush(){
   }else{
     if(!ytReady)return;
     yt.loadVideoById(w.vid);
+    applyVol();
   }
 }
 function ytErr(code){
@@ -2292,8 +2295,8 @@ function ensureApi(src,first){
     if(ytLoading)return;ytLoading=true;
     window.onYouTubeIframeAPIReady=()=>{
       yt=new YT.Player("ytbox",{width:"100%",height:"100%",playerVars:{autoplay:1,rel:0,playsinline:1,origin:location.origin},events:{
-        onReady:()=>{ytReady=true;flush()},
-        onStateChange:e=>{if(e.data===0)next()},
+        onReady:()=>{ytReady=true;applyVol();flush()},
+        onStateChange:e=>{if(e.data===1)applyVol();if(e.data===0)next()},
         onError:e=>ytErr(e.data),
         onAutoplayBlocked:tapMsg
       }});
@@ -2316,9 +2319,10 @@ function apply(s){
   $("by").textContent=c?c.by:"";
   const id=c?c.qid:"";
   if(id===cur)return;
-  cur=id;clearTimeout(tapT);clearTimeout(errT);hideMsg();note("");spStarted=false;lastPos=0;
+  cur=id;volUi();clearTimeout(tapT);clearTimeout(errT);hideMsg();note("");spStarted=false;lastPos=0;
   if(!c){want=null;stopAll();return}
   want={src:c.src||"yt",vid:c.vid,dur:c.dur||0};
+  volUi();
   $("ytwrap").hidden=want.src==="sp";$("spwrap").hidden=want.src!=="sp";
   ensureApi(want.src,want.vid);
   flush();
@@ -2330,6 +2334,16 @@ async function poll(){
     if(!s.current&&s.queue.length)await next();else apply(s);
   }catch(e){}
 }
+let VOL=100;
+try{const v=parseInt(localStorage.getItem("vol"),10);if(v>=0&&v<=100)VOL=v}catch(e){}
+$("vol").value=VOL;
+function applyVol(){try{if(ytReady)yt.setVolume(VOL)}catch(e){}}
+function volUi(){
+  const sp=!!want&&want.src==="sp";
+  $("vol").disabled=sp;$("volwrap").style.opacity=sp?".4":"1";
+  $("volwrap").title=sp?"سبوتيفاي ما يسمح بالتحكم بالصوت من هنا. استخدم مستوى صوت التبويب أو OBS":"";
+}
+$("vol").oninput=()=>{VOL=parseInt($("vol").value,10);try{localStorage.setItem("vol",VOL)}catch(e){}applyVol()};
 $("sk").onclick=next;
 poll();
 setInterval(poll,3000);
