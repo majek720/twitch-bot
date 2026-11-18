@@ -217,10 +217,10 @@ MSG = {
     "no_user": ("ما لقيت مستخدم باسم {u}", "I couldn't find a user named {u}"),
     # طلبات الأغاني
     "sr_off": ("طلبات الأغاني مو مفعّلة في هذي القناة", "Song requests aren't enabled in this channel"),
-    "sr_usage": ("الصيغة: !sr رابط يوتيوب أو سبوتيفاي أو اسم الأغنية", "Usage: !sr YouTube/Spotify link or song name"),
-    "sr_need_link": ("اكتب رابط أغنية من يوتيوب أو سبوتيفاي", "Please send a YouTube or Spotify song link"),
-    "sr_sp_type": ("أرسل رابط أغنية وحدة من سبوتيفاي (مو ألبوم ولا بلايليست)",
-                   "Please send a single Spotify track link (not an album or playlist)"),
+    "sr_usage": ("الصيغة: !sr رابط يوتيوب أو اسم الأغنية", "Usage: !sr YouTube link or song name"),
+    "sr_need_link": ("اكتب رابط أغنية من يوتيوب", "Please send a YouTube song link"),
+    "sr_sp_type": ("أغاني سبوتيفاي حالياً ما تشتغل، استخدم رابط يوتيوب أو اسم الأغنية",
+                   "Spotify songs currently don't work. Use a YouTube link or the song name"),
     "sr_nf": ("ما لقيت الأغنية أو ما تنفع", "I couldn't find that song or it can't be played"),
     "sr_full": ("الطابور ممتلئ", "The queue is full"),
     "sr_user_max": ("وصلت الحد الأقصى من الطلبات ({n})", "You've reached the request limit ({n})"),
@@ -1598,7 +1598,7 @@ main{flex:1;min-width:0}
               <option value="mod">المودات فقط</option>
             </select>
             <button class="btn" id="sr-save">حفظ الإعدادات</button>
-            <p class="hint" id="sr-nokey" style="margin:10px 0 0" hidden>البحث بالاسم والحد الأقصى للمدة يحتاجون SPOTIFY_CLIENT_ID وSPOTIFY_CLIENT_SECRET (لسبوتيفاي) أو YOUTUBE_API_KEY (ليوتيوب) في Render. بدونها تشتغل الروابط فقط.</p>
+            <p class="hint" id="sr-nokey" style="margin:10px 0 0" hidden>البحث بالاسم والحد الأقصى للمدة يحتاجون YOUTUBE_API_KEY في Render. بدونه تشتغل روابط يوتيوب فقط.</p>
           </div>
           <div class="panel" style="margin-bottom:14px">
             <h3>مشغّل الأغاني</h3>
@@ -1610,7 +1610,7 @@ main{flex:1;min-width:0}
             </div>
             <div class="tool" style="margin-top:12px"><button class="btn sm" id="sr-play">▶ تشغيل الأغاني من الموقع</button></div>
             <p class="hint" style="margin:6px 0 0">يشغّل الأغاني هنا داخل الموقع نفسه. لا تشغّل مشغّل ثاني (مثل OBS) بنفس الوقت وإلا بيشتغلون مرتين.</p>
-            <p class="hint" style="margin:6px 0 0">أغاني سبوتيفاي تشتغل كاملة بس في متصفح كمبيوتر مسجّل فيه حساب Spotify Premium. غير كذا (جوال أو OBS أو بدون تسجيل دخول) تشتغل مقاطع 30 ثانية.</p>
+            <p class="hint" style="margin:6px 0 0">⚠️ أغاني سبوتيفاي حالياً ما تشتغل. استخدم روابط يوتيوب أو اسم الأغنية.</p>
             <div id="srplayer" hidden style="margin-top:12px;border:1px solid #1c2438;border-radius:12px;overflow:hidden"></div>
           </div>
           <div class="panel">
@@ -1740,8 +1740,8 @@ Object.assign(EN,{
 });
 for(const k in EN)AR[EN[k]]=k;
 let ME=null,CH=null,PG="ov",FILT="all",Q="";
-Object.assign(EN,{"تشتغل مباشرة بدون إضافة. وإذا سوّيت كوماند بنفس الاسم يشتغل كوماندك بدلها": "These work out of the box. If you create a command with the same name, yours replaces the built-in one", "أدعية وأذكار وتذكيرات تنكتب تلقائياً بالفاصل اللي تحدده. تقدر تعدل الافتراضية أو تحذفها وتضيف رسائلك.": "Prayers, adhkar and reminders are posted automatically at the interval you set. You can edit the defaults or delete them and add your own messages.", "مثال: اللهم صلِّ وسلم على نبينا محمد": "Example: Peace and blessings upon our Prophet Muhammad", "اتركه فاضي وتبقى الرسالة تختار عشوائي من القائمة الجاهزة، أو اكتب نص خاص فيه عشان يستبدلها.": "Leave it empty and the message picks at random from the ready-made list, or write your own text to replace it.", "ردود البوت على السلام ومساء الخير وباك وبرب. تقدر تعدل النص أو تحذف الرد. الرد يبدأ دائماً بمنشن للمشاهد، وتقدر تستخدم $(user).": "Bot replies to salam, good evening, back and brb. You can edit the text or delete the reply. The reply always starts by mentioning the viewer, and you can use $(user).", "المشاهدين يطلبون أغاني من يوتيوب أو سبوتيفاي بالشات: !sr رابط أو اسم الأغنية": "Viewers request songs from YouTube or Spotify in chat: !sr link or song name", "أقصى طلبات لكل مشاهد": "Max requests per viewer", "أقصى طول للطابور": "Max queue length", "أقصى مدة للأغنية (دقائق)": "Max song length (minutes)", "مين يقدر يطلب؟": "Who can request?", "البحث بالاسم والحد الأقصى للمدة يحتاجون SPOTIFY_CLIENT_ID وSPOTIFY_CLIENT_SECRET (لسبوتيفاي) أو YOUTUBE_API_KEY (ليوتيوب) في Render. بدونها تشتغل الروابط فقط.": "Searching by name and the max length limit need SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET (for Spotify) or YOUTUBE_API_KEY (for YouTube) in Render. Without them only links work.", "افتح الرابط في تبويب، أو حطه Browser Source في OBS. لا تشاركه مع أحد.": "Open the link in a tab, or use it as a Browser Source in OBS. Don't share it with anyone.", "🔗 منع الروابط": "🔗 Block links", "🔠 منع الحروف الكبيرة الكثيرة (إنجليزي)": "🔠 Block excessive capital letters (English)", "⚠️ منع الرموز الكثيرة": "⚠️ Block excessive symbols", "🔁 منع تكرار الحرف الواحد (مثل: هههههههههه)": "🔁 Block repeated characters (e.g. hahahahaha)", "📏 منع الرسائل الطويلة (فوق 300 حرف)": "📏 Block long messages (over 300 characters)", "كلمات ممنوعة (كلمة أو جملة في كل سطر)": "Banned words (a word or phrase per line)", "روابط مسموحة (دومين في كل سطر، مثل: youtube.com)": "Allowed links (one domain per line, e.g. youtube.com)", "مدة الكتم بالثواني (0 = حذف الرسالة فقط)": "Timeout duration in seconds (0 = delete the message only)", "أرسل تنبيه للمشاهد المخالف": "Send a warning to the offending viewer", "استثناء المشتركين من الفلاتر": "Exempt subscribers from the filters", "استثناء الـ VIP من الفلاتر": "Exempt VIPs from the filters", "المودات والستريمر مستثنون دائماً. والمود يقدر يسمح لشخص بروابط لمدة دقيقة بـ !permit اسم_المشاهد": "Mods and the streamer are always exempt. A mod can allow someone to post links for a minute with !permit viewer_name", "الحساب اللي يكتب فيه البوت بقناتك:": "The account the bot writes with in your channel:", "«حسابي أنا»: البوت يكتب باسمك. «حساب ثاني»: سجّل دخول بحساب البوت اللي تبيه (حساب جديد تسوّيه للبوت أحسن) ووافق على الصلاحيات. بعدها يستقبل ويرد البوت بهذا الحساب بقناتك فقط.": "“My account”: the bot writes under your name. “Another account”: log in with the bot account you want (a new account made for the bot is better) and approve the permissions. After that the bot reads and replies with this account in your channel only.", "ترجع الرسائل المجدولة الافتراضية؟ الرسائل اللي أضفتها تنحذف.": "Reset the default scheduled messages? The messages you added will be deleted.", "تم ربط حساب البوت ✅": "Bot account linked ✅", "لازم تدخل بنفس حسابك": "You need to log in with your own account", "اكتب المدة بالدقائق": "Enter the duration in minutes", "اكتب نص الرسالة": "Enter the message text", "الرسالة ما تبدأ بـ / أو .": "The message can't start with / or .", "وصلت الحد الأقصى للرسائل المجدولة": "You've reached the maximum number of scheduled messages", "▶ تشغيل الأغاني من الموقع": "▶ Play songs on the site", "⏹ إيقاف المشغّل": "⏹ Stop the player", "تشغيل الآن": "Play now", "يشغّل الأغاني هنا داخل الموقع نفسه. لا تشغّل مشغّل ثاني (مثل OBS) بنفس الوقت وإلا بيشتغلون مرتين.": "Plays the songs right here on the site. Don't run another player (like OBS) at the same time or songs will play twice."});
-Object.assign(EN,{"أغاني سبوتيفاي تشتغل كاملة بس في متصفح كمبيوتر مسجّل فيه حساب Spotify Premium. غير كذا (جوال أو OBS أو بدون تسجيل دخول) تشتغل مقاطع 30 ثانية.":"Spotify songs play in full only in a desktop browser where a Spotify Premium account is logged in. Otherwise (mobile, OBS, or not logged in) only 30-second previews play."});
+Object.assign(EN,{"تشتغل مباشرة بدون إضافة. وإذا سوّيت كوماند بنفس الاسم يشتغل كوماندك بدلها": "These work out of the box. If you create a command with the same name, yours replaces the built-in one", "أدعية وأذكار وتذكيرات تنكتب تلقائياً بالفاصل اللي تحدده. تقدر تعدل الافتراضية أو تحذفها وتضيف رسائلك.": "Prayers, adhkar and reminders are posted automatically at the interval you set. You can edit the defaults or delete them and add your own messages.", "مثال: اللهم صلِّ وسلم على نبينا محمد": "Example: Peace and blessings upon our Prophet Muhammad", "اتركه فاضي وتبقى الرسالة تختار عشوائي من القائمة الجاهزة، أو اكتب نص خاص فيه عشان يستبدلها.": "Leave it empty and the message picks at random from the ready-made list, or write your own text to replace it.", "ردود البوت على السلام ومساء الخير وباك وبرب. تقدر تعدل النص أو تحذف الرد. الرد يبدأ دائماً بمنشن للمشاهد، وتقدر تستخدم $(user).": "Bot replies to salam, good evening, back and brb. You can edit the text or delete the reply. The reply always starts by mentioning the viewer, and you can use $(user).", "المشاهدين يطلبون أغاني من يوتيوب أو سبوتيفاي بالشات: !sr رابط أو اسم الأغنية": "Viewers request songs from YouTube or Spotify in chat: !sr link or song name", "أقصى طلبات لكل مشاهد": "Max requests per viewer", "أقصى طول للطابور": "Max queue length", "أقصى مدة للأغنية (دقائق)": "Max song length (minutes)", "مين يقدر يطلب؟": "Who can request?", "البحث بالاسم والحد الأقصى للمدة يحتاجون YOUTUBE_API_KEY في Render. بدونه تشتغل روابط يوتيوب فقط.": "Searching by name and the max length limit need YOUTUBE_API_KEY in Render. Without it only YouTube links work.", "افتح الرابط في تبويب، أو حطه Browser Source في OBS. لا تشاركه مع أحد.": "Open the link in a tab, or use it as a Browser Source in OBS. Don't share it with anyone.", "🔗 منع الروابط": "🔗 Block links", "🔠 منع الحروف الكبيرة الكثيرة (إنجليزي)": "🔠 Block excessive capital letters (English)", "⚠️ منع الرموز الكثيرة": "⚠️ Block excessive symbols", "🔁 منع تكرار الحرف الواحد (مثل: هههههههههه)": "🔁 Block repeated characters (e.g. hahahahaha)", "📏 منع الرسائل الطويلة (فوق 300 حرف)": "📏 Block long messages (over 300 characters)", "كلمات ممنوعة (كلمة أو جملة في كل سطر)": "Banned words (a word or phrase per line)", "روابط مسموحة (دومين في كل سطر، مثل: youtube.com)": "Allowed links (one domain per line, e.g. youtube.com)", "مدة الكتم بالثواني (0 = حذف الرسالة فقط)": "Timeout duration in seconds (0 = delete the message only)", "أرسل تنبيه للمشاهد المخالف": "Send a warning to the offending viewer", "استثناء المشتركين من الفلاتر": "Exempt subscribers from the filters", "استثناء الـ VIP من الفلاتر": "Exempt VIPs from the filters", "المودات والستريمر مستثنون دائماً. والمود يقدر يسمح لشخص بروابط لمدة دقيقة بـ !permit اسم_المشاهد": "Mods and the streamer are always exempt. A mod can allow someone to post links for a minute with !permit viewer_name", "الحساب اللي يكتب فيه البوت بقناتك:": "The account the bot writes with in your channel:", "«حسابي أنا»: البوت يكتب باسمك. «حساب ثاني»: سجّل دخول بحساب البوت اللي تبيه (حساب جديد تسوّيه للبوت أحسن) ووافق على الصلاحيات. بعدها يستقبل ويرد البوت بهذا الحساب بقناتك فقط.": "“My account”: the bot writes under your name. “Another account”: log in with the bot account you want (a new account made for the bot is better) and approve the permissions. After that the bot reads and replies with this account in your channel only.", "ترجع الرسائل المجدولة الافتراضية؟ الرسائل اللي أضفتها تنحذف.": "Reset the default scheduled messages? The messages you added will be deleted.", "تم ربط حساب البوت ✅": "Bot account linked ✅", "لازم تدخل بنفس حسابك": "You need to log in with your own account", "اكتب المدة بالدقائق": "Enter the duration in minutes", "اكتب نص الرسالة": "Enter the message text", "الرسالة ما تبدأ بـ / أو .": "The message can't start with / or .", "وصلت الحد الأقصى للرسائل المجدولة": "You've reached the maximum number of scheduled messages", "▶ تشغيل الأغاني من الموقع": "▶ Play songs on the site", "⏹ إيقاف المشغّل": "⏹ Stop the player", "تشغيل الآن": "Play now", "يشغّل الأغاني هنا داخل الموقع نفسه. لا تشغّل مشغّل ثاني (مثل OBS) بنفس الوقت وإلا بيشتغلون مرتين.": "Plays the songs right here on the site. Don't run another player (like OBS) at the same time or songs will play twice."});
+Object.assign(EN,{"⚠️ أغاني سبوتيفاي حالياً ما تشتغل. استخدم روابط يوتيوب أو اسم الأغنية.":"⚠️ Spotify songs currently don't work. Use YouTube links or the song name."});
 for(const k in EN)AR[EN[k]]=k;
 const TITLES={ov:"الرئيسية",cmd:"الكوماندات",auto:"الرسائل التلقائية",songs:"طلبات الأغاني",spam:"الحماية من السبام",bot:"حساب البوت",mods:"المودات",set:"الإعدادات"};
 const COLORS={ov:"#9146ff",cmd:"#3b82f6",auto:"#f59e0b",songs:"#ec4899",spam:"#ef4444",bot:"#14b8a6",mods:"#22c55e",set:"#94a3b8"};
@@ -1959,7 +1959,7 @@ function renderSongs(){
   const c=CH,s=c.sr,q=c.songs;
   document.querySelectorAll(".srchip").forEach(x=>x.classList.toggle("on",x.dataset.sr===(s.on?"on":"off")));
   $("#sr-user").value=s.per_user;$("#sr-queue").value=s.max_queue;$("#sr-min").value=s.max_minutes;$("#sr-perm").value=s.perm;
-  $("#sr-nokey").hidden=!!(c.yt_key||c.sp_key);
+  $("#sr-nokey").hidden=!!c.yt_key;
   const url=location.origin+c.player_path;
   $("#sr-playerurl").value=url;$("#sr-open").href=url;
   renderQueue();
@@ -2207,11 +2207,8 @@ PLAYER_HTML = r"""<!DOCTYPE html>
 html,body{margin:0;height:100%;background:#0b0b10;color:#f1f1f5;font-family:Tajawal,system-ui,sans-serif}
 #wrap{display:flex;flex-direction:column;height:100%}
 #stage{flex:1;min-height:0;position:relative;background:#000}
-#ytwrap,#spwrap{position:absolute;inset:0}
+#ytwrap{position:absolute;inset:0}
 #ytwrap iframe{width:100%;height:100%;border:0;display:block}
-#spwrap{display:flex;align-items:center;justify-content:center;background:#121212}
-#spslot{width:100%;max-width:640px;padding:0 8px;box-sizing:border-box}
-#spslot iframe{width:100%;border:0;display:block}
 #msg{position:absolute;inset:0;z-index:5;display:grid;place-items:center;background:rgba(0,0,0,.72);color:#fff;font-size:18px;text-align:center;padding:16px;cursor:pointer}
 #note{padding:6px 14px;background:#3a2a05;color:#fcd34d;font-size:13px}
 #bar{padding:10px 14px;background:#18181f;border-top:3px solid #ec4899;font-size:15px;display:flex;gap:10px;align-items:center}
@@ -2224,7 +2221,6 @@ button{background:#ec4899;color:#fff;border:0;border-radius:8px;padding:6px 12px
 <div id="wrap">
   <div id="stage">
     <div id="ytwrap"><div id="ytbox"></div></div>
-    <div id="spwrap" hidden><div id="spslot"><div id="spbox"></div></div></div>
     <div id="msg" hidden></div>
   </div>
   <div id="note" hidden></div>
@@ -2236,7 +2232,6 @@ const $=id=>document.getElementById(id);
 const url=p=>"/player/api/"+encodeURIComponent(CH)+"/"+p+"?k="+encodeURIComponent(K);
 let cur="",want=null,busy=false,tapT=null,errT=null;
 let yt=null,ytReady=false,ytLoading=false;
-let spc=null,spReady=false,spLoading=false,spLoaded="",spStarted=false,lastPos=0;
 function note(t){const n=$("note");n.textContent=t||"";n.hidden=!t}
 function showMsg(t,fn){const m=$("msg");m.textContent=t;m.hidden=false;m.onclick=fn||null}
 function hideMsg(){$("msg").hidden=true}
@@ -2250,68 +2245,40 @@ async function next(){
 }
 function retry(){
   if(!want)return;
-  try{want.src==="sp"?spc.play():yt.playVideo()}catch(e){}
+  try{yt.playVideo()}catch(e){}
 }
 function tapMsg(){showMsg("▶ اضغط هنا لتشغيل الصوت",()=>{hideMsg();retry()})}
 function checkStarted(){
   if(!want)return;
   let ok=false;
-  try{ok=want.src==="sp"?spStarted:(ytReady&&[1,3].indexOf(yt.getPlayerState())>=0)}catch(e){}
+  try{ok=(ytReady&&[1,3].indexOf(yt.getPlayerState())>=0)}catch(e){}
   if(!ok)tapMsg();
 }
 function stopAll(){
   try{if(ytReady)yt.stopVideo()}catch(e){}
-  try{if(spReady)spc.pause()}catch(e){}
 }
 function flush(){
   const w=want;if(!w)return;
-  if(w.src==="sp"){
-    if(!spReady)return;
-    if(spLoaded!==w.vid){spLoaded=w.vid;spc.loadUri("spotify:track:"+w.vid)}
-    setTimeout(()=>{if(want===w)try{spc.play()}catch(e){}},800);
-  }else{
-    if(!ytReady)return;
-    yt.loadVideoById(w.vid);
-    applyVol();
-  }
+  if(!ytReady)return;
+  yt.loadVideoById(w.vid);
+  applyVol();
 }
 function ytErr(code){
   const why={2:"رابط غير صالح",5:"خطأ في المشغّل",100:"الفيديو محذوف أو خاص",101:"صاحب الفيديو منع تشغيله خارج يوتيوب",150:"صاحب الفيديو منع تشغيله خارج يوتيوب",153:"يوتيوب رفض التضمين"}[code]||"خطأ";
   showMsg("⚠️ "+why+" ("+code+") — بنتخطى الأغنية");
   clearTimeout(errT);errT=setTimeout(next,2500);
 }
-function ensureApi(src,first){
-  if(src==="sp"){
-    if(spLoading)return;spLoading=true;
-    window.onSpotifyIframeApiReady=A=>{
-      A.createController($("spbox"),{width:"100%",height:152,uri:"spotify:track:"+first},c=>{
-        spc=c;spReady=true;spLoaded=first;
-        c.addListener("playback_update",onSp);
-        flush();
-      });
-    };
-    loadScript("https://open.spotify.com/embed/iframe-api/v1",()=>showMsg("تعذر تحميل مشغّل سبوتيفاي"));
-  }else{
-    if(ytLoading)return;ytLoading=true;
-    window.onYouTubeIframeAPIReady=()=>{
-      yt=new YT.Player("ytbox",{width:"100%",height:"100%",playerVars:{autoplay:1,rel:0,playsinline:1,origin:location.origin},events:{
-        onReady:()=>{ytReady=true;applyVol();flush()},
-        onStateChange:e=>{if(e.data===1)applyVol();if(e.data===0)next()},
-        onError:e=>ytErr(e.data),
-        onAutoplayBlocked:tapMsg
-      }});
-    };
-    loadScript("https://www.youtube.com/iframe_api",()=>showMsg("تعذر تحميل مشغّل يوتيوب"));
-  }
-}
-function onSp(e){
-  const d=e.data||{},pos=d.position||0,dur=d.duration||0;
-  if(!d.isPaused&&!d.isBuffering&&pos>0&&!spStarted){
-    spStarted=true;clearTimeout(tapT);hideMsg();
-    if(want&&dur>0&&dur<=31000&&(!want.dur||want.dur>45))note("⚠️ مقطع 30 ثانية فقط: سجّل دخول Spotify Premium في نفس المتصفح (كمبيوتر) عشان تشتغل كاملة");
-  }
-  if(spStarted&&d.isPaused&&dur>0&&(pos>=dur-1500||(pos===0&&lastPos>=dur-3000))){spStarted=false;next()}
-  lastPos=pos;
+function ensureApi(){
+  if(ytLoading)return;ytLoading=true;
+  window.onYouTubeIframeAPIReady=()=>{
+    yt=new YT.Player("ytbox",{width:"100%",height:"100%",playerVars:{autoplay:1,rel:0,playsinline:1,origin:location.origin},events:{
+      onReady:()=>{ytReady=true;applyVol();flush()},
+      onStateChange:e=>{if(e.data===1)applyVol();if(e.data===0)next()},
+      onError:e=>ytErr(e.data),
+      onAutoplayBlocked:tapMsg
+    }});
+  };
+  loadScript("https://www.youtube.com/iframe_api",()=>showMsg("تعذر تحميل مشغّل يوتيوب"));
 }
 function apply(s){
   const c=s.current;
@@ -2319,12 +2286,11 @@ function apply(s){
   $("by").textContent=c?c.by:"";
   const id=c?c.qid:"";
   if(id===cur)return;
-  cur=id;volUi();clearTimeout(tapT);clearTimeout(errT);hideMsg();note("");spStarted=false;lastPos=0;
+  cur=id;volUi();clearTimeout(tapT);clearTimeout(errT);hideMsg();note("");
   if(!c){want=null;stopAll();return}
-  want={src:c.src||"yt",vid:c.vid,dur:c.dur||0};
-  volUi();
-  $("ytwrap").hidden=want.src==="sp";$("spwrap").hidden=want.src!=="sp";
-  ensureApi(want.src,want.vid);
+  if(c.src==="sp"){want=null;stopAll();showMsg("⚠️ أغاني سبوتيفاي ما تشتغل — بنتخطى الأغنية");errT=setTimeout(next,2500);return}
+  want={src:"yt",vid:c.vid,dur:c.dur||0};
+  ensureApi();
   flush();
   tapT=setTimeout(checkStarted,7000);
 }
@@ -2338,11 +2304,7 @@ let VOL=100;
 try{const v=parseInt(localStorage.getItem("vol"),10);if(v>=0&&v<=100)VOL=v}catch(e){}
 $("vol").value=VOL;
 function applyVol(){try{if(ytReady)yt.setVolume(VOL)}catch(e){}}
-function volUi(){
-  const sp=!!want&&want.src==="sp";
-  $("vol").disabled=sp;$("volwrap").style.opacity=sp?".4":"1";
-  $("volwrap").title=sp?"سبوتيفاي ما يسمح بالتحكم بالصوت من هنا. استخدم مستوى صوت التبويب أو OBS":"";
-}
+function volUi(){}
 $("vol").oninput=()=>{VOL=parseInt($("vol").value,10);try{localStorage.setItem("vol",VOL)}catch(e){}applyVol()};
 $("sk").onclick=next;
 poll();
@@ -2496,115 +2458,13 @@ async def yt_search(q):
     return None
 
 
-SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID", "").strip()
-SPOTIFY_CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET", "").strip()
-SPOTIFY_ENABLED = bool(SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET)  # اختياري: للبحث بالاسم ومدة الأغنية
-_INTL = r"(?:intl-[a-z]{2}(?:-[a-z]{2,4})?/)?"
-SP_TRACK_RE = re.compile(
-    r"(?:open\.spotify\.com/" + _INTL + r"(?:embed/)?track/|spotify:track:)([A-Za-z0-9]{22})")
-SP_OTHER_RE = re.compile(
-    r"open\.spotify\.com/" + _INTL + r"(?:album|playlist|artist|show|episode)/"
-    r"|spotify:(?:album|playlist|artist|show|episode):")
-SP_SHORT_RE = re.compile(r"https?://(?:spotify\.link|spotify\.app\.link)/[A-Za-z0-9_-]+")
-_sp_tok = {"t": None, "exp": 0}
-_SP_TIMEOUT = aiohttp.ClientTimeout(total=8)
+SP_ANY_RE = re.compile(
+    r"open\.spotify\.com/|spotify:(?:track|album|playlist|artist|show|episode):"
+    r"|https?://(?:spotify\.link|spotify\.app\.link)/", re.I)
 
 
-async def sp_token():
-  """توكن التطبيق (Client Credentials) للبحث وتفاصيل الأغنية. None لو ما فيه مفاتيح."""
-  if not SPOTIFY_ENABLED:
-    return None
-  if _sp_tok["t"] and time.time() < _sp_tok["exp"] - 60:
-    return _sp_tok["t"]
-  try:
-    async with aiohttp.ClientSession(timeout=_SP_TIMEOUT) as s:
-      async with s.post("https://accounts.spotify.com/api/token",
-                        data={"grant_type": "client_credentials"},
-                        auth=aiohttp.BasicAuth(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)) as r:
-        d = await r.json()
-    if d.get("access_token"):
-      _sp_tok["t"] = d["access_token"]
-      _sp_tok["exp"] = time.time() + d.get("expires_in", 3600)
-      return _sp_tok["t"]
-    print(f"سبوتيفاي رفض المفاتيح: {d}")
-  except Exception as e:
-    print(f"خطأ توكن سبوتيفاي: {e}")
-  return None
-
-
-async def sp_follow_short(link):
-  """يفتح روابط spotify.link القصيرة ويرجع (الرابط النهائي، نص الصفحة)."""
-  try:
-    async with aiohttp.ClientSession(timeout=_SP_TIMEOUT) as s:
-      async with s.get(link, allow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}) as r:
-        body = (await r.text())[:300000]
-        return str(r.url), body
-  except Exception as e:
-    print(f"خطأ رابط سبوتيفاي القصير: {e}")
-    return "", ""
-
-
-async def sp_parse(text):
-  """يرجع معرّف الأغنية، أو "other" لو الرابط مو أغنية (ألبوم/بلايليست...)، أو None لو مو رابط سبوتيفاي."""
-  m = SP_TRACK_RE.search(text)
-  if m:
-    return m.group(1)
-  sh = SP_SHORT_RE.search(text)
-  if sh:
-    final, body = await sp_follow_short(sh.group(0))
-    m = SP_TRACK_RE.search(final) or SP_TRACK_RE.search(body)
-    return m.group(1) if m else "other"
-  if SP_OTHER_RE.search(text):
-    return "other"
-  return None
-
-
-async def sp_lookup(tid):
-  """يرجع (العنوان، المدة بالثواني أو None) أو None لو الأغنية ما تنفع."""
-  tok = await sp_token()
-  try:
-    async with aiohttp.ClientSession(timeout=_SP_TIMEOUT) as s:
-      if tok:
-        async with s.get(f"https://api.spotify.com/v1/tracks/{tid}",
-                         headers={"Authorization": f"Bearer {tok}"}) as r:
-          if r.status == 200:
-            d = await r.json()
-            name = d.get("name") or tid
-            artists = ", ".join(a.get("name", "") for a in (d.get("artists") or []) if a.get("name"))
-            ms = d.get("duration_ms")
-            return (f"{artists} - {name}" if artists else name), (int(ms // 1000) if ms else None)
-          if r.status == 404:
-            return None
-      async with s.get("https://open.spotify.com/oembed",
-                       params={"url": f"https://open.spotify.com/track/{tid}"}) as r:
-        if r.status != 200:
-          return None
-        d = await r.json()
-        return (d.get("title") or tid), None
-  except Exception as e:
-    print(f"خطأ تفاصيل سبوتيفاي: {e}")
-    return None
-
-
-async def sp_search(q):
-  """يبحث بالاسم في سبوتيفاي ويرجع معرّف أول أغنية (يحتاج SPOTIFY_CLIENT_ID/SECRET)."""
-  tok = await sp_token()
-  if not tok:
-    return None
-  try:
-    async with aiohttp.ClientSession(timeout=_SP_TIMEOUT) as s:
-      async with s.get("https://api.spotify.com/v1/search",
-                       params={"q": q[:100], "type": "track", "limit": 5},
-                       headers={"Authorization": f"Bearer {tok}"}) as r:
-        if r.status != 200:
-          print(f"بحث سبوتيفاي رجّع {r.status}")
-          return None
-        d = await r.json()
-    items = (d.get("tracks") or {}).get("items") or []
-    return items[0]["id"] if items else None
-  except Exception as e:
-    print(f"خطأ بحث سبوتيفاي: {e}")
-    return None
+def is_spotify(text):
+  return bool(SP_ANY_RE.search(text))
 
 
 def player_key(ch):
@@ -3088,7 +2948,6 @@ def make_web_app(bot):
         "sr": {k: sr[k] for k in SR_DEFAULT},
         "songs": bot.sr_view(ch),
         "yt_key": bool(YOUTUBE_API_KEY),
-        "sp_key": SPOTIFY_ENABLED,
         "player_path": f"/player/{ch}?k={player_key(ch)}" if own else "",
         "filters": {k: f[k] for k in FILTER_DEFAULT},
         "mod_ready": bool((acct or store.data["bot_auth"]).get("refresh")),
@@ -4063,29 +3922,15 @@ class Bot:
       if mine >= sr["per_user"] and level < PERMS["mod"]:
         await say("sr_user_max", n=sr["per_user"])
         return True
-      src, vid = None, None
-      sp = await sp_parse(arg)
-      if sp == "other":
+      if is_spotify(arg):
         await say("sr_sp_type")
         return True
-      if sp:
-        src, vid = "sp", sp
-      else:
-        vid = yt_id(arg)
-        if vid:
-          src = "yt"
-        elif re.match(r"https?://", arg.strip(), re.I):
+      src, vid = "yt", yt_id(arg)
+      if not vid:
+        if re.match(r"https?://", arg.strip(), re.I) or not YOUTUBE_API_KEY:
           await say("sr_need_link")
           return True
-        elif SPOTIFY_ENABLED:
-          src, vid = "sp", await sp_search(arg)
-          if not vid and YOUTUBE_API_KEY:
-            src, vid = "yt", await yt_search(arg)
-        elif YOUTUBE_API_KEY:
-          src, vid = "yt", await yt_search(arg)
-        else:
-          await say("sr_need_link")
-          return True
+        vid = await yt_search(arg)
         if not vid:
           await say("sr_nf")
           return True
@@ -4096,7 +3941,7 @@ class Bot:
       if any(same(x) for x in s["queue"]) or (s["current"] and same(s["current"])):
         await say("sr_dup")
         return True
-      info = await (sp_lookup(vid) if src == "sp" else yt_lookup(vid))
+      info = await yt_lookup(vid)
       if not info:
         await say("sr_nf")
         return True
