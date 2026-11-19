@@ -15,6 +15,10 @@ from urllib.parse import urlencode
 import aiohttp
 from aiohttp import web
 
+# رقم نسخة السيرفر: يتغير مع كل نشر/إعادة تشغيل. كل صفحة تحمل رقم النسخة اللي انفتحت منها
+# وتقارنه برقم السيرفر الحالي، وإذا السيرفر أحدث تتحدث لحالها فوراً.
+BUILD_ID = str(int(time.time()))
+
 # يخلي اللوقز تطلع فوراً في Render (بدون ما تنحبس في الذاكرة)
 try:
   sys.stdout.reconfigure(line_buffering=True)
@@ -2339,17 +2343,63 @@ HEAD = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0d0720">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="application-name" content="majek bot">
+<meta name="apple-mobile-web-app-title" content="majek bot">
 <link rel="manifest" href="/manifest.json">
 <script>
 if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();window.__bip=e});
+(function(){
+  // تحديث فوري: لو السيرفر عنده نسخة أحدث من اللي فتحت منها الصفحة، تتحدث الصفحة لحالها
+  const V0=Number("{{BUILD}}"),p=location.pathname;
+  const fast=p==="/"||p.indexOf("/s")===0||(window.matchMedia&&matchMedia("(display-mode: standalone)").matches);
+  const en=()=>{try{return localStorage.getItem("lang")==="en"}catch(e){return false}};
+  let busy=false;
+  const typing=()=>{const a=document.activeElement;return !!(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.value)};
+  function run(){
+    try{if(navigator.serviceWorker)navigator.serviceWorker.getRegistration().then(r=>r&&r.update()).catch(()=>{})}catch(e){}
+    location.reload();
+  }
+  function banner(txt,withBtn){
+    const d=document.createElement("div");
+    d.style.cssText="position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:99999;background:#7c3aed;color:#fff;padding:12px 18px;border-radius:14px;font:700 14px Tajawal,system-ui,sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;gap:12px;align-items:center";
+    d.innerHTML="<span>"+txt+"</span>"+(withBtn?"<button style=\"background:#fff;color:#4c1d95;border:0;border-radius:9px;padding:6px 14px;font:inherit;cursor:pointer\">"+(en()?"Update now":"تحديث الآن")+"</button>":"");
+    const b=d.querySelector("button");if(b)b.onclick=run;
+    (document.body||document.documentElement).appendChild(d);
+  }
+  function go(){
+    if(busy)return;busy=true;
+    if(typing()){
+      // المستخدم يكتب شي: ما نضيّعه، نحدّث أول ما يطلع من الحقل
+      banner(en()?"New update available":"فيه تحديث جديد",true);
+      document.addEventListener("focusout",()=>setTimeout(()=>{if(!typing())run()},1200));
+    }else{
+      banner(en()?"Updating…":"جاري التحديث…",false);
+      setTimeout(run,500);
+    }
+  }
+  async function check(){
+    try{
+      const r=await fetch("/version?"+Date.now(),{cache:"no-store"});if(!r.ok)return;
+      const v=Number((await r.json()).v);
+      if(v>V0)go();
+    }catch(e){}
+  }
+  setInterval(check,fast?4000:20000);
+  check();
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)check()});
+  window.addEventListener("focus",check);
+  window.addEventListener("online",check);
+  window.addEventListener("pageshow",e=>{if(e.persisted)check()});
+})();
 </script>
 <link rel="icon" type="image/png" href="/avatar.png">
 <link rel="apple-touch-icon" href="/avatar.png">
 <script>try{if(localStorage.getItem("lang")==="en"){document.documentElement.dir="ltr";document.documentElement.lang="en"}}catch(e){}</script>
 <title>{{TITLE}}</title>
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="majek_bot">
+<meta property="og:site_name" content="majek bot">
 <meta property="og:title" content="{{TITLE}}">
 <meta property="og:description" content="ماجيك بوت: كوماندات مخصصة وردود تلقائية وطلبات أغاني وحماية للشات • Chat magic, one command at a time">
 <meta property="og:image" content="{{SITE}}/banner.jpg">
@@ -2361,10 +2411,10 @@ window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();window.__bi
 <style>/*COMMON_CSS*/</style>
 </head>
 <body>
-""".replace("{{SITE}}", SITE_URL)
+""".replace("{{SITE}}", SITE_URL).replace("{{BUILD}}", BUILD_ID)
 
 # ---------------- لوحة الأونر ----------------
-OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
+OWNER_HTML = HEAD.replace("{{TITLE}}", "majek bot") + r"""
 <style>
 body{background:#090418}
 .oshell{display:flex;min-height:100vh;--pc:#7c3aed}
@@ -2398,8 +2448,8 @@ main{flex:1;min-width:0}
 <div class="wrap">
 <div id="login" hidden>
   <div class="card">
-    <img class="bnr" src="/banner.jpg" alt="majek_bot">
-    <h1 style="font-size:20px;margin:0 0 16px">لوحة تحكم البوت</h1>
+    <img class="bnr" src="/banner.jpg" alt="majek bot">
+    <h1 style="font-size:20px;margin:0 0 16px">majek bot</h1>
     <input id="pw" type="password" placeholder="كلمة المرور" autocomplete="current-password">
     <button class="btn" id="loginBtn">دخول</button>
     <button class="btn ghost langbtn" style="margin-top:10px">EN</button>
@@ -2409,7 +2459,7 @@ main{flex:1;min-width:0}
 
 <div class="oshell" id="app" hidden>
   <aside id="oside">
-    <div class="brand"><div class="logo">🤖</div><span>majek_bot</span></div>
+    <div class="brand"><div class="logo">🤖</div><span>majek bot</span></div>
     <small class="bsub" id="botname"></small>
     <div class="nav" id="onav">
       <div class="sec">القائمة الرئيسية</div>
@@ -2679,7 +2729,7 @@ for(const k in EN)AR[EN[k]]=k;
 """
 
 # ---------------- موقع الستريمر ----------------
-STREAMER_HTML = HEAD.replace("{{TITLE}}", "موقع الستريمر") + r"""
+STREAMER_HTML = HEAD.replace("{{TITLE}}", "majek bot") + r"""
 <style>
 body{background:#090418}
 #app{--pc:#7c3aed;--acc:var(--pc)}
@@ -2779,8 +2829,8 @@ main{flex:1;min-width:0}
 </style>
 <div id="login" hidden style="padding:16px">
   <div class="card" style="max-width:440px;margin:10vh auto 0;text-align:center">
-    <img class="bnr" src="/banner.jpg" alt="majek_bot">
-    <h1 style="font-size:20px;margin:0 0 8px">موقع الستريمر</h1>
+    <img class="bnr" src="/banner.jpg" alt="majek bot">
+    <h1 style="font-size:20px;margin:0 0 8px">majek bot</h1>
     <p class="mut">ضغطة وحدة وتتفعّل الأمور: البوت يدخل قناتك ويرتبط تغيير اللعبة</p>
     <div id="loginbtns">
       <a class="btn" href="/auth/streamer">أنا ستريمر: تفعيل البوت في قناتي</a>
@@ -2794,7 +2844,7 @@ main{flex:1;min-width:0}
 
 <div class="shell" id="app" hidden>
   <aside id="side">
-    <div class="brand"><div class="logo">🎮</div><span>موقع الستريمر</span></div>
+    <div class="brand"><div class="logo">🎮</div><span>majek bot</span></div>
     <select id="chsel" hidden></select>
     <div class="nav" id="nav">
       <div class="sec">القائمة الرئيسية</div>
@@ -3540,7 +3590,7 @@ init().then(()=>{if(goto&&CH)go(goto)});
 </html>
 """
 
-PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
+PUBLIC_HTML = HEAD.replace("{{TITLE}}", "majek bot") + r"""
 <style>
 .wrap{max-width:900px}
 .hero{display:flex;align-items:center;gap:16px;padding:20px;border:1px solid var(--line);border-radius:18px;margin-bottom:16px;background:radial-gradient(circle at 100% 0,rgba(124,58,237,.28),transparent 60%),var(--card)}
@@ -3583,7 +3633,7 @@ html{scroll-behavior:smooth}
 @media(max-width:560px){.hero{padding:16px}.av{width:52px;height:52px;font-size:22px}}
 </style>
 <nav class="pnav" id="pnav">
-  <span class="pb"><img src="/avatar.png" alt=""><span>majek_bot</span></span>
+  <span class="pb"><img src="/avatar.png" alt=""><span>majek bot</span></span>
   <a href="#srbox" id="nv-sr" hidden>🎵 طلبات الأغاني</a>
   <a href="#cmdsec">⌨️ الكوماندات</a>
   <a href="#basicsec">📖 دليل الكوماندات</a>
@@ -3622,7 +3672,7 @@ html{scroll-behavior:smooth}
     </div>
   </div>
   <p class="hint" style="text-align:center;margin-top:18px"><a href="/s" style="color:#c4a5ff">أنت الستريمر أو مود؟ ادخل لوحة التحكم</a></p>
-  <div class="brandf"><img src="/avatar.png" alt=""><div><b>majek_bot</b><small>Chat magic, one command at a time • سحر الشات، كوماند بعد كوماند</small></div></div>
+  <div class="brandf"><img src="/avatar.png" alt=""><div><b>majek bot</b><small>Chat magic, one command at a time • سحر الشات، كوماند بعد كوماند</small></div></div>
 </div>
 <!--REPORT_HTML-->
 <div id="toast"></div>
@@ -3687,7 +3737,7 @@ PLAYER_HTML = r"""<!DOCTYPE html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<title>مشغّل الأغاني</title>
+<title>majek bot</title>
 <style>
 [hidden]{display:none!important}
 html,body{margin:0;height:100%;background:#090418;color:#f4efff;font-family:Tajawal,system-ui,sans-serif}
@@ -3826,7 +3876,7 @@ ICON_SVG = (
 )
 
 MANIFEST = {
-    "name": "majek_bot • موقع الستريمر", "short_name": "majek_bot", "id": "/s", "start_url": "/s", "scope": "/",
+    "name": "majek bot", "short_name": "majek bot", "description": "majek bot • Chat magic, one command at a time", "id": "/s", "start_url": "/s", "scope": "/",
     "display": "standalone", "background_color": "#0d0720",
     "theme_color": "#0d0720", "lang": "ar", "dir": "rtl",
     "icons": [{"src": "/avatar.png", "sizes": "256x256", "type": "image/png", "purpose": "any"},
@@ -3834,7 +3884,8 @@ MANIFEST = {
 }
 
 
-SW_JS = """self.addEventListener('install',()=>self.skipWaiting());
+SW_JS = """// build """ + BUILD_ID + """
+self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch',()=>{});
 """
@@ -3984,6 +4035,15 @@ def make_web_app(bot):
     return bool(SESSION_TOKEN) and hmac.compare_digest(tok.encode(), SESSION_TOKEN.encode())
 
   @web.middleware
+  async def nocache_mw(request, handler):
+    # الصفحات والـ manifest ما تتخزن أبداً: أي تحديث يوصل التطبيق مباشرة
+    resp = await handler(request)
+    ct = getattr(resp, "content_type", "") or ""
+    if ct.startswith("text/html") or request.path in ("/manifest.json", "/sw.js", "/version"):
+      resp.headers.setdefault("Cache-Control", "no-store, must-revalidate")
+    return resp
+
+  @web.middleware
   async def auth_mw(request, handler):
     if request.path.startswith("/api/") and request.path != "/api/login" and not authed(request):
       return jerr("unauthorized", 401)
@@ -3997,6 +4057,9 @@ def make_web_app(bot):
 
   async def manifest(request):
     return web.json_response(MANIFEST)
+
+  async def version(request):
+    return web.json_response({"v": BUILD_ID}, headers={"Cache-Control": "no-store"})
 
   async def sw(request):
     return web.Response(text=SW_JS, content_type="application/javascript",
@@ -4405,8 +4468,8 @@ def make_web_app(bot):
     page = PUBLIC_HTML
     ch = request.match_info["channel"].lower()
     if valid_channel(ch):
-      page = page.replace('property="og:title" content="كوماندات القناة"',
-                          f'property="og:title" content="كوماندات {ch} • majek_bot"')
+      page = page.replace('property="og:title" content="majek bot"',
+                          f'property="og:title" content="كوماندات {ch} • majek bot"')
     return web.Response(text=page, content_type="text/html")
 
   async def pub(request):
@@ -4832,12 +4895,13 @@ def make_web_app(bot):
     await bot.reset_bot(a[1])
     return web.json_response({"ok": True})
 
-  app = web.Application(middlewares=[auth_mw])
+  app = web.Application(middlewares=[nocache_mw, auth_mw])
   r = app.router
   r.add_get("/", index)
   r.add_get("/ping", ping)
   r.add_get("/manifest.json", manifest)
   r.add_get("/sw.js", sw)
+  r.add_get("/version", version)
   r.add_get("/icon.svg", icon)
   r.add_get("/avatar.png", avatar_png)
   r.add_get("/banner.jpg", banner_jpg)
