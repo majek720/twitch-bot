@@ -2361,6 +2361,36 @@ HEAD = r"""<!DOCTYPE html>
 
 # ---------------- لوحة الأونر ----------------
 OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
+<style>
+body{background:#090418}
+.oshell{display:flex;min-height:100vh;--pc:#7c3aed}
+aside{width:260px;background:#0f0828;border-inline-end:1px solid #2d1f57;display:flex;flex-direction:column;padding:16px 12px;position:sticky;top:0;height:100vh;flex-shrink:0;overflow-y:auto}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;padding:4px 8px 6px}
+.brand .logo{width:36px;height:36px}
+.bsub{display:block;color:var(--mut);font-size:12px;padding:0 8px 8px}
+.sec{font-size:11px;color:#7d6aae;letter-spacing:.08em;padding:12px 12px 6px}
+.nav a{--c:#7c3aed;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;color:var(--mut);cursor:pointer;font-weight:500;margin-bottom:3px;border-inline-start:3px solid transparent;transition:.15s;text-decoration:none}
+.nav a:hover{background:color-mix(in srgb,var(--c) 12%,transparent);color:var(--tx)}
+.nav a.on{background:linear-gradient(90deg,color-mix(in srgb,var(--c) 32%,transparent),color-mix(in srgb,var(--c) 4%,transparent));color:#fff;border-inline-start-color:var(--c)}
+.nav i{font-style:normal;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 24%,transparent);font-size:16px;flex-shrink:0}
+.nav a.on i{background:var(--c)}
+.nav a.ext:after{content:"↗";margin-inline-start:auto;opacity:.5;font-size:12px}
+.nav .cnt{margin-inline-start:auto}
+.me{margin-top:auto;border-top:1px solid #2d1f57;padding-top:12px;display:flex;gap:8px}
+.me .btn{flex:1;text-align:center}
+main{flex:1;min-width:0}
+.top{display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid #2d1f57;position:sticky;top:0;background:rgba(9,4,24,.88);backdrop-filter:blur(8px);z-index:5}
+.top h1{font-size:18px;margin:0;flex:1;border-inline-start:4px solid var(--pc);padding-inline-start:10px}
+.burger{display:none;width:auto!important;padding:8px 12px!important}
+.content{max-width:900px;margin:0 auto;padding:24px}
+#obd{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:30}
+@media(max-width:860px){
+ aside{display:none}
+ aside.open{display:flex;position:fixed;inset-block:0;inset-inline-start:0;z-index:40;width:280px}
+ .burger{display:block}
+ .content{padding:16px}.top{padding:12px 16px}
+}
+</style>
 <div class="wrap">
 <div id="login" hidden>
   <div class="card">
@@ -2371,23 +2401,33 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
     <button class="btn ghost langbtn" style="margin-top:10px">EN</button>
   </div>
 </div>
+</div>
 
-<div id="app" hidden>
-  <header>
-    <div class="logo">🤖</div>
-    <div><h1>لوحة تحكم البوت</h1><small id="botname"></small></div>
-    <div class="sp"></div>
-    <button class="btn ghost langbtn">EN</button>
-    <button class="btn ghost" id="logout">خروج</button>
-  </header>
-  <div class="tabs">
-    <button class="on" data-t="ch" style="--c:#7c3aed">القنوات</button>
-    <button data-t="cmd" style="--c:#3b82f6">الكوماندات</button>
-    <button data-t="msg" style="--c:#0d9488">إرسال رسالة</button>
-    <button data-t="basic" style="--c:#f59e0b">الأساسية</button>
-    <button data-t="rep" style="--c:#f43f5e">🚩 البلاغات<span class="cnt" id="repn" hidden></span></button>
-  </div>
-
+<div class="oshell" id="app" hidden>
+  <aside id="oside">
+    <div class="brand"><div class="logo">🤖</div><span>majek_bot</span></div>
+    <small class="bsub" id="botname"></small>
+    <div class="nav" id="onav">
+      <div class="sec">القائمة الرئيسية</div>
+      <a data-p="ch" class="on" style="--c:#7c3aed"><i>📺</i><span>القنوات</span></a>
+      <a data-p="bans" style="--c:#ef4444"><i>🚫</i><span>الحظر</span></a>
+      <div class="sec">الأدوات</div>
+      <a data-p="cmd" style="--c:#3b82f6"><i>⌨️</i><span>الكوماندات</span></a>
+      <a data-p="msg" style="--c:#0d9488"><i>💬</i><span>إرسال رسالة</span></a>
+      <a data-p="basic" style="--c:#f59e0b"><i>📖</i><span>دليل الكوماندات</span></a>
+      <div class="sec">النظام</div>
+      <a data-p="rep" style="--c:#f43f5e"><i>🚩</i><span>البلاغات</span><span class="cnt" id="repn" hidden></span></a>
+      <a href="/s" target="_blank" class="ext" style="--c:#22c55e"><i>🎮</i><span>موقع الستريمر</span></a>
+    </div>
+    <div class="me"><button class="btn ghost langbtn">EN</button><button class="btn ghost" id="logout">خروج</button></div>
+  </aside>
+  <div id="obd" hidden></div>
+  <main>
+    <div class="top">
+      <button class="btn ghost burger" id="oburger">☰</button>
+      <h1 id="optitle">القنوات</h1>
+    </div>
+    <div class="content">
   <section id="t-ch">
     <div class="card">
       <h2>إضافة قناة</h2>
@@ -2399,6 +2439,9 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
       <input id="chq" class="srch" dir="ltr" placeholder="بحث عن قناة">
       <div class="list" id="chlist"></div>
     </div>
+  </section>
+
+  <section id="t-bans" hidden>
     <div class="card">
       <h2>حظر قناة</h2>
       <input id="banch" dir="ltr" placeholder="اسم القناة اللي تبي تحظرها">
@@ -2444,7 +2487,8 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
       <button class="btn" id="sendmsg">إرسال</button>
     </div>
   </section>
-</div>
+    </div>
+  </main>
 </div>
 <div id="toast"></div>
 
@@ -2453,11 +2497,12 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
 Object.assign(EN,{"البلاغات":"Reports","ممنوعين من إرسال البلاغات":"Blocked from sending reports","يوزر تويتش":"Twitch username",
 "منع من البلاغات":"Block from reports","ما فيه بلاغات":"No reports","ما فيه ممنوعين":"Nobody is blocked","رفع المنع":"Unblock",
 "تم منع المُبلّغ":"Reporter blocked","تم رفع الحظر":"Ban lifted","تمنع هذا المُبلّغ من إرسال البلاغات؟":"Block this reporter from sending reports?",
-"🚩 البلاغات":"🚩 Reports","بحث عن قناة":"Search channels","حظر":"Ban","حذف":"Delete"});
+"🚩 البلاغات":"🚩 Reports","بحث عن قناة":"Search channels","حظر":"Ban","حذف":"Delete",
+"القائمة الرئيسية":"Main","الأدوات":"Tools","النظام":"System","الحظر":"Bans","دليل الكوماندات":"Commands guide"});
 for(const k in EN)AR[EN[k]]=k;
 let S={channels:[],commands:{},bot:"",banned:[],reports:[],report_bans:[]};
 onAuth=()=>show(false);
-onLang=()=>{if(!$("#app").hidden)render()};
+onLang=()=>{if(typeof OT!=="undefined")$("#optitle").textContent=t(OT[OP]);if(!$("#app").hidden)render()};
 function show(on){$("#login").hidden=on;$("#app").hidden=!on}
 async function act(fn,msg){try{await fn();if(msg)toast(msg);await load()}catch(e){if(e.message!=="auth")toast(e.message,1)}}
 async function load(){
@@ -2556,10 +2601,22 @@ $("#savecmd").onclick=()=>act(async()=>{
 $("#sendmsg").onclick=()=>act(async()=>{
   await api("POST","/api/send",{channel:$("#msgch").value,text:$("#msgtxt").value});$("#msgtxt").value="";
 },"تم الإرسال");
-document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{
-  document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x===b));
-  for(const t of ["ch","cmd","msg","basic","rep"])$("#t-"+t).hidden=t!==b.dataset.t;
-});
+const OPG=["ch","bans","cmd","msg","basic","rep"];
+const OT={ch:"القنوات",bans:"الحظر",cmd:"الكوماندات",msg:"إرسال رسالة",basic:"دليل الكوماندات",rep:"البلاغات"};
+const OC={ch:"#7c3aed",bans:"#ef4444",cmd:"#3b82f6",msg:"#0d9488",basic:"#f59e0b",rep:"#f43f5e"};
+let OP="ch";
+function ogo(p){
+  OP=p;
+  for(const x of OPG)$("#t-"+x).hidden=x!==p;
+  document.querySelectorAll("#onav a[data-p]").forEach(a=>a.classList.toggle("on",a.dataset.p===p));
+  $("#app").style.setProperty("--pc",OC[p]);
+  $("#optitle").textContent=t(OT[p]);
+  $("#oside").classList.remove("open");$("#obd").hidden=true;
+}
+document.querySelectorAll("#onav a[data-p]").forEach(a=>a.onclick=()=>ogo(a.dataset.p));
+$("#oburger").onclick=()=>{$("#oside").classList.add("open");$("#obd").hidden=false};
+$("#obd").onclick=()=>{$("#oside").classList.remove("open");$("#obd").hidden=true};
+ogo("ch");
 setInterval(()=>{if(!$("#app").hidden)load()},60000);
 initLang();
 load();
@@ -3494,6 +3551,15 @@ PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
 .bd.p-mod{background:rgba(52,211,153,.15);color:#34d399}
 .bd.p-broadcaster{background:rgba(245,166,35,.18);color:#f5a623}
 .sec{margin-top:22px;border-top:3px solid #f59e0b}
+.pnav{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:6px;background:rgba(13,7,32,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:10px 16px;overflow-x:auto}
+.pnav .pb{display:flex;align-items:center;gap:8px;font-weight:700;margin-inline-end:10px;white-space:nowrap}
+.pnav .pb img{width:30px;height:30px;border-radius:9px}
+.pnav a,.pnav button.pl{color:var(--mut);text-decoration:none;font:inherit;font-size:14px;font-weight:500;padding:7px 12px;border-radius:10px;white-space:nowrap;background:none;border:0;cursor:pointer}
+.pnav a:hover,.pnav button.pl:hover{background:rgba(124,58,237,.16);color:var(--tx)}
+.pnav .sp{flex:1}
+.pnav .btn{width:auto;padding:7px 14px;font-size:13px;white-space:nowrap}
+html{scroll-behavior:smooth}
+#srbox,#cmdsec,#basicsec{scroll-margin-top:70px}
 .sec.sr{border-top-color:#ec4899}
 .song{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line);font-size:14px}
 .song:last-child{border:0}
@@ -3501,6 +3567,16 @@ PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
 .song small{color:var(--mut)}
 @media(max-width:560px){.hero{padding:16px}.av{width:52px;height:52px;font-size:22px}}
 </style>
+<nav class="pnav" id="pnav">
+  <span class="pb"><img src="/avatar.png" alt=""><span>majek_bot</span></span>
+  <a href="#srbox" id="nv-sr" hidden>🎵 طلبات الأغاني</a>
+  <a href="#cmdsec">⌨️ الكوماندات</a>
+  <a href="#basicsec">📖 دليل الكوماندات</a>
+  <button class="pl" id="nv-rep">🚩 بلاغ</button>
+  <span class="sp"></span>
+  <a class="btn" href="/s">🎮 دخول الستريمر</a>
+  <button class="btn ghost langbtn">EN</button>
+</nav>
 <div class="wrap">
   <div class="hero">
     <div class="av" id="av"></div>
@@ -3508,7 +3584,6 @@ PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
       <h1 id="chname" dir="ltr" data-nt></h1>
       <div class="sub"><span class="pill" id="live" hidden></span><span class="mut" id="cnt" data-nt></span></div>
     </div>
-    <button class="btn ghost langbtn">EN</button>
   </div>
   <div class="card" id="nf" hidden><p class="mut" style="margin:0">القناة غير موجودة أو البوت غير مفعّل فيها</p></div>
   <div id="box">
@@ -3516,6 +3591,7 @@ PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
       <h2>🎵 طلبات الأغاني</h2>
       <div id="srlist"></div>
     </div>
+    <div id="cmdsec"></div>
     <div class="tool" style="margin-top:16px">
       <input id="q" placeholder="بحث في الكوماندات">
       <button class="chip on" data-f="all">كل الأنواع</button>
@@ -3524,7 +3600,7 @@ PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
       <button class="chip" data-f="clip">كليبات</button>
     </div>
     <div class="grid" id="list"></div>
-    <div class="card sec">
+    <div class="card sec" id="basicsec">
       <h2>كوماندات الشات الأساسية</h2>
       <p class="hint">للستريمر والمودات. اضغط 📋 للنسخ</p>
       <div id="basiclist"></div>
@@ -3537,7 +3613,7 @@ PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
 <div id="toast"></div>
 <script>
 //COMMON_JS
-Object.assign(EN,{"🎵 طلبات الأغاني":"🎵 Song requests","ما فيه أغاني بالطابور":"The queue is empty"});
+Object.assign(EN,{"🎵 طلبات الأغاني":"🎵 Song requests","ما فيه أغاني بالطابور":"The queue is empty","⌨️ الكوماندات":"⌨️ Commands","📖 دليل الكوماندات":"📖 Commands guide","🎮 دخول الستريمر":"🎮 Streamer login"});
 for(const k in EN)AR[EN[k]]=k;
 const CHN=decodeURIComponent(location.pathname.split("/").pop()).toLowerCase();
 let D=null,BAD=false,FILT="all",Q="";
@@ -3548,7 +3624,7 @@ function render(){
   const lp=$("#live");lp.hidden=false;lp.className="pill"+(D.live?" live":"");lp.textContent=t(D.live?"لايف":"أوفلاين");
   const all=Object.keys(D.commands).sort(),q=Q.toLowerCase();
   $("#cnt").textContent=all.length+" "+t("كوماند");
-  const sb=$("#srbox"),sl=$("#srlist");sb.hidden=!(D.songs&&D.songs.on);sl.innerHTML="";
+  const sb=$("#srbox"),sl=$("#srlist");sb.hidden=!(D.songs&&D.songs.on);$("#nv-sr").hidden=sb.hidden;sl.innerHTML="";
   if(D.songs&&D.songs.on){
     const add=(m,now)=>{const d=document.createElement("div");d.className="song";d.innerHTML='<span>'+(now?"▶️":"🎵")+'</span><b data-nt></b><small data-nt></small>';d.querySelector("b").textContent=m.title;d.querySelector("small").textContent=m.by;sl.appendChild(d)};
     if(D.songs.current)add(D.songs.current,true);
@@ -3578,6 +3654,7 @@ function render(){
   renderBasic($("#basiclist"));
 }
 onLang=render;
+$("#nv-rep").onclick=()=>{const b=document.getElementById("repbtn");if(b)b.click()};
 $("#q").oninput=e=>{Q=e.target.value.trim();render()};
 document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{
   FILT=b.dataset.f;document.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x===b));render();
