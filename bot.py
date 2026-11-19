@@ -2340,6 +2340,10 @@ HEAD = r"""<!DOCTYPE html>
 <meta name="theme-color" content="#0d0720">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="/manifest.json">
+<script>
+if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();window.__bip=e});
+</script>
 <link rel="icon" type="image/png" href="/avatar.png">
 <link rel="apple-touch-icon" href="/avatar.png">
 <script>try{if(localStorage.getItem("lang")==="en"){document.documentElement.dir="ltr";document.documentElement.lang="en"}}catch(e){}</script>
@@ -2783,6 +2787,7 @@ main{flex:1;min-width:0}
       <a class="btn line mt" href="/auth/login">أنا مود: دخول فقط</a>
     </div>
     <p class="mut" id="nolink" hidden>الموقع غير مفعّل بعد من المطوّر.</p>
+    <button class="btn line mt instb" type="button">⬇️ تحميل التطبيق</button>
     <button class="btn ghost langbtn" style="margin-top:10px">EN</button>
   </div>
 </div>
@@ -2807,6 +2812,7 @@ main{flex:1;min-width:0}
       <a data-p="mods" class="own" style="--c:#10b981"><i>👥</i><span>المودات</span></a>
       <a data-p="bot" class="own" style="--c:#0d9488"><i>🤖</i><span>حساب البوت</span></a>
       <div class="sec">النظام</div>
+      <a data-act="install" style="--c:#fbbf24"><i>⬇️</i><span>تحميل التطبيق</span></a>
       <a data-act="pub" class="ext" style="--c:#22c55e"><i>🌐</i><span>صفحة القناة العامة</span></a>
       <a data-act="rep" style="--c:#f43f5e"><i>🚩</i><span>البلاغات والدعم</span></a>
       <a data-p="set" class="own" style="--c:#94a3b8"><i>⚙️</i><span>الإعدادات</span></a>
@@ -3165,7 +3171,7 @@ let ME=null,CH=null,PG="ov",FILT="all",Q="";
 Object.assign(EN,{"تشتغل مباشرة بدون إضافة. وإذا سوّيت كوماند بنفس الاسم يشتغل كوماندك بدلها": "These work out of the box. If you create a command with the same name, yours replaces the built-in one", "أدعية وأذكار وتذكيرات تنكتب تلقائياً بالفاصل اللي تحدده. تقدر تعدل الافتراضية أو تحذفها وتضيف رسائلك.": "Prayers, adhkar and reminders are posted automatically at the interval you set. You can edit the defaults or delete them and add your own messages.", "مثال: اللهم صلِّ وسلم على نبينا محمد": "Example: Peace and blessings upon our Prophet Muhammad", "اتركه فاضي وتبقى الرسالة تختار عشوائي من القائمة الجاهزة، أو اكتب نص خاص فيه عشان يستبدلها.": "Leave it empty and the message picks at random from the ready-made list, or write your own text to replace it.", "ردود البوت على السلام ومساء الخير وباك وبرب. تقدر تعدل النص أو تحذف الرد. الرد يبدأ دائماً بمنشن للمشاهد، وتقدر تستخدم $(user).": "Bot replies to salam, good evening, back and brb. You can edit the text or delete the reply. The reply always starts by mentioning the viewer, and you can use $(user).", "المشاهدين يطلبون أغاني من يوتيوب أو سبوتيفاي بالشات: !sr رابط أو اسم الأغنية": "Viewers request songs from YouTube or Spotify in chat: !sr link or song name", "أقصى طلبات لكل مشاهد": "Max requests per viewer", "أقصى طول للطابور": "Max queue length", "أقصى مدة للأغنية (دقائق)": "Max song length (minutes)", "مين يقدر يطلب؟": "Who can request?", "البحث بالاسم والحد الأقصى للمدة يحتاجون YOUTUBE_API_KEY في Render. بدونه تشتغل روابط يوتيوب فقط.": "Searching by name and the max length limit need YOUTUBE_API_KEY in Render. Without it only YouTube links work.", "افتح الرابط في تبويب، أو حطه Browser Source في OBS. لا تشاركه مع أحد.": "Open the link in a tab, or use it as a Browser Source in OBS. Don't share it with anyone.", "🔗 منع الروابط": "🔗 Block links", "🔠 منع الحروف الكبيرة الكثيرة (إنجليزي)": "🔠 Block excessive capital letters (English)", "⚠️ منع الرموز الكثيرة": "⚠️ Block excessive symbols", "🔁 منع تكرار الحرف الواحد (مثل: هههههههههه)": "🔁 Block repeated characters (e.g. hahahahaha)", "📏 منع الرسائل الطويلة (فوق 300 حرف)": "📏 Block long messages (over 300 characters)", "كلمات ممنوعة (كلمة أو جملة في كل سطر)": "Banned words (a word or phrase per line)", "روابط مسموحة (دومين في كل سطر، مثل: youtube.com)": "Allowed links (one domain per line, e.g. youtube.com)", "مدة الكتم بالثواني (0 = حذف الرسالة فقط)": "Timeout duration in seconds (0 = delete the message only)", "أرسل تنبيه للمشاهد المخالف": "Send a warning to the offending viewer", "استثناء المشتركين من الفلاتر": "Exempt subscribers from the filters", "استثناء الـ VIP من الفلاتر": "Exempt VIPs from the filters", "المودات والستريمر مستثنون دائماً. والمود يقدر يسمح لشخص بروابط لمدة دقيقة بـ !permit اسم_المشاهد": "Mods and the streamer are always exempt. A mod can allow someone to post links for a minute with !permit viewer_name", "الحساب اللي يكتب فيه البوت بقناتك:": "The account the bot writes with in your channel:", "«حسابي أنا»: البوت يكتب باسمك. «حساب ثاني»: سجّل دخول بحساب البوت اللي تبيه (حساب جديد تسوّيه للبوت أحسن) ووافق على الصلاحيات. بعدها يستقبل ويرد البوت بهذا الحساب بقناتك فقط.": "“My account”: the bot writes under your name. “Another account”: log in with the bot account you want (a new account made for the bot is better) and approve the permissions. After that the bot reads and replies with this account in your channel only.", "ترجع الرسائل المجدولة الافتراضية؟ الرسائل اللي أضفتها تنحذف.": "Reset the default scheduled messages? The messages you added will be deleted.", "تم ربط حساب البوت ✅": "Bot account linked ✅", "لازم تدخل بنفس حسابك": "You need to log in with your own account", "اكتب المدة بالدقائق": "Enter the duration in minutes", "اكتب نص الرسالة": "Enter the message text", "الرسالة ما تبدأ بـ / أو .": "The message can't start with / or .", "وصلت الحد الأقصى للرسائل المجدولة": "You've reached the maximum number of scheduled messages", "▶ تشغيل الأغاني من الموقع": "▶ Play songs on the site", "⏹ إيقاف المشغّل": "⏹ Stop the player", "تشغيل الآن": "Play now", "يشغّل الأغاني هنا داخل الموقع نفسه. لا تشغّل مشغّل ثاني (مثل OBS) بنفس الوقت وإلا بيشتغلون مرتين.": "Plays the songs right here on the site. Don't run another player (like OBS) at the same time or songs will play twice."});
 Object.assign(EN,{"⚠️ أغاني سبوتيفاي حالياً ما تشتغل. استخدم روابط يوتيوب أو اسم الأغنية.":"⚠️ Spotify songs currently don't work. Use YouTube links or the song name."});
 for(const k in EN)AR[EN[k]]=k;
-Object.assign(EN,{"القائمة الرئيسية":"Main","الأدوات":"Tools","الفريق والبوت":"Team & bot","النظام":"System","إدارة البث":"Stream manager","المؤقتات":"Timers","حماية الشات":"Chat moderation","دليل الكوماندات":"Commands guide","صفحة القناة العامة":"Public channel page","البلاغات والدعم":"Reports & support","اختصارات سريعة":"Quick actions","انتقل بسرعة لأهم الأدوات":"Jump to the most important tools","تغيير اللعبة بسرعة":"Change the game fast","سوّي اختصار لعبة (مثل !f للفورتنايت) وغيّر كاتيقوري البث من الشات بدون ما تفتح تويتش.":"Create a game shortcut (like !f for Fortnite) and change the stream category from chat without opening Twitch.","فتح صفحة الكوماندات":"Open the commands page"});
+Object.assign(EN,{"القائمة الرئيسية":"Main","الأدوات":"Tools","الفريق والبوت":"Team & bot","النظام":"System","إدارة البث":"Stream manager","المؤقتات":"Timers","حماية الشات":"Chat moderation","دليل الكوماندات":"Commands guide","صفحة القناة العامة":"Public channel page","البلاغات والدعم":"Reports & support","اختصارات سريعة":"Quick actions","انتقل بسرعة لأهم الأدوات":"Jump to the most important tools","تغيير اللعبة بسرعة":"Change the game fast","سوّي اختصار لعبة (مثل !f للفورتنايت) وغيّر كاتيقوري البث من الشات بدون ما تفتح تويتش.":"Create a game shortcut (like !f for Fortnite) and change the stream category from chat without opening Twitch.","فتح صفحة الكوماندات":"Open the commands page","تحميل التطبيق":"Install app","⬇️ تحميل التطبيق":"⬇️ Install the app","لتثبيت التطبيق: في كروم أو إيدج على الكمبيوتر اضغط ⋮ ثم «تثبيت التطبيق». في الآيفون: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية».":"To install the app: in Chrome or Edge on a computer click ⋮ then \"Install app\". On iPhone: tap Share then \"Add to Home Screen\"."});
 for(const k in EN)AR[EN[k]]=k;
 const TITLES={ov:"الرئيسية",stream:"إدارة البث",cmd:"الكوماندات",auto:"المؤقتات",songs:"طلبات الأغاني",spam:"حماية الشات",ai:"الذكاء الاصطناعي",sim:"محاكي الكوماند",guide:"دليل الكوماندات",mods:"المودات",bot:"حساب البوت",set:"الإعدادات"};
 const COLORS={ov:"#7c3aed",stream:"#0ea5e9",cmd:"#3b82f6",auto:"#f59e0b",songs:"#ec4899",spam:"#f43f5e",bot:"#0d9488",ai:"#c026d3",sim:"#8b5cf6",guide:"#14b8a6",mods:"#10b981",set:"#94a3b8"};
@@ -3450,11 +3456,20 @@ function renderBot(){
 cmdFormInit();
 document.querySelectorAll("#nav a").forEach(a=>a.onclick=()=>{
   const k=a.dataset.act;
-  if(k==="rep"){$("#side").classList.remove("open");$("#bd").hidden=true;const b=$("#repbtn");if(b)b.click()}
+  if(k==="install"){doInstall()}
+  else if(k==="rep"){$("#side").classList.remove("open");$("#bd").hidden=true;const b=$("#repbtn");if(b)b.click()}
   else if(k==="pub"){const h=$("#pubbtn").href;if(h)window.open(h,"_blank")}
   else go(a.dataset.p);
 });
 document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+const isApp=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
+async function doInstall(){
+  const e=window.__bip;
+  if(e){window.__bip=null;e.prompt();try{await e.userChoice}catch(_){}return}
+  alert(t("لتثبيت التطبيق: في كروم أو إيدج على الكمبيوتر اضغط ⋮ ثم «تثبيت التطبيق». في الآيفون: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية»."));
+}
+document.querySelectorAll(".instb").forEach(b=>b.onclick=doInstall);
+if(isApp)document.querySelectorAll(".instb,#nav a[data-act=install]").forEach(x=>x.remove());
 $("#burger").onclick=()=>{$("#side").classList.add("open");$("#bd").hidden=false};
 $("#bd").onclick=()=>{$("#side").classList.remove("open");$("#bd").hidden=true};
 $("#chsel").onchange=loadCh;
@@ -3811,12 +3826,18 @@ ICON_SVG = (
 )
 
 MANIFEST = {
-    "name": "majek_bot • لوحة تحكم البوت", "short_name": "majek_bot", "start_url": "/",
+    "name": "majek_bot • موقع الستريمر", "short_name": "majek_bot", "id": "/s", "start_url": "/s", "scope": "/",
     "display": "standalone", "background_color": "#0d0720",
     "theme_color": "#0d0720", "lang": "ar", "dir": "rtl",
     "icons": [{"src": "/avatar.png", "sizes": "256x256", "type": "image/png", "purpose": "any"},
               {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml"}],
 }
+
+
+SW_JS = """self.addEventListener('install',()=>self.skipWaiting());
+self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
+self.addEventListener('fetch',()=>{});
+"""
 
 
 def jerr(msg, status=400):
@@ -3976,6 +3997,10 @@ def make_web_app(bot):
 
   async def manifest(request):
     return web.json_response(MANIFEST)
+
+  async def sw(request):
+    return web.Response(text=SW_JS, content_type="application/javascript",
+                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
 
   async def icon(request):
     return web.Response(text=ICON_SVG, content_type="image/svg+xml")
@@ -4812,6 +4837,7 @@ def make_web_app(bot):
   r.add_get("/", index)
   r.add_get("/ping", ping)
   r.add_get("/manifest.json", manifest)
+  r.add_get("/sw.js", sw)
   r.add_get("/icon.svg", icon)
   r.add_get("/avatar.png", avatar_png)
   r.add_get("/banner.jpg", banner_jpg)
