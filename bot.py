@@ -907,13 +907,13 @@ class TwitchAPI:
 # الواجهات (HTML)
 # ============================================================
 COMMON_CSS = r"""
-:root{--bg:#0e0e12;--card:#18181f;--line:#2a2a35;--tx:#f1f1f5;--mut:#9a9aab;--acc:#9146ff;--ok:#2ecc71;--bad:#ff5c6c}
+:root{--bg:#07121b;--card:#0d1b27;--line:#1c3445;--tx:#e9f2f8;--mut:#8aa4b6;--acc:#0891b2;--ok:#34d399;--bad:#f43f5e}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--tx);font-family:Tajawal,system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 .wrap{max-width:720px;margin:0 auto;padding:16px}
 header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
-.logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#9146ff,#5b21b6);display:grid;place-items:center;font-size:22px}
+.logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#0891b2,#0e7490);display:grid;place-items:center;font-size:22px}
 header h1{font-size:18px;margin:0}header small{color:var(--mut);display:block}
 header .sp{flex:1}
 .tabs{display:flex;gap:6px;background:var(--card);padding:5px;border-radius:14px;margin-bottom:16px}
@@ -921,11 +921,11 @@ header .sp{flex:1}
 .tabs button.on{background:var(--c,var(--acc));color:#fff}
 .tabs button{white-space:nowrap}
 .tabs{overflow-x:auto}
-.cnt{background:#ef4444;color:#fff;border-radius:20px;font-size:11px;padding:1px 7px;margin-inline-start:4px}
+.cnt{background:#f43f5e;color:#fff;border-radius:20px;font-size:11px;padding:1px 7px;margin-inline-start:4px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
-h2{font-size:15px;margin:0 0 12px;color:var(--mut);font-weight:500}
+h2{font-size:15px;margin:0 0 12px;color:var(--tx);font-weight:700;border-inline-start:3px solid var(--acc);padding-inline-start:9px}
 label{display:block;font-size:13px;color:var(--mut);margin:2px 0 6px}
-input,select,textarea{width:100%;background:#0e0e12;border:1px solid var(--line);color:var(--tx);border-radius:10px;padding:11px 12px;font:inherit;margin-bottom:10px}
+input,select,textarea{width:100%;background:#07121b;border:1px solid var(--line);color:var(--tx);border-radius:10px;padding:11px 12px;font:inherit;margin-bottom:10px}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--acc);border-color:transparent}
 textarea{min-height:90px;resize:vertical}
 .btn{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:11px 18px;font:inherit;font-weight:700;cursor:pointer;width:100%}
@@ -933,11 +933,13 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .btn.ghost{background:none;border:1px solid var(--line);color:var(--mut);width:auto;padding:8px 14px}
 .btn.red{background:var(--bad)}
 .btn.mt{margin-top:8px}
-.row{display:flex;align-items:center;gap:10px;padding:12px 4px;border-bottom:1px solid var(--line)}
+.row{display:flex;align-items:center;gap:10px;padding:12px 10px;border-bottom:1px solid var(--line);border-radius:10px;transition:background .15s}
+.row:hover{background:rgba(8,145,178,.07)}
 .row:last-child{border:0}
 .row b{flex:1;text-align:start}
 .row small{color:var(--mut)}
-.row.col{flex-direction:column;align-items:stretch;gap:6px}
+.row.col{flex-direction:column;align-items:stretch;gap:6px;background:rgba(255,255,255,.02);border:1px solid var(--line);margin-bottom:8px;padding:12px 14px}
+.row.col:last-child{border:1px solid var(--line)}
 .row .top{display:flex;align-items:center;justify-content:space-between}
 .row p{margin:0;color:var(--mut);font-size:14px;word-break:break-word}
 .meta{font-size:12px;color:var(--acc)}
@@ -945,20 +947,46 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .hint{font-size:12px;color:var(--mut);margin:-4px 0 10px}
 .dot{width:10px;height:10px;border-radius:50%;background:#555}
 .dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
-.ic{background:none;border:0;font-size:18px;cursor:pointer;padding:4px 8px;border-radius:8px}
-.ic:hover{background:var(--line)}
+.ic{background:#2a4b60;border:1px solid #35607a;font-size:15px;line-height:1;cursor:pointer;padding:6px 9px;border-radius:9px;color:var(--tx)}
+.ic:hover{border-color:var(--acc);background:#32627d}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
 .chips span{background:var(--line);color:var(--mut);font-size:12px;padding:5px 10px;border-radius:20px;cursor:pointer;direction:ltr}
 .empty{color:var(--mut);text-align:center;margin:12px 0}
-.bd{font-size:11px;padding:3px 10px;border-radius:20px;background:#1c2438;color:var(--mut);white-space:nowrap}
-.bc{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 0;border-bottom:1px solid var(--line)}
+.bd{font-size:11px;padding:3px 10px;border-radius:20px;background:#1c3445;color:var(--mut);white-space:nowrap}
+.bc{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 8px;border-bottom:1px solid var(--line);border-radius:10px;transition:background .15s}
+.bc:hover{background:rgba(8,145,178,.07)}
 .bc:last-child{border:0}
-.bc code{color:#c4a1ff;background:#1a1530;padding:5px 10px;border-radius:8px;font-size:13px;direction:ltr;unicode-bidi:plaintext;word-break:break-word;max-width:100%}
+.bc code{color:#67e8f9;background:#0a2d3a;padding:5px 10px;border-radius:8px;font-size:13px;direction:ltr;unicode-bidi:plaintext;word-break:break-word;max-width:100%}
 .bc .d{flex:1;color:var(--mut);font-size:13px;min-width:140px}
 #toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,80px);background:var(--ok);color:#000;padding:11px 20px;border-radius:12px;font-weight:700;transition:.25s;opacity:0}
 #toast.show{transform:translate(-50%,0);opacity:1}#toast.bad{background:var(--bad);color:#fff}
 #login{min-height:80vh;display:grid;place-items:center}
 #login .card{width:100%;max-width:360px;text-align:center}
+.lh{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.lh h2{margin:0;flex:1}
+.cntb{background:var(--acc);color:#fff;border-radius:20px;font-size:12px;font-weight:700;padding:2px 11px}
+.cntb.live{background:rgba(52,211,153,.16);color:var(--ok)}
+.srch{margin:0 0 12px}
+.list{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:rgba(255,255,255,.015)}
+.list .empty{padding:14px}
+.chrow{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line);border-inline-start:3px solid transparent;transition:background .15s}
+.chrow:last-child{border-bottom:0}
+.chrow:hover{background:rgba(8,145,178,.08)}
+.chrow.live{border-inline-start-color:var(--ok)}
+.chav{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:17px;color:#fff;background:linear-gradient(135deg,var(--acc),#0e7490);flex-shrink:0}
+.chav.bn{background:linear-gradient(135deg,#f43f5e,#9f1239)}
+.chinfo{flex:1;min-width:0}
+.chinfo b{display:block;font-size:15px;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chinfo small{color:var(--mut);font-size:12px}
+.st{font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;background:rgba(138,164,182,.14);color:var(--mut);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.st:before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.st.live{background:rgba(52,211,153,.16);color:var(--ok)}
+.acts2{display:flex;gap:6px;flex-wrap:wrap}
+.ab{border:1px solid #2a4a5f;background:#0a1d29;color:var(--tx);border-radius:9px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+.ab:hover{border-color:var(--acc);background:rgba(8,145,178,.16)}
+.ab.dg{color:#fda4af}
+.ab.dg:hover{border-color:#f43f5e;background:rgba(244,63,94,.15)}
+@media(max-width:520px){.chrow{flex-wrap:wrap}.chrow .acts2{width:100%;justify-content:flex-end}}
 """
 
 COMMON_JS = r"""
@@ -1198,7 +1226,7 @@ HEAD = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0e0e12">
+<meta name="theme-color" content="#07121b">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg">
@@ -1232,11 +1260,11 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
     <button class="btn ghost" id="logout">خروج</button>
   </header>
   <div class="tabs">
-    <button class="on" data-t="ch" style="--c:#9146ff">القنوات</button>
-    <button data-t="cmd" style="--c:#3b82f6">الكوماندات</button>
-    <button data-t="msg" style="--c:#14b8a6">إرسال رسالة</button>
+    <button class="on" data-t="ch" style="--c:#0891b2">القنوات</button>
+    <button data-t="cmd" style="--c:#6366f1">الكوماندات</button>
+    <button data-t="msg" style="--c:#0d9488">إرسال رسالة</button>
     <button data-t="basic" style="--c:#f59e0b">الأساسية</button>
-    <button data-t="rep" style="--c:#ef4444">🚩 البلاغات<span class="cnt" id="repn" hidden></span></button>
+    <button data-t="rep" style="--c:#f43f5e">🚩 البلاغات<span class="cnt" id="repn" hidden></span></button>
   </div>
 
   <section id="t-ch">
@@ -1245,13 +1273,20 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
       <input id="newch" dir="ltr" placeholder="اسم القناة مثل: majek113">
       <button class="btn" id="addch">إضافة القناة</button>
     </div>
-    <div class="card"><h2>القنوات الحالية</h2><div id="chlist"></div></div>
+    <div class="card">
+      <div class="lh"><h2>القنوات الحالية</h2><span class="cntb live" id="chlive" hidden></span><span class="cntb" id="chcount">0</span></div>
+      <input id="chq" class="srch" dir="ltr" placeholder="بحث عن قناة">
+      <div class="list" id="chlist"></div>
+    </div>
     <div class="card">
       <h2>حظر قناة</h2>
       <input id="banch" dir="ltr" placeholder="اسم القناة اللي تبي تحظرها">
       <button class="btn red" id="banbtn">حظر القناة</button>
     </div>
-    <div class="card"><h2>القنوات المحظورة</h2><div id="banlist"></div></div>
+    <div class="card">
+      <div class="lh"><h2>القنوات المحظورة</h2><span class="cntb" id="bancount">0</span></div>
+      <div class="list" id="banlist"></div>
+    </div>
   </section>
 
   <section id="t-cmd" hidden>
@@ -1268,7 +1303,7 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
   </section>
 
   <section id="t-rep" hidden>
-    <div class="card" style="border-top:3px solid #ef4444">
+    <div class="card" style="border-top:3px solid #f43f5e">
       <h2>البلاغات</h2>
       <div id="replist"></div>
     </div>
@@ -1297,7 +1332,7 @@ OWNER_HTML = HEAD.replace("{{TITLE}}", "لوحة تحكم البوت") + r"""
 Object.assign(EN,{"البلاغات":"Reports","ممنوعين من إرسال البلاغات":"Blocked from sending reports","يوزر تويتش":"Twitch username",
 "منع من البلاغات":"Block from reports","ما فيه بلاغات":"No reports","ما فيه ممنوعين":"Nobody is blocked","رفع المنع":"Unblock",
 "تم منع المُبلّغ":"Reporter blocked","تم رفع الحظر":"Ban lifted","تمنع هذا المُبلّغ من إرسال البلاغات؟":"Block this reporter from sending reports?",
-"🚩 البلاغات":"🚩 Reports"});
+"🚩 البلاغات":"🚩 Reports","بحث عن قناة":"Search channels","حظر":"Ban","حذف":"Delete"});
 for(const k in EN)AR[EN[k]]=k;
 let S={channels:[],commands:{},bot:"",banned:[],reports:[],report_bans:[]};
 onAuth=()=>show(false);
@@ -1309,22 +1344,35 @@ async function load(){
 }
 function render(){
   $("#botname").textContent=S.bot?t("البوت:")+" "+S.bot:"";
+  const q=($("#chq").value||"").trim().toLowerCase();
+  const chs=S.channels.filter(c=>!q||c.name.includes(q)).sort((a,b)=>(b.live-a.live)||a.name.localeCompare(b.name));
+  const liveN=S.channels.filter(c=>c.live).length;
+  $("#chcount").textContent=S.channels.length;
+  $("#chlive").hidden=!liveN;$("#chlive").textContent="🟢 "+liveN+" "+t("لايف");
   const list=$("#chlist");list.innerHTML="";
-  if(!S.channels.length)list.innerHTML='<p class="empty">'+t("ما فيه قنوات")+'</p>';
-  S.channels.forEach(c=>{
-    const d=document.createElement("div");d.className="row";
-    d.innerHTML='<span class="dot'+(c.live?" on":"")+'"></span><b dir="ltr" data-nt></b><small>'+t(c.live?"لايف":"أوفلاين")+'</small><button class="ic ban">🚫</button><button class="ic del">🗑</button>';
-    d.querySelector("b").textContent=c.name;
+  if(!chs.length)list.innerHTML='<p class="empty">'+t("ما فيه قنوات")+'</p>';
+  chs.forEach(c=>{
+    const n=Object.keys(S.commands[c.name]||{}).length;
+    const d=document.createElement("div");d.className="chrow "+(c.live?"live":"off");
+    d.innerHTML='<div class="chav" data-nt></div><div class="chinfo"><b><span dir="ltr" data-nt style="display:inline-block"></span></b><small data-nt></small></div><span class="st'+(c.live?" live":"")+'" data-nt></span><div class="acts2"><button class="ab dg ban" data-nt></button><button class="ab dg del" data-nt></button></div>';
+    d.querySelector(".chav").textContent=c.name.charAt(0).toUpperCase();
+    d.querySelector("b span").textContent=c.name;
+    d.querySelector("small").textContent=n+" "+t("كوماند");
+    d.querySelector(".st").textContent=t(c.live?"لايف":"أوفلاين");
+    d.querySelector(".ban").textContent="🚫 "+t("حظر");
+    d.querySelector(".del").textContent="🗑 "+t("حذف");
     d.querySelector(".ban").onclick=()=>{if(ask("تحظر القناة {n} من استخدام البوت؟",c.name))act(()=>api("POST","/api/ban",{name:c.name}),"تم حظر القناة")};
     d.querySelector(".del").onclick=()=>{if(ask("تحذف القناة {n}؟",c.name))act(()=>api("DELETE","/api/channels/"+encodeURIComponent(c.name)),"تم حذف القناة")};
     list.appendChild(d);
   });
+  $("#bancount").textContent=S.banned.length;
   const bl=$("#banlist");bl.innerHTML="";
   if(!S.banned.length)bl.innerHTML='<p class="empty">'+t("ما فيه قنوات محظورة")+'</p>';
   S.banned.forEach(n=>{
-    const d=document.createElement("div");d.className="row";
-    d.innerHTML='<b dir="ltr" data-nt></b><button class="btn ghost">'+t("رفع الحظر")+'</button>';
-    d.querySelector("b").textContent=n;
+    const d=document.createElement("div");d.className="chrow off";
+    d.innerHTML='<div class="chav bn" data-nt>🚫</div><div class="chinfo"><b><span dir="ltr" data-nt style="display:inline-block"></span></b></div><div class="acts2"><button class="ab" data-nt></button></div>';
+    d.querySelector("b span").textContent=n;
+    d.querySelector("button").textContent=t("رفع الحظر");
     d.querySelector("button").onclick=()=>act(()=>api("DELETE","/api/ban/"+encodeURIComponent(n)),"تم رفع الحظر");
     bl.appendChild(d);
   });
@@ -1378,6 +1426,7 @@ $("#logout").onclick=async()=>{await api("POST","/api/logout");show(false)};
 $("#addch").onclick=()=>act(async()=>{await api("POST","/api/channels",{name:$("#newch").value});$("#newch").value=""},"تمت إضافة القناة");
 $("#banbtn").onclick=()=>act(async()=>{await api("POST","/api/ban",{name:$("#banch").value});$("#banch").value=""},"تم حظر القناة");
 $("#cmdch").onchange=renderCmds;
+$("#chq").oninput=()=>render();
 $("#repbanbtn").onclick=()=>act(async()=>{await api("POST","/api/report-ban",{name:$("#repban").value});$("#repban").value=""},"تم منع المُبلّغ");
 $("#savecmd").onclick=()=>act(async()=>{
   await api("POST","/api/commands",Object.assign({channel:$("#cmdch").value},cmdFormGet()));
@@ -1401,14 +1450,14 @@ load();
 # ---------------- زر البلاغات (يظهر في موقع الستريمر وصفحة الكوماندات العامة) ----------------
 REPORT_HTML = r"""
 <style>
-#repbtn{position:fixed;bottom:18px;inset-inline-end:18px;z-index:60;background:#ef4444;color:#fff;border:0;border-radius:30px;padding:11px 16px;font:inherit;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(239,68,68,.35)}
+#repbtn{position:fixed;bottom:18px;inset-inline-end:18px;z-index:60;background:#f43f5e;color:#fff;border:0;border-radius:30px;padding:11px 16px;font:inherit;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(244,63,94,.35)}
 #repmodal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:grid;place-items:center;z-index:70;padding:16px}
-#repmodal .rsheet{background:#111827;border:1px solid #1c2438;border-top:3px solid #ef4444;border-radius:18px;padding:20px;width:100%;max-width:460px}
+#repmodal .rsheet{background:#0f202e;border:1px solid #1c3445;border-top:3px solid #f43f5e;border-radius:18px;padding:20px;width:100%;max-width:460px}
 #repmodal h3{margin:0 0 6px}
 #repmodal textarea{min-height:120px}
 #repmodal .rr{display:flex;gap:8px}
 #repmodal .rr .btn{flex:1}
-#repmodal .btn.sendr{background:#ef4444}
+#repmodal .btn.sendr{background:#f43f5e}
 </style>
 <button id="repbtn">🚩 بلاغ</button>
 <div id="repmodal" hidden>
@@ -1450,77 +1499,78 @@ for(const k in EN)AR[EN[k]]=k;
 # ---------------- موقع الستريمر ----------------
 STREAMER_HTML = HEAD.replace("{{TITLE}}", "موقع الستريمر") + r"""
 <style>
-body{background:#0a0e17}
-#app{--pc:#9146ff;--acc:var(--pc)}
+body{background:#060f17}
+#app{--pc:#0891b2;--acc:var(--pc)}
 .shell{display:flex;min-height:100vh}
-aside{width:260px;background:#0d1220;border-inline-end:1px solid #1c2438;display:flex;flex-direction:column;padding:16px 12px;position:sticky;top:0;height:100vh;flex-shrink:0;overflow-y:auto}
+aside{width:260px;background:#08141e;border-inline-end:1px solid #1c3445;display:flex;flex-direction:column;padding:16px 12px;position:sticky;top:0;height:100vh;flex-shrink:0;overflow-y:auto}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;padding:4px 8px 14px}
 .brand .logo{width:36px;height:36px;font-size:18px}
 aside select{margin:0 0 14px}
-.sec{font-size:11px;color:#5d6785;letter-spacing:.08em;padding:12px 12px 6px}
-.nav a{--c:#9146ff;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;color:var(--mut);cursor:pointer;font-weight:500;margin-bottom:3px;border-inline-start:3px solid transparent;transition:.15s}
+.sec{font-size:11px;color:#5f8296;letter-spacing:.08em;padding:12px 12px 6px}
+.nav a{--c:#0891b2;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;color:var(--mut);cursor:pointer;font-weight:500;margin-bottom:3px;border-inline-start:3px solid transparent;transition:.15s}
 .nav a:hover{background:color-mix(in srgb,var(--c) 12%,transparent);color:var(--tx)}
 .nav a.on{background:linear-gradient(90deg,color-mix(in srgb,var(--c) 32%,transparent),color-mix(in srgb,var(--c) 4%,transparent));color:#fff;border-inline-start-color:var(--c)}
 .nav i{font-style:normal;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 24%,transparent);font-size:16px;flex-shrink:0}
 .nav a.on i{background:var(--c)}
-.me{margin-top:auto;border-top:1px solid #1c2438;padding-top:12px}
+.me{margin-top:auto;border-top:1px solid #1c3445;padding-top:12px}
 .meinfo{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.mav{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#9146ff,#5b21b6);display:grid;place-items:center;font-weight:700}
+.mav{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#0891b2,#0e7490);display:grid;place-items:center;font-weight:700}
 .meinfo b{display:block;font-size:14px}
 .mebtns{display:flex;gap:8px}
 .mebtns .btn{flex:1;text-align:center}
 main{flex:1;min-width:0}
-.top{display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid #1c2438;position:sticky;top:0;background:rgba(10,14,23,.88);backdrop-filter:blur(8px);z-index:5}
+.top{display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid #1c3445;position:sticky;top:0;background:rgba(6,15,23,.88);backdrop-filter:blur(8px);z-index:5}
 .top h1{font-size:18px;margin:0;flex:1;border-inline-start:4px solid var(--pc);padding-inline-start:10px}
 .burger{display:none;width:auto!important;padding:8px 12px!important}
 .content{max-width:1080px;margin:0 auto;padding:24px}
-.panel,.stat,.hero,.cmd{background:#111827;border:1px solid #1c2438;border-radius:16px}
+.panel,.stat,.hero,.cmd{background:#0f202e;border:1px solid #1c3445;border-radius:16px}
 .panel{padding:18px;border-top:3px solid var(--pc)}
 .panel h3{margin:0 0 4px;font-size:15px}
-.hero{padding:28px 20px;text-align:center;margin-bottom:14px;background:radial-gradient(circle at 50% 0,color-mix(in srgb,var(--pc) 32%,transparent),transparent 65%),#111827}
-.av{width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,var(--pc),#5b21b6);display:grid;place-items:center;font-size:36px;font-weight:700;margin:0 auto 12px;box-shadow:0 0 0 5px color-mix(in srgb,var(--pc) 25%,transparent)}
-.hero h2{font-size:26px;margin:0 0 8px;color:var(--tx)}
-.pill{display:inline-block;font-size:12px;padding:4px 12px;border-radius:20px;background:#1c2438;color:var(--mut);font-weight:700}
-.pill.live{background:rgba(46,204,113,.15);color:#2ecc71}
+.hero{padding:28px 20px;text-align:center;margin-bottom:14px;background:radial-gradient(circle at 50% 0,color-mix(in srgb,var(--pc) 32%,transparent),transparent 65%),#0f202e}
+.av{width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,var(--pc),#0e7490);display:grid;place-items:center;font-size:36px;font-weight:700;margin:0 auto 12px;box-shadow:0 0 0 5px color-mix(in srgb,var(--pc) 25%,transparent)}
+.hero h2{font-size:26px;margin:0 0 8px;color:var(--tx);border:0;padding:0}
+.pill{display:inline-block;font-size:12px;padding:4px 12px;border-radius:20px;background:#1c3445;color:var(--mut);font-weight:700}
+.pill.live{background:rgba(52,211,153,.15);color:#34d399}
 .acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:18px}
 .acts .btn,.acts a.btn{width:auto;padding:10px 18px}
-.btn.line{background:none;border:1px solid #2a3350;color:var(--tx)}
+.btn.line{background:none;border:1px solid #2a4a5f;color:var(--tx)}
 .btn.sm{width:auto;padding:8px 14px;font-size:13px}
 .grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:14px}
-.stat{padding:18px;border-top:3px solid var(--sc,#9146ff)}
-.stat:nth-child(1){--sc:#3b82f6}.stat:nth-child(2){--sc:#ec4899}.stat:nth-child(3){--sc:#22c55e}.stat:nth-child(4){--sc:#f59e0b}
+.stat{padding:18px;border-top:3px solid var(--sc,#0891b2)}
+.stat:nth-child(1){--sc:#6366f1}.stat:nth-child(2){--sc:#ec4899}.stat:nth-child(3){--sc:#10b981}.stat:nth-child(4){--sc:#f59e0b}
 .stat small{font-size:12px;color:var(--mut)}
 .stat b{display:block;font-size:28px;margin-top:6px}
 .stat b.ok{color:var(--ok)}.stat b.bad{color:var(--bad);font-size:20px;margin-top:12px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
 .bar{display:flex;align-items:center;gap:10px;margin:12px 0;font-size:14px}
 .bar b{min-width:70px}
-.bar i{flex:1;height:10px;background:#1c2438;border-radius:6px;overflow:hidden}
-.bar s{display:block;height:100%;background:linear-gradient(90deg,var(--pc),#f0abfc);border-radius:6px}
+.bar i{flex:1;height:10px;background:#1c3445;border-radius:6px;overflow:hidden}
+.bar s{display:block;height:100%;background:linear-gradient(90deg,var(--pc),#6ee7b7);border-radius:6px}
 .bar em{font-style:normal;color:var(--mut);min-width:24px;text-align:end}
-.bubble{background:#0a0e17;border:1px solid #1c2438;border-radius:12px;padding:12px 14px;min-height:56px;white-space:pre-wrap;word-break:break-word;font-size:14px}
+.bubble{background:#060f17;border:1px solid #1c3445;border-radius:12px;padding:12px 14px;min-height:56px;white-space:pre-wrap;word-break:break-word;font-size:14px}
 .bubble:before{content:"🤖 ";}
 .simrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tool{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .tool input{flex:1;min-width:160px;margin:0}
 .tool .btn{width:auto}
-.chip,.lchip,.rchip,.srchip,.achip,.aichip{background:#111827;border:1px solid #1c2438;color:var(--mut);padding:8px 14px;border-radius:20px;font:inherit;cursor:pointer;font-size:13px}
+.chip,.lchip,.rchip,.srchip,.achip,.aichip{background:#0f202e;border:1px solid #1c3445;color:var(--mut);padding:8px 14px;border-radius:20px;font:inherit;cursor:pointer;font-size:13px}
 .chip.on,.lchip.on,.rchip.on,.srchip.on,.achip.on,.aichip.on{background:var(--pc);border-color:var(--pc);color:#fff}
 .cmd{display:flex;gap:12px;padding:14px;margin-bottom:10px;align-items:flex-start;border-inline-start:4px solid var(--pc)}
 .cmd.off{opacity:.55}
+.cmd{transition:.15s}.cmd:hover{border-color:var(--pc);transform:translateY(-1px)}
 .cmd.col{flex-direction:column;align-items:stretch}
 .cbody{flex:1;min-width:0}
 .chead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
-.chead b{font-size:16px;color:#e9ddff}
+.chead b{font-size:16px;color:#d9f7fc}
 .cbody p{margin:0;color:var(--mut);font-size:14px;word-break:break-word}
-.bd{font-size:11px;padding:3px 10px;border-radius:20px;background:#1c2438;color:var(--mut)}
+.bd{font-size:11px;padding:3px 10px;border-radius:20px;background:#1c3445;color:var(--mut)}
 .bd.g{background:color-mix(in srgb,var(--pc) 22%,transparent);color:#fff}
 .bd.warn{background:rgba(245,158,11,.18);color:#f5a623}
 .chk{display:flex;align-items:center;gap:10px;margin:9px 0;color:var(--tx);font-size:14px;cursor:pointer}
 .chk input{width:auto;margin:0;accent-color:var(--pc)}
 .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .sub{font-size:13px;color:var(--mut);margin:12px 0 6px}
-.song{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid #1c2438}
+.song{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid #1c3445}
 .song:last-child{border:0}
 .song b{flex:1;font-size:14px;word-break:break-word;font-weight:500}
 .song small{color:var(--mut)}
@@ -1529,7 +1579,7 @@ main{flex:1;min-width:0}
 .copyrow input{margin:0;direction:ltr}
 .copyrow .btn{width:auto}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:grid;place-items:center;z-index:50;padding:16px}
-.sheet{background:#111827;border:1px solid #1c2438;border-radius:18px;padding:20px;width:100%;max-width:520px;max-height:92vh;overflow:auto}
+.sheet{background:#0f202e;border:1px solid #1c3445;border-radius:18px;padding:20px;width:100%;max-width:520px;max-height:92vh;overflow:auto}
 .sheet .card{background:none;border:0;padding:0;margin:0}
 #bd{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:30}
 @media(max-width:860px){
@@ -1559,14 +1609,14 @@ main{flex:1;min-width:0}
     <div class="brand"><div class="logo">🎮</div><span>موقع الستريمر</span></div>
     <select id="chsel" hidden></select>
     <div class="nav" id="nav">
-      <a data-p="ov" class="on" style="--c:#9146ff"><i>🏠</i><span>الرئيسية</span></a>
-      <a data-p="cmd" style="--c:#3b82f6"><i>⌨️</i><span>الكوماندات</span></a>
+      <a data-p="ov" class="on" style="--c:#0891b2"><i>🏠</i><span>الرئيسية</span></a>
+      <a data-p="cmd" style="--c:#6366f1"><i>⌨️</i><span>الكوماندات</span></a>
       <a data-p="auto" class="own" style="--c:#f59e0b"><i>⏰</i><span>الرسائل التلقائية</span></a>
       <a data-p="songs" class="own" style="--c:#ec4899"><i>🎵</i><span>طلبات الأغاني</span></a>
-      <a data-p="spam" class="own" style="--c:#ef4444"><i>🛡️</i><span>الحماية من السبام</span></a>
-      <a data-p="bot" class="own" style="--c:#14b8a6"><i>🤖</i><span>حساب البوت</span></a>
+      <a data-p="spam" class="own" style="--c:#f43f5e"><i>🛡️</i><span>الحماية من السبام</span></a>
+      <a data-p="bot" class="own" style="--c:#0d9488"><i>🤖</i><span>حساب البوت</span></a>
       <a data-p="ai" class="own" style="--c:#8b5cf6"><i>✨</i><span>الذكاء الاصطناعي</span></a>
-      <a data-p="mods" class="own" style="--c:#22c55e"><i>👥</i><span>المودات</span></a>
+      <a data-p="mods" class="own" style="--c:#10b981"><i>👥</i><span>المودات</span></a>
       <a data-p="set" class="own" style="--c:#94a3b8"><i>⚙️</i><span>الإعدادات</span></a>
     </div>
     <div class="me">
@@ -1729,7 +1779,7 @@ main{flex:1;min-width:0}
             <div class="tool" style="margin-top:12px"><button class="btn sm" id="sr-play">▶ تشغيل الأغاني من الموقع</button></div>
             <p class="hint" style="margin:6px 0 0">يشغّل الأغاني هنا داخل الموقع نفسه. لا تشغّل مشغّل ثاني (مثل OBS) بنفس الوقت وإلا بيشتغلون مرتين.</p>
             <p class="hint" style="margin:6px 0 0">⚠️ أغاني سبوتيفاي حالياً ما تشتغل. استخدم روابط يوتيوب أو اسم الأغنية.</p>
-            <div id="srplayer" hidden style="margin-top:12px;border:1px solid #1c2438;border-radius:12px;overflow:hidden"></div>
+            <div id="srplayer" hidden style="margin-top:12px;border:1px solid #1c3445;border-radius:12px;overflow:hidden"></div>
           </div>
           <div class="panel">
             <h3>الطابور</h3>
@@ -1898,7 +1948,7 @@ Object.assign(EN,{"تشتغل مباشرة بدون إضافة. وإذا سوّ�
 Object.assign(EN,{"⚠️ أغاني سبوتيفاي حالياً ما تشتغل. استخدم روابط يوتيوب أو اسم الأغنية.":"⚠️ Spotify songs currently don't work. Use YouTube links or the song name."});
 for(const k in EN)AR[EN[k]]=k;
 const TITLES={ov:"الرئيسية",cmd:"الكوماندات",auto:"الرسائل التلقائية",songs:"طلبات الأغاني",spam:"الحماية من السبام",bot:"حساب البوت",ai:"الذكاء الاصطناعي",mods:"المودات",set:"الإعدادات"};
-const COLORS={ov:"#9146ff",cmd:"#3b82f6",auto:"#f59e0b",songs:"#ec4899",spam:"#ef4444",bot:"#14b8a6",ai:"#8b5cf6",mods:"#22c55e",set:"#94a3b8"};
+const COLORS={ov:"#0891b2",cmd:"#6366f1",auto:"#f59e0b",songs:"#ec4899",spam:"#f43f5e",bot:"#0d9488",ai:"#8b5cf6",mods:"#10b981",set:"#94a3b8"};
 const OWNPG=["auto","songs","spam","bot","ai","mods","set"];
 const BUILTIN_CMDS=[
  ["!followage","من متى يتابع المشاهد القناة","How long a viewer has followed"],
@@ -1932,7 +1982,7 @@ function go(p){
   PG=p;
   document.querySelectorAll(".pg").forEach(x=>x.hidden=x.id!=="p-"+p);
   document.querySelectorAll("#nav a").forEach(x=>x.classList.toggle("on",x.dataset.p===p));
-  $("#app").style.setProperty("--pc",COLORS[p]||"#9146ff");
+  $("#app").style.setProperty("--pc",COLORS[p]||"#0891b2");
   $("#ptitle").textContent=t(TITLES[p]);
   $("#side").classList.remove("open");$("#bd").hidden=true;
 }
@@ -2252,27 +2302,27 @@ init().then(()=>{if(goto&&CH)go(goto)});
 PUBLIC_HTML = HEAD.replace("{{TITLE}}", "كوماندات القناة") + r"""
 <style>
 .wrap{max-width:900px}
-.hero{display:flex;align-items:center;gap:16px;padding:20px;border:1px solid var(--line);border-radius:18px;margin-bottom:16px;background:radial-gradient(circle at 100% 0,rgba(145,70,255,.28),transparent 60%),var(--card)}
-.av{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#9146ff,#5b21b6);display:grid;place-items:center;font-size:28px;font-weight:700;flex-shrink:0;box-shadow:0 0 0 4px rgba(145,70,255,.22)}
+.hero{display:flex;align-items:center;gap:16px;padding:20px;border:1px solid var(--line);border-radius:18px;margin-bottom:16px;background:radial-gradient(circle at 100% 0,rgba(8,145,178,.28),transparent 60%),var(--card)}
+.av{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#0891b2,#0e7490);display:grid;place-items:center;font-size:28px;font-weight:700;flex-shrink:0;box-shadow:0 0 0 4px rgba(8,145,178,.22)}
 .info{flex:1;min-width:0}
 .info h1{margin:0 0 6px;font-size:22px;word-break:break-all}
 .sub{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.pill{display:inline-block;font-size:12px;padding:4px 12px;border-radius:20px;background:#1c2438;color:var(--mut);font-weight:700}
-.pill.live{background:rgba(46,204,113,.15);color:#2ecc71}
+.pill{display:inline-block;font-size:12px;padding:4px 12px;border-radius:20px;background:#1c3445;color:var(--mut);font-weight:700}
+.pill.live{background:rgba(52,211,153,.15);color:#34d399}
 .tool{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
 .tool input{flex:1;min-width:180px;margin:0}
 .chip{background:var(--card);border:1px solid var(--line);color:var(--mut);padding:8px 14px;border-radius:20px;font:inherit;cursor:pointer;font-size:13px}
 .chip.on{background:var(--acc);border-color:var(--acc);color:#fff}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
-.cc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0;border-top:3px solid var(--k,#3b82f6)}
+.cc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0;border-top:3px solid var(--k,#6366f1)}
 .cc.game{--k:#ec4899}
 .cc .h{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.cc b{font-size:16px;color:#e9ddff;cursor:pointer;word-break:break-all}
+.cc b{font-size:16px;color:#d9f7fc;cursor:pointer;word-break:break-all}
 .cc b:hover{color:#fff}
 .cc p{margin:0;color:var(--mut);font-size:14px;word-break:break-word}
-.bd.p-sub{background:rgba(59,130,246,.18);color:#7db4ff}
+.bd.p-sub{background:rgba(99,102,241,.18);color:#a5b4fc}
 .bd.p-vip{background:rgba(236,72,153,.18);color:#f59ac8}
-.bd.p-mod{background:rgba(46,204,113,.15);color:#2ecc71}
+.bd.p-mod{background:rgba(52,211,153,.15);color:#34d399}
 .bd.p-broadcaster{background:rgba(245,166,35,.18);color:#f5a623}
 .sec{margin-top:22px;border-top:3px solid #f59e0b}
 .sec.sr{border-top-color:#ec4899}
@@ -2378,18 +2428,18 @@ PLAYER_HTML = r"""<!DOCTYPE html>
 <title>مشغّل الأغاني</title>
 <style>
 [hidden]{display:none!important}
-html,body{margin:0;height:100%;background:#0b0b10;color:#f1f1f5;font-family:Tajawal,system-ui,sans-serif}
+html,body{margin:0;height:100%;background:#060f17;color:#e9f2f8;font-family:Tajawal,system-ui,sans-serif}
 #wrap{display:flex;flex-direction:column;height:100%}
 #stage{flex:1;min-height:0;position:relative;background:#000}
 #ytwrap{position:absolute;inset:0}
 #ytwrap iframe{width:100%;height:100%;border:0;display:block}
 #msg{position:absolute;inset:0;z-index:5;display:grid;place-items:center;background:rgba(0,0,0,.72);color:#fff;font-size:18px;text-align:center;padding:16px;cursor:pointer}
 #note{padding:6px 14px;background:#3a2a05;color:#fcd34d;font-size:13px}
-#bar{padding:10px 14px;background:#18181f;border-top:3px solid #ec4899;font-size:15px;display:flex;gap:10px;align-items:center}
+#bar{padding:10px 14px;background:#0d1b27;border-top:3px solid #ec4899;font-size:15px;display:flex;gap:10px;align-items:center}
 #bar b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#bar small{color:#9a9aab}
+#bar small{color:#8aa4b6}
 button{background:#ec4899;color:#fff;border:0;border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer}
-#volwrap{display:flex;align-items:center;gap:6px;color:#9a9aab}
+#volwrap{display:flex;align-items:center;gap:6px;color:#8aa4b6}
 #vol{width:90px;accent-color:#ec4899;margin:0}
 </style></head><body>
 <div id="wrap">
@@ -2509,14 +2559,14 @@ SESSION_TOKEN = (
 
 ICON_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
-    '<rect width="100" height="100" rx="24" fill="#9146ff"/>'
+    '<rect width="100" height="100" rx="24" fill="#0891b2"/>'
     '<text x="50" y="68" font-size="56" text-anchor="middle">🤖</text></svg>'
 )
 
 MANIFEST = {
     "name": "لوحة تحكم البوت", "short_name": "البوت", "start_url": "/",
-    "display": "standalone", "background_color": "#0e0e12",
-    "theme_color": "#0e0e12", "lang": "ar", "dir": "rtl",
+    "display": "standalone", "background_color": "#07121b",
+    "theme_color": "#07121b", "lang": "ar", "dir": "rtl",
     "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml"}],
 }
 
