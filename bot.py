@@ -1830,6 +1830,23 @@ class TwitchAPI:
         return True, d2["data"][0].get("url") or f"https://clips.twitch.tv/{clip_id}"
     return False, "failed"
 
+  async def random_clip(self, login):
+    """يرجع كليب عشوائي من أشهر كليبات قناة login: {"id","url","duration"}، أو None."""
+    if not self.enabled or not re.fullmatch(r"\w{1,25}", login or ""):
+      return None
+    uid = await self.user_id(login.lower())
+    if not uid:
+      return None
+    st, d = await self.call("GET", "clips", await self.get_app_token(),
+                            params={"broadcaster_id": uid, "first": "30"})
+    if st != 200 or not d.get("data"):
+      return None
+    c = random.choice(d["data"])
+    if not c.get("id"):
+      return None
+    return {"id": c["id"], "url": c.get("url") or f"https://clips.twitch.tv/{c['id']}",
+            "duration": float(c.get("duration") or 30)}
+
   # ---------- الشات عبر EventSub + Send Chat Message API ----------
   async def is_live(self, login):
     if not self.enabled:
@@ -2320,7 +2337,7 @@ CMD_FORM = r"""
   <input id="csecs" type="number" min="5" max="60" value="30" dir="ltr" hidden>
   <p class="hint" id="cliphint" hidden>لازم الستريمر يربط تويتش (أو يعيد الربط) من تبويب الإعدادات عشان صلاحية الكليب تتفعّل. الكليب يشتغل بس وأنت لايف.</p>
   <textarea id="creply" placeholder="رد البوت"></textarea>
-  <div class="chips" id="chips"><span>$(user)</span><span>$(touser)</span><span>$(channel)</span><span>$(game)</span><span>$(count)</span><span>$(uptime)</span><span>$(url)</span></div>
+  <div class="chips" id="chips"><span>$(user)</span><span>$(touser)</span><span>$(channel)</span><span>$(game)</span><span>$(count)</span><span>$(uptime)</span><span>$(url)</span><span>$(clip)</span></div>
   <label>مين يقدر يستخدم الكوماند؟</label>
   <select id="cperm">
     <option value="everyone">الكل</option>
@@ -3143,6 +3160,16 @@ main{flex:1;min-width:0}
 
         <section class="pg own" id="p-set" hidden>
           <div class="panel" style="margin-bottom:14px">
+            <h3>🎬 Overlay الشاوت آوت (OBS)</h3>
+            <p class="mut">لما أحد يكتب !so اسم_ستريمر يظهر كليب من قناته على بثك. أضف الرابط في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.</p>
+            <div class="copyrow" style="margin-top:10px">
+              <input id="ov-url" readonly>
+              <button class="btn sm" id="ov-copy">نسخ</button>
+              <button class="btn sm line" id="ov-test">تجربة</button>
+            </div>
+            <p class="hint" style="margin:6px 0 0">زر «تجربة» يشغّل كليب عشوائي من قناتك. الكليب يظهر بس إذا الـ Overlay مفتوح في OBS.</p>
+          </div>
+          <div class="panel" style="margin-bottom:14px">
             <h3>متى يشتغل البوت في قناتي؟</h3>
             <p class="mut">يتحكم في الكوماندات والردود التلقائية والرسائل المجدولة. كوماندات الإدارة (مثل !addcmd) وتغيير اللعبة والعنوان تشتغل دائماً.</p>
             <div class="tool" style="margin:12px 0 10px">
@@ -3445,6 +3472,7 @@ function renderSongs(){
   $("#sr-nokey").hidden=!!c.yt_key;
   const url=location.origin+c.player_path;
   $("#sr-playerurl").value=url;$("#sr-open").href=url;
+  $("#ov-url").value=c.overlay_path?location.origin+c.overlay_path:"";
   renderQueue();
   if(SRP&&SRC!==c.player_path)srPlayer(true);
   $("#sr-play").textContent=t(SRP?"⏹ إيقاف المشغّل":"▶ تشغيل الأغاني من الموقع");
@@ -3550,6 +3578,8 @@ $("#tmreset").onclick=()=>{if(ask("ترجع الرسائل المجدولة ال
 document.querySelectorAll(".srchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/sr/settings",{on:b.dataset.sr==="on"}),"تم الحفظ"));
 $("#sr-save").onclick=()=>act(()=>api("POST",base()+"/sr/settings",{per_user:parseInt($("#sr-user").value,10),max_queue:parseInt($("#sr-queue").value,10),max_minutes:parseInt($("#sr-min").value,10),perm:$("#sr-perm").value}),"تم الحفظ");
 $("#sr-copy").onclick=()=>copyText($("#sr-playerurl").value);
+$("#ov-copy").onclick=()=>copyText($("#ov-url").value);
+$("#ov-test").onclick=()=>act(()=>api("POST",base()+"/overlay/test"),"تم الإرسال");
 $("#sr-skip").onclick=()=>act(()=>api("POST",base()+"/sr/skip"),"تم الحفظ");
 $("#sr-clear").onclick=()=>act(()=>api("POST",base()+"/sr/clear"),"تم الحفظ");
 $("#sr-play").onclick=()=>srPlayer(!SRP);
@@ -3679,6 +3709,7 @@ html{scroll-behavior:smooth}
 <script>
 //COMMON_JS
 Object.assign(EN,{"🎵 طلبات الأغاني":"🎵 Song requests","ما فيه أغاني بالطابور":"The queue is empty","⌨️ الكوماندات":"⌨️ Commands","📖 دليل الكوماندات":"📖 Commands guide","🎮 دخول الستريمر":"🎮 Streamer login"});
+Object.assign(EN,{"🎬 Overlay الشاوت آوت (OBS)":"🎬 Shoutout overlay (OBS)","لما أحد يكتب !so اسم_ستريمر يظهر كليب من قناته على بثك. أضف الرابط في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.":"When someone types !so streamer_name, a clip from their channel plays on your stream. Add the link in OBS: Sources, then Browser Source, size 1920×1080. Don't share it with anyone.","تجربة":"Test","زر «تجربة» يشغّل كليب عشوائي من قناتك. الكليب يظهر بس إذا الـ Overlay مفتوح في OBS.":"The Test button plays a random clip from your channel. It only shows if the overlay is open in OBS.","تم الإرسال":"Sent","ما لقيت كليبات بقناتك للتجربة":"No clips found on your channel to test with"});
 for(const k in EN)AR[EN[k]]=k;
 const CHN=decodeURIComponent(location.pathname.split("/").pop()).toLowerCase();
 let D=null,BAD=false,FILT="all",Q="";
@@ -3733,6 +3764,58 @@ fetch("/pub/"+encodeURIComponent(CHN)).then(r=>r.ok?r.json():Promise.reject()).t
 """
 
 # ---------------- مشغّل الأغاني (رابط خاص بالستريمر يُحط في OBS) ----------------
+OVERLAY_HTML = r"""<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>majek overlay</title>
+<style>
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font-family:Tajawal,system-ui,sans-serif}
+#card{position:absolute;left:50%;bottom:6%;width:62%;max-width:1100px;transform:translate(-50%,40px);opacity:0;transition:opacity .5s,transform .5s;
+  background:linear-gradient(135deg,#1a0b3d,#2b1160);border:3px solid #ec4899;border-radius:22px;overflow:hidden;box-shadow:0 14px 50px rgba(0,0,0,.6)}
+#card.show{opacity:1;transform:translate(-50%,0)}
+#hd{padding:12px 20px;color:#fff;font-size:clamp(18px,2.6vw,34px);font-weight:700;display:flex;gap:12px;align-items:center;justify-content:center;text-shadow:0 2px 8px rgba(0,0,0,.5)}
+#hd small{color:#f9a8d4;font-weight:400;font-size:.7em}
+#vid{position:relative;width:100%;aspect-ratio:16/9;background:#000}
+#vid iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+</style></head><body>
+<div id="card"><div id="hd"><span>💜</span><span id="nm"></span><small id="lk"></small></div><div id="vid"></div></div>
+<script>
+const CH=__CH__,K=__KEY__;
+const $=id=>document.getElementById(id);
+let last=-1,queue=[],playing=false;
+function esc(t){return String(t).replace(/[^\w]/g,"")}
+function play(ev){
+  playing=true;
+  const login=esc(ev.login);
+  $("nm").textContent="شاوت آوت لـ "+login;
+  $("lk").textContent="twitch.tv/"+login;
+  const f=document.createElement("iframe");
+  f.allow="autoplay; fullscreen";
+  f.src="https://clips.twitch.tv/embed?clip="+encodeURIComponent(ev.clip)+"&parent="+encodeURIComponent(location.hostname)+"&autoplay=true&muted=false";
+  const v=$("vid");v.innerHTML="";v.appendChild(f);
+  $("card").classList.add("show");
+  setTimeout(()=>{
+    $("card").classList.remove("show");
+    setTimeout(()=>{v.innerHTML="";playing=false;next()},700);
+  },(ev.dur+2)*1000);
+}
+function next(){if(!playing&&queue.length)play(queue.shift())}
+async function poll(){
+  try{
+    const r=await fetch("/overlay/api/"+encodeURIComponent(CH)+"/poll?k="+encodeURIComponent(K)+"&after="+last,{cache:"no-store"});
+    const d=await r.json();
+    if(typeof d.last==="number"){
+      if(last<0)last=d.last;
+      else d.events.forEach(e=>{if(e.id>last)last=e.id;queue.push(e)});
+    }
+    next();
+  }catch(e){}
+}
+poll();setInterval(poll,2000);
+</script></body></html>
+"""
+
+
 PLAYER_HTML = r"""<!DOCTYPE html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -4021,6 +4104,10 @@ def is_spotify(text):
 
 def player_key(ch):
   return sign("player:" + ch)[:24]
+
+
+def overlay_key(ch):
+  return sign("overlay:" + ch)[:24]
 
 
 def make_web_app(bot):
@@ -4534,6 +4621,7 @@ def make_web_app(bot):
         "songs": bot.sr_view(ch),
         "yt_key": bool(YOUTUBE_API_KEY),
         "player_path": f"/player/{ch}?k={player_key(ch)}" if own else "",
+        "overlay_path": f"/overlay/{ch}?k={overlay_key(ch)}" if own else "",
         "filters": {k: f[k] for k in FILTER_DEFAULT},
         "ai": dict(store.ai(ch)) if own else {},
         "ai_ready": bool(GEMINI_API_KEY),
@@ -4842,6 +4930,43 @@ def make_web_app(bot):
     bot.sr_next(ch)
     return web.json_response(bot.sr_view(ch))
 
+  def overlay_ok(request, ch):
+    k = request.query.get("k", "")
+    return ch in store.data["channels"] and hmac.compare_digest(k.encode(), overlay_key(ch).encode())
+
+  async def overlay_page(request):
+    ch = request.match_info["channel"].lower()
+    if not overlay_ok(request, ch):
+      return web.Response(text="403", status=403)
+    html = OVERLAY_HTML.replace("__CH__", json.dumps(ch)).replace("__KEY__", json.dumps(overlay_key(ch)))
+    return web.Response(text=html, content_type="text/html")
+
+  async def overlay_poll(request):
+    ch = request.match_info["channel"].lower()
+    if not overlay_ok(request, ch):
+      return jerr("forbidden", 403)
+    try:
+      after = int(request.query.get("after", "-1"))
+    except ValueError:
+      after = -1
+    now = time.time()
+    lst = [e for e in bot.overlay_events.get(ch, []) if now - e["ts"] < 120]
+    # أول طلب (after=-1): نرجّع آخر رقم فقط عشان ما نعيد أحداث قديمة
+    ev = [] if after < 0 else [e for e in lst if e["id"] > after]
+    return web.json_response({"last": bot.overlay_seq, "events": ev},
+                             headers={"Cache-Control": "no-store"})
+
+  async def overlay_test(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    clip = await twitch.random_clip(ch)
+    if not clip:
+      return jerr("ما لقيت كليبات بقناتك للتجربة")
+    bot.push_overlay(ch, ch, clip)
+    return web.json_response({"ok": True})
+
   # ---------- الحماية + حساب البوت ----------
   async def s_filters(request):
     a, err = access(request, owner_only=True)
@@ -4959,6 +5084,9 @@ def make_web_app(bot):
   r.add_post("/s/api/channel/{channel}/ai", s_ai)
   r.add_post("/s/api/channel/{channel}/botacct/reset", s_botacct_reset)
   # مشغّل الأغاني
+  r.add_get("/overlay/{channel}", overlay_page)
+  r.add_get("/overlay/api/{channel}/poll", overlay_poll)
+  r.add_post("/s/api/channel/{channel}/overlay/test", overlay_test)
   r.add_get("/player/{channel}", player_page)
   r.add_get("/player/api/{channel}/state", player_state)
   r.add_post("/player/api/{channel}/next", player_next)
@@ -5137,6 +5265,8 @@ class Bot:
     self.permits = {}  # (قناة، يوزر) -> وقت انتهاء السماح بالروابط
     self.sent_texts = {}  # (قناة، نص) -> وقت الإرسال: يمنع البوت يتعامل مع رسائله إذا كان بحساب الستريمر
     self.clipping = set()  # قنوات فيها كليب قيد الإنشاء الحين
+    self.overlay_events = {}  # قناة -> قائمة أحداث !so للـ Overlay (في الذاكرة)
+    self.overlay_seq = 0
     self.warned = {}  # (قناة، يوزر) -> آخر تنبيه من الفلاتر
     self.ai_times = []  # أوقات طلبات Gemini في آخر دقيقة (حد عام)
     self.ai_user = {}  # (قناة، يوزر) -> آخر سؤال
@@ -5897,6 +6027,15 @@ class Bot:
     parts[0] = word
     return await self.run_custom(message, word, entry, parts, channel_name, level)
 
+  def push_overlay(self, channel_name, target, clip):
+    """يسجّل حدث شاوت آوت عشان صفحة الـ Overlay في OBS تلقطه وتشغّل الكليب."""
+    self.overlay_seq += 1
+    ev = {"id": self.overlay_seq, "clip": clip["id"], "login": target.lstrip("@")[:25],
+          "dur": max(5, min(60, clip["duration"])), "ts": time.time()}
+    lst = self.overlay_events.setdefault(channel_name, [])
+    lst.append(ev)
+    del lst[:-10]
+
   def count_use(self, channel_name, cmd):
     d = self.usage.setdefault(channel_name, {})
     d[cmd] = d.get(cmd, 0) + 1
@@ -5970,8 +6109,22 @@ class Bot:
     self.cmd_cooldown[key] = now
     self.count_use(channel_name, cmd)
 
+    # كليب الستريمر المستهدف: متغير $(clip)، وتلقائياً مع !so / !shoutout
+    clip_url = ""
+    auto_clip = cmd.lstrip("!").lower() in ("so", "shoutout")
+    if target and ("$(clip)" in entry["reply"] or auto_clip):
+      clip = await self.twitch.random_clip(target)
+      if clip:
+        clip_url = clip["url"]
+        if auto_clip:
+          self.push_overlay(channel_name, target, clip)
+
     text = format_response(entry["reply"], message.author.name, channel_name, target)
     text = await self.expand(text, channel_name, cmd)
+    if "$(clip)" in text:
+      text = text.replace("$(clip)", clip_url)
+    elif clip_url:
+      text = text[:490 - len(clip_url) - 1] + " " + clip_url
     await send(text[:490])
     return True
 
