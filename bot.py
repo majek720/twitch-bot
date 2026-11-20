@@ -3819,6 +3819,7 @@ async function poll(){
     if(!r.ok){dbg("poll HTTP "+r.status);return}
     const d=await r.json();
     if(typeof d.last==="number"){
+      if(last>=0&&d.last<last){last=d.last;dbg("server restarted, reset to "+last)}
       if(last<0){last=d.last;dbg("connected, last="+last)}
       else d.events.forEach(e=>{if(e.id>last)last=e.id;queue.push(e);dbg("event #"+e.id+" for "+e.login)});
     }
@@ -5280,7 +5281,7 @@ class Bot:
     self.sent_texts = {}  # (قناة، نص) -> وقت الإرسال: يمنع البوت يتعامل مع رسائله إذا كان بحساب الستريمر
     self.clipping = set()  # قنوات فيها كليب قيد الإنشاء الحين
     self.overlay_events = {}  # قناة -> قائمة أحداث !so للـ Overlay (في الذاكرة)
-    self.overlay_seq = 0
+    self.overlay_seq = int(time.time())  # يبدأ من الوقت: ما يرجع لرقم أصغر بعد إعادة التشغيل
     self.warned = {}  # (قناة، يوزر) -> آخر تنبيه من الفلاتر
     self.ai_times = []  # أوقات طلبات Gemini في آخر دقيقة (حد عام)
     self.ai_user = {}  # (قناة، يوزر) -> آخر سؤال
