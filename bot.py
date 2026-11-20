@@ -6257,6 +6257,13 @@ class Bot:
     user_reply_time[username] = current_time
 
 
+try:
+  import extras
+  extras.apply(sys.modules[__name__])
+except Exception as e:
+  print(f"extras: {e}")
+
+
 if __name__ == "__main__":
   bot = Bot()
   bot.run()
