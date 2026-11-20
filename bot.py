@@ -1546,6 +1546,10 @@ class Store:
         "counts": {},  # قناة -> عدادات $(count)
         "ai": {},  # قناة -> إعدادات الذكاء الاصطناعي
     }
+    # [patch-v2]
+    self._save_lock = asyncio.Lock()  # يمنع كتابتين تتداخلان
+    self._flush_task = None
+    self.broken = False  # True = ما قدرنا نحمّل من الـ Gist، فلا نكتب فوقه
 
   @property
   def use_gist(self):
@@ -1593,8 +1597,16 @@ class Store:
           async with session.get(
               f"https://api.github.com/gists/{GIST_ID}", headers=self._headers()
           ) as resp:
+            if resp.status != 200:
+              raise RuntimeError(f"gist status {resp.status}")
             gist = await resp.json()
-        loaded = json.loads(gist["files"][DATA_FILE]["content"])
+        gfile = (gist.get("files") or {}).get(DATA_FILE)
+        if not gfile:
+          self.broken = False
+          return  # أول تشغيل: ما فيه ملف بيانات بعد
+        if gfile.get("truncated"):
+          raise RuntimeError("gist file truncated")
+        loaded = json.loads(gfile["content"])
       elif os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
           loaded = json.load(f)
@@ -1622,27 +1634,48 @@ class Store:
         # أول تشغيل بعد الترقية: القنوات الحالية تبقى على وضعها (شغالة)، والجديدة تبدأ متوقفة
         self.data["reminders"] = {c: True for c in self.data["channels"]}
       self.data["channels"] = [c for c in self.data["channels"] if c not in self.data["banned"]]
+      self.broken = False
     except Exception as e:
       print(f"تعذر تحميل البيانات: {e}")
+      if self.use_gist:
+        self.broken = True  # لا نكتب فوق الـ Gist ببيانات فاضية
 
   async def save(self):
-    raw = json.dumps(self.data, ensure_ascii=False, indent=2)
-    try:
-      if self.use_gist:
-        payload = {"files": {DATA_FILE: {"content": raw}}}
-        async with aiohttp.ClientSession() as session:
-          async with session.patch(
-              f"https://api.github.com/gists/{GIST_ID}",
-              headers=self._headers(),
-              json=payload,
-          ) as resp:
-            if resp.status >= 300:
-              print(f"فشل حفظ الـ Gist: {resp.status}")
-      else:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-          f.write(raw)
-    except Exception as e:
-      print(f"تعذر حفظ البيانات: {e}")
+    if self.broken:
+      print("⚠️ تجاهلت الحفظ: ما قدرت أحمّل بياناتك من الـ Gist وما أبي أكتب فوقها. "
+            "تأكد من GITHUB_TOKEN و GIST_ID وأعد التشغيل.")
+      return
+    async with self._save_lock:  # كتابة وحدة كل مرة، وتكتب آخر نسخة دايماً
+      raw = json.dumps(self.data, ensure_ascii=False, indent=2)
+      try:
+        if self.use_gist:
+          payload = {"files": {DATA_FILE: {"content": raw}}}
+          async with aiohttp.ClientSession() as session:
+            async with session.patch(
+                f"https://api.github.com/gists/{GIST_ID}",
+                headers=self._headers(),
+                json=payload,
+            ) as resp:
+              if resp.status >= 300:
+                print(f"فشل حفظ الـ Gist: {resp.status}")
+        else:
+          tmp = DATA_FILE + ".tmp"
+          with open(tmp, "w", encoding="utf-8") as f:
+            f.write(raw)
+          os.replace(tmp, DATA_FILE)  # كتابة ذرية: الملف ما يتلف لو انقطع التشغيل
+      except Exception as e:
+        print(f"تعذر حفظ البيانات: {e}")
+
+  def save_soon(self, delay=15):
+    """حفظ مؤجّل للتعديلات الصغيرة المتكررة (مثل عدّاد الكوماند) بدل كتابة الـ Gist كل مرة."""
+    if self._flush_task and not self._flush_task.done():
+      return
+
+    async def _go():
+      await asyncio.sleep(delay)
+      await self.save()
+
+    self._flush_task = asyncio.create_task(_go())
 
 
 # ============================================================
@@ -2119,6 +2152,20 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .ab.dg{color:#fda4af}
 .ab.dg:hover{border-color:#f43f5e;background:rgba(244,63,94,.15)}
 @media(max-width:520px){.chrow{flex-wrap:wrap}.chrow .acts2{width:100%;justify-content:flex-end}}
+/* لمسات تحسين */
+::selection{background:#7c3aed;color:#fff}
+*{scrollbar-width:thin;scrollbar-color:#3d2a73 transparent}
+button,a,input,select,textarea{-webkit-tap-highlight-color:transparent}
+.btn,.ab,.ic,.chip,.lchip,.rchip,.srchip,.achip,.aichip,.tabs button{transition:transform .12s,filter .15s,background .15s,border-color .15s}
+.btn:hover:not(:disabled){filter:brightness(1.12)}
+.btn:active,.ab:active,.ic:active{transform:scale(.97)}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--acc)}
+.card{transition:border-color .15s}
+.card:hover{border-color:#42308a}
+#toast{bottom:calc(24px + env(safe-area-inset-bottom));max-width:90vw;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+@media(max-width:860px){.content,.wrap{padding-bottom:90px!important}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 """
 
 COMMON_JS = r"""
@@ -2509,6 +2556,12 @@ main{flex:1;min-width:0}
       <div class="lh"><h2>القنوات الحالية</h2><span class="cntb live" id="chlive" hidden></span><span class="cntb" id="chcount">0</span></div>
       <input id="chq" class="srch" dir="ltr" placeholder="بحث عن قناة">
       <div class="list" id="chlist"></div>
+    </div>
+    <div class="card">
+      <h2>نسخة احتياطية وحالة البوت • Backup &amp; status</h2>
+      <p class="hint">نزّل نسخة من بيانات البوت (قنوات، كوماندات، ربط تويتش). لا تشاركها مع أحد.</p>
+      <a class="btn" href="/api/export" download="bot_data.json">⬇️ تحميل نسخة احتياطية</a>
+      <a class="btn ghost mt" href="/api/status" target="_blank" style="width:100%">🩺 حالة البوت</a>
     </div>
   </section>
 
@@ -2907,6 +2960,11 @@ main{flex:1;min-width:0}
 
       <div id="main" hidden>
         <section class="pg" id="p-ov">
+          <div class="card" id="chatwarn" hidden style="border-color:#f43f5e;border-inline-start:4px solid #f43f5e">
+            <h2 style="border-color:#f43f5e">⚠️ البوت ما يقدر يقرأ شات قناتك</h2>
+            <p class="mut" style="margin:0 0 12px">عشان يرد البوت لازم تعطيه صلاحية: اضغط الزر وافق على الصلاحيات (ما يحتاج تغيّر حساب البوت)، أو اكتب في شاتك: <b dir="ltr">/mod <span id="cwbot"></span></b></p>
+            <a class="btn" href="/auth/connect">إعادة الربط وإعطاء الصلاحية</a>
+          </div>
           <div class="hero">
             <div class="av" id="av"></div>
             <h2 id="chname" dir="ltr" data-nt></h2>
@@ -3269,6 +3327,8 @@ const BUILTIN_CMDS=[
  ["!permit اسم","يسمح لشخص بروابط دقيقة (مود)","Lets a viewer post links for a minute (mod)"]
 ];
 const dn=(n,c)=>((c&&c.bang===false)?"":"!")+n;
+Object.assign(EN,{"⚠️ البوت ما يقدر يقرأ شات قناتك":"⚠️ The bot can't read your chat","عشان يرد البوت لازم تعطيه صلاحية: اضغط الزر وافق على الصلاحيات (ما يحتاج تغيّر حساب البوت)، أو اكتب في شاتك:":"For the bot to reply, you need to grant it permission: press the button and approve the permissions (no need to change the bot account), or type in your chat:","إعادة الربط وإعطاء الصلاحية":"Relink and grant permission"});
+for(const k in EN)AR[EN[k]]=k;
 const base=()=>"/s/api/channel/"+encodeURIComponent(CH.name);
 const base2=()=>"/s/api/channel/"+encodeURIComponent($("#chsel").value);
 onAuth=d=>{
@@ -3321,6 +3381,8 @@ function render(){
   $("#livepill").className="pill"+(c.live?" live":"");
   $("#livepill").textContent=t(c.live?"لايف":"أوفلاين");
   $("#curgame").textContent=c.game?t("🎮 اللعبة الحالية:")+" "+c.game:"";
+  $("#chatwarn").hidden=!(c.role==="owner"&&c.chat&&c.chat.ok===false);
+  $("#cwbot").textContent=c.bot?c.bot.login:"";
   $("#pubbtn").href="/c/"+encodeURIComponent(c.name);
   $("#curtitle").textContent=c.title?t("📝 العنوان الحالي:")+" "+c.title:"";
   $("#curtitle").hidden=!c.title;
@@ -4130,6 +4192,7 @@ def make_web_app(bot):
   twitch = bot.twitch
   redirect_uri = SITE_URL + "/auth/callback"
   report_times = {}  # بصمة المرسل -> أوقات آخر بلاغات
+  login_fails = {}  # بصمة -> أوقات المحاولات الفاشلة لكلمة مرور اللوحة
 
   # ---------------- لوحة الأونر ----------------
   def authed(request):
@@ -4182,9 +4245,20 @@ def make_web_app(bot):
     if not SESSION_TOKEN:
       return jerr("لوحة التحكم مقفلة: ضيف DASHBOARD_PASSWORD في Render", 503)
     body = await jbody(request)
+    now = time.time()
+    ip = client_ids(request)[0]
+    recent = [x for x in login_fails.get(ip, []) if now - x < 600]
+    overall = [x for x in login_fails.get("*", []) if now - x < 600]
+    if len(recent) >= 6 or len(overall) >= 40:
+      return jerr("محاولات كثيرة، حاول بعد شوي", 429)
     await asyncio.sleep(1)
     if not hmac.compare_digest(str(body.get("password", "")).encode(), DASHBOARD_PASSWORD.encode()):
+      recent.append(now)
+      overall.append(now)
+      login_fails[ip] = recent
+      login_fails["*"] = overall
       return jerr("كلمة المرور غلط", 401)
+    login_fails.pop(ip, None)
     resp = web.json_response({"ok": True})
     resp.set_cookie("session", SESSION_TOKEN, max_age=60 * 60 * 24 * 30, httponly=True,
                     samesite="Lax", secure=is_https(request))
@@ -4288,10 +4362,34 @@ def make_web_app(bot):
     await channel.send(text)
     return web.json_response({"ok": True})
 
+  async def export_data(request):
+    raw = json.dumps(store.data, ensure_ascii=False, indent=2)
+    return web.Response(
+        body=raw.encode("utf-8"), content_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="bot_data.json"',
+                 "Cache-Control": "no-store"})
+
+  async def status(request):
+    return web.json_response({
+        "build": BUILD_ID,
+        "uptime_minutes": int((time.time() - int(BUILD_ID)) / 60),
+        "storage": "gist (دائم)" if store.use_gist else "ملف محلي (يتصفر مع كل نشر في Render!)",
+        "store_broken": store.broken,
+        "channels": len(store.data["channels"]),
+        "irc_connected": bool(bot.irc and bot.irc.ready.is_set()),
+        "irc_channels": sorted(bot.irc_channels),
+        "paused_channels": sorted(bot.paused),
+        "send_queues": {c: q.qsize() for c, q in bot.queues.items() if q.qsize()},
+        "gemini_key": bool(GEMINI_API_KEY),
+        "youtube_key": bool(YOUTUBE_API_KEY),
+    }, dumps=lambda o: json.dumps(o, ensure_ascii=False, indent=2))
+
   # ---------------- البلاغات ----------------
   def client_ids(request):
     """هوية المرسل: يوزر تويتش (لو مسجل دخول) + بصمة مشفّرة من الـ IP."""
-    ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or (request.remote or "")
+    h = request.headers
+    ip = (h.get("CF-Connecting-IP") or h.get("True-Client-IP")
+          or h.get("X-Forwarded-For", "").split(",")[0]).strip() or (request.remote or "")
     ipid = "ip:" + hashlib.sha256((ip + "|" + SECRET.decode(errors="ignore")).encode()).hexdigest()[:12]
     login_name = read_session(request.cookies.get("ssess", ""))
     ids = [ipid]
@@ -4642,6 +4740,7 @@ def make_web_app(bot):
         "ai_ready": bool(GEMINI_API_KEY),
         "mod_ready": bool((acct or store.data["bot_auth"]).get("refresh")),
         "bot": {"login": twitch.bot_login(ch), "custom": bool(acct)},
+        "chat": bot.chat_state.get(ch, {"ok": True, "mode": "unknown", "why": ""}),
     })
 
   async def s_save_cmd(request):
@@ -5055,6 +5154,8 @@ def make_web_app(bot):
   r.add_post("/api/commands", save_command)
   r.add_delete("/api/commands/{channel}/{name}", del_command)
   r.add_post("/api/send", send_msg)
+  r.add_get("/api/export", export_data)
+  r.add_get("/api/status", status)
   # البلاغات
   r.add_post("/report", send_report)
   r.add_post("/api/reports/{id}/done", report_done)
@@ -5273,6 +5374,7 @@ class Bot:
     self.seen = {}  # معرفات أحداث EventSub لمنع التكرار
     self.queues = {}  # قناة -> طابور الإرسال
     self.paused = set()  # قنوات الستريمر سحب منها الصلاحية: ما نعيد الاشتراك لين يعيد الربط
+    self.chat_state = {}  # قناة -> {"ok": هل البوت يقرأ الشات، "mode": eventsub/irc/none، "why": السبب}
     self.irc = IRCClient(self, IRC_TOKEN) if IRC_TOKEN else None
     self.irc_channels = set()  # قنوات تشتغل بالـ IRC لأن ما فيها صلاحية EventSub
     self.timer_next = {}  # (قناة، رقم الرسالة) -> وقت الإرسال القادم
@@ -5296,13 +5398,22 @@ class Bot:
 
   async def start(self):
     print(f"البوت يشتغل بحساب ({self.nick}) عبر EventSub.")
-    await self.store.load()
+    for attempt in range(5):
+      await self.store.load()
+      if not self.store.broken:
+        break
+      print(f"تحميل البيانات فشل (محاولة {attempt + 1}/5)، أعيد بعد شوي...")
+      await asyncio.sleep(3 * (attempt + 1))
+    if self.store.broken:
+      print("⚠️ تعذر تحميل بيانات الـ Gist: الحفظ متوقف لحماية بياناتك. "
+            "تأكد من GITHUB_TOKEN و GIST_ID وأعد التشغيل.")
     data = self.store.data
     if OWNER not in data["channels"] and OWNER not in data["banned"]:
       data["channels"].append(OWNER)
     asyncio.create_task(start_web_server(self))
     asyncio.create_task(self.periodic_reminders())
     asyncio.create_task(self.resub_loop())
+    asyncio.create_task(self.keepalive_loop())
     if self.irc:
       asyncio.create_task(self.irc.run())
     else:
@@ -5321,6 +5432,20 @@ class Bot:
     s = self.songs_of(ch)
     s["current"] = s["queue"].pop(0) if s["queue"] else None
     return s["current"]
+
+  async def keepalive_loop(self):
+    """يزور موقعه كل 10 دقايق عشان Render (الخطة المجانية) ما ينيّمه. KEEPALIVE=0 يوقفه."""
+    if not SITE_URL or os.environ.get("KEEPALIVE", "1") == "0":
+      return
+    await asyncio.sleep(120)
+    while True:
+      try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
+          async with s.get(SITE_URL + "/ping") as r:
+            await r.read()
+      except Exception as e:
+        print(f"keepalive: {e}")
+      await asyncio.sleep(600)
 
   # ---------- حساب البوت المخصص لكل قناة ----------
   async def set_custom_bot(self, ch, login, uid, refresh):
@@ -5370,6 +5495,8 @@ class Bot:
     await asyncio.sleep(10)  # لين يشتغل السيرفر ويقدر يرد على تحقق تويتش
     while True:
       try:
+        if self.store.broken:
+          await self.store.load()  # نحاول نحمّل البيانات من جديد
         await self.resub_all()
       except Exception as e:
         print(f"خطأ في الاشتراك: {e}")
@@ -5379,7 +5506,17 @@ class Bot:
     for n in names:
       self.paused.discard(n)  # الاستدعاء الصريح (إضافة أو إعادة ربط) يرفع الإيقاف
       ok, why = await self.twitch.subscribe_chat(n)
+      if (not ok and str(why).startswith("403") and n not in self.store.data["botacct"]
+          and n in self.store.data["tokens"]):
+        # الستريمر ما أعطى صلاحية channel:bot: نخلي البوت مود من ربطه (المود يكفي) ونعيد المحاولة
+        try:
+          if await self.twitch.make_bot_mod(n, self.twitch.bot_login(n)):
+            print(f"اشتراك الشات {n}: صرت مود تلقائياً، أعيد المحاولة")
+            ok, why = await self.twitch.subscribe_chat(n)
+        except Exception as e:
+          print(f"تعذر جعل البوت مود في {n}: {e}")
       if ok:
+        self.chat_state[n] = {"ok": True, "mode": "eventsub", "why": ""}
         print(f"اشتراك الشات {n}: ✅")
         if n in self.irc_channels:  # صارت تشتغل بـ EventSub، نطلع من IRC عشان ما يتكرر الرد
           self.irc_channels.discard(n)
@@ -5389,8 +5526,10 @@ class Bot:
         print(f"اشتراك الشات {n}: ❌ {why} ← يشتغل بالـ IRC")
         self.irc_channels.add(n)
         self.irc.join(n)
+        self.chat_state[n] = {"ok": True, "mode": "irc", "why": str(why)}
       else:
         print(f"اشتراك الشات {n}: ❌ {why}")
+        self.chat_state[n] = {"ok": False, "mode": "none", "why": str(why)}
       await asyncio.sleep(0.3)
 
   async def part_channels(self, names):
@@ -5575,6 +5714,14 @@ class Bot:
                 print(f"تعذر إرسال الرسالة المجدولة في {ch}: {e}")
         for k in [k for k in self.timer_next if k not in seen_keys]:
           del self.timer_next[k]
+        # تنظيف الذاكرة كل ساعة (عشان البوت يظل خفيف لو شغال أيام)
+        if now - getattr(self, "_last_clean", 0) > 3600:
+          self._last_clean = now
+          for d in (self.cmd_cooldown, self.warned, user_reply_time):
+            for k in [k for k, v in d.items() if now - v > 3600]:
+              del d[k]
+          for k in [k for k, v in self.permits.items() if v < now]:
+            del self.permits[k]
       except Exception as e:
         print(f"خطأ في الرسائل المجدولة: {e}")
 
@@ -5609,7 +5756,7 @@ class Bot:
       d = self.store.data["counts"].setdefault(ch, {})
       d[cmd] = d.get(cmd, 0) + 1
       text = text.replace("$(count)", str(d[cmd]))
-      await self.store.save()
+      self.store.save_soon()
     if "$(uptime)" in text:
       si = await self.twitch.stream_info(ch)
       up = fmt_dur(time.time() - parse_ts(si["started_at"]), self.lang_of(ch)) if si else "—"
@@ -6142,8 +6289,9 @@ class Bot:
         await self.say(message, channel_name, "e_" + result, q=entry["game"])
       return True
 
-    # الكوماندات العادية: لايف فقط، أو دائماً إذا الستريمر فعّل «يشتغل دائماً»
-    if not await self.channel_active(channel_name):
+    # الكوماندات العادية: للمشاهدين لايف فقط (أو دائماً لو الستريمر فعّل «يشتغل دائماً»).
+    # الستريمر والمودات يشغّلونها حتى لو أوفلاين (للتجربة و !so وغيرها).
+    if level < PERMS["mod"] and not await self.channel_active(channel_name):
       return True
 
     if now - self.cmd_cooldown.get(key, 0) < cd:
