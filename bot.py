@@ -3166,6 +3166,7 @@ main{flex:1;min-width:0}
               <input id="ov-url" readonly>
               <button class="btn sm" id="ov-copy">نسخ</button>
               <button class="btn sm line" id="ov-test">تجربة</button>
+              <a class="btn sm line" id="ov-dbg" target="_blank">فحص</a>
             </div>
             <p class="hint" style="margin:6px 0 0">زر «تجربة» يشغّل كليب عشوائي من قناتك. الكليب يظهر بس إذا الـ Overlay مفتوح في OBS.</p>
           </div>
@@ -3473,6 +3474,7 @@ function renderSongs(){
   const url=location.origin+c.player_path;
   $("#sr-playerurl").value=url;$("#sr-open").href=url;
   $("#ov-url").value=c.overlay_path?location.origin+c.overlay_path:"";
+  $("#ov-dbg").href=c.overlay_path?location.origin+c.overlay_path+"&debug=1":"#";
   renderQueue();
   if(SRP&&SRC!==c.player_path)srPlayer(true);
   $("#sr-play").textContent=t(SRP?"⏹ إيقاف المشغّل":"▶ تشغيل الأغاني من الموقع");
@@ -3709,7 +3711,7 @@ html{scroll-behavior:smooth}
 <script>
 //COMMON_JS
 Object.assign(EN,{"🎵 طلبات الأغاني":"🎵 Song requests","ما فيه أغاني بالطابور":"The queue is empty","⌨️ الكوماندات":"⌨️ Commands","📖 دليل الكوماندات":"📖 Commands guide","🎮 دخول الستريمر":"🎮 Streamer login"});
-Object.assign(EN,{"🎬 Overlay الشاوت آوت (OBS)":"🎬 Shoutout overlay (OBS)","لما أحد يكتب !so اسم_ستريمر يظهر كليب من قناته على بثك. أضف الرابط في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.":"When someone types !so streamer_name, a clip from their channel plays on your stream. Add the link in OBS: Sources, then Browser Source, size 1920×1080. Don't share it with anyone.","تجربة":"Test","زر «تجربة» يشغّل كليب عشوائي من قناتك. الكليب يظهر بس إذا الـ Overlay مفتوح في OBS.":"The Test button plays a random clip from your channel. It only shows if the overlay is open in OBS.","تم الإرسال":"Sent","ما لقيت كليبات بقناتك للتجربة":"No clips found on your channel to test with"});
+Object.assign(EN,{"🎬 Overlay الشاوت آوت (OBS)":"🎬 Shoutout overlay (OBS)","لما أحد يكتب !so اسم_ستريمر يظهر كليب من قناته على بثك. أضف الرابط في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.":"When someone types !so streamer_name, a clip from their channel plays on your stream. Add the link in OBS: Sources, then Browser Source, size 1920×1080. Don't share it with anyone.","تجربة":"Test","فحص":"Check","زر «تجربة» يشغّل كليب عشوائي من قناتك. الكليب يظهر بس إذا الـ Overlay مفتوح في OBS.":"The Test button plays a random clip from your channel. It only shows if the overlay is open in OBS.","تم الإرسال":"Sent","ما لقيت كليبات بقناتك للتجربة":"No clips found on your channel to test with"});
 for(const k in EN)AR[EN[k]]=k;
 const CHN=decodeURIComponent(location.pathname.split("/").pop()).toLowerCase();
 let D=null,BAD=false,FILT="all",Q="";
@@ -3777,12 +3779,21 @@ html,body{margin:0;height:100%;background:transparent;overflow:hidden;font-famil
 #hd small{color:#f9a8d4;font-weight:400;font-size:.7em}
 #vid{position:relative;width:100%;aspect-ratio:16/9;background:#000}
 #vid iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+#dbg{position:fixed;left:8px;top:8px;max-width:90%;background:rgba(0,0,0,.85);color:#7CFC9A;font:13px/1.5 monospace;padding:8px 12px;border-radius:8px;direction:ltr;white-space:pre-wrap;z-index:99}
 </style></head><body>
+<div id="dbg" hidden></div>
 <div id="card"><div id="hd"><span>💜</span><span id="nm"></span><small id="lk"></small></div><div id="vid"></div></div>
 <script>
 const CH=__CH__,K=__KEY__;
 const $=id=>document.getElementById(id);
-let last=-1,queue=[],playing=false;
+let last=-1,queue=[],playing=false,logs=[];
+const DEBUG=new URLSearchParams(location.search).get("debug")==="1";
+if(DEBUG){document.body.style.background="#333";$("dbg").hidden=false}
+function dbg(m){
+  if(!DEBUG)return;
+  logs.push(new Date().toLocaleTimeString()+"  "+m);logs=logs.slice(-8);
+  $("dbg").textContent=logs.join("\n");
+}
 function esc(t){return String(t).replace(/[^\w]/g,"")}
 function play(ev){
   playing=true;
@@ -3792,6 +3803,8 @@ function play(ev){
   const f=document.createElement("iframe");
   f.allow="autoplay; fullscreen";
   f.src="https://clips.twitch.tv/embed?clip="+encodeURIComponent(ev.clip)+"&parent="+encodeURIComponent(location.hostname)+"&autoplay=true&muted=false";
+  f.onload=()=>dbg("iframe loaded (clip "+ev.clip+")");
+  dbg("play "+login+" parent="+location.hostname);
   const v=$("vid");v.innerHTML="";v.appendChild(f);
   $("card").classList.add("show");
   setTimeout(()=>{
@@ -3803,13 +3816,14 @@ function next(){if(!playing&&queue.length)play(queue.shift())}
 async function poll(){
   try{
     const r=await fetch("/overlay/api/"+encodeURIComponent(CH)+"/poll?k="+encodeURIComponent(K)+"&after="+last,{cache:"no-store"});
+    if(!r.ok){dbg("poll HTTP "+r.status);return}
     const d=await r.json();
     if(typeof d.last==="number"){
-      if(last<0)last=d.last;
-      else d.events.forEach(e=>{if(e.id>last)last=e.id;queue.push(e)});
+      if(last<0){last=d.last;dbg("connected, last="+last)}
+      else d.events.forEach(e=>{if(e.id>last)last=e.id;queue.push(e);dbg("event #"+e.id+" for "+e.login)});
     }
     next();
-  }catch(e){}
+  }catch(e){dbg("poll error: "+e)}
 }
 poll();setInterval(poll,2000);
 </script></body></html>
@@ -6032,6 +6046,7 @@ class Bot:
     self.overlay_seq += 1
     ev = {"id": self.overlay_seq, "clip": clip["id"], "login": target.lstrip("@")[:25],
           "dur": max(5, min(60, clip["duration"])), "ts": time.time()}
+    print(f"overlay: حدث #{ev['id']} في {channel_name} -> {ev['login']} (كليب {ev['clip']})")
     lst = self.overlay_events.setdefault(channel_name, [])
     lst.append(ev)
     del lst[:-10]
