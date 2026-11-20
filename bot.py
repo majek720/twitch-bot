@@ -6043,6 +6043,9 @@ class Bot:
 
   def push_overlay(self, channel_name, target, clip):
     """يسجّل حدث شاوت آوت عشان صفحة الـ Overlay في OBS تلقطه وتشغّل الكليب."""
+    lst0 = self.overlay_events.get(channel_name, [])
+    if lst0 and lst0[-1]["login"].lower() == target.lstrip("@").lower() and time.time() - lst0[-1]["ts"] < 15:
+      return  # نفس الشاوت آوت وصل مرتين (من المراقب ومن الكوماند)
     self.overlay_seq += 1
     ev = {"id": self.overlay_seq, "clip": clip["id"], "login": target.lstrip("@")[:25],
           "dur": max(5, min(60, clip["duration"])), "ts": time.time()}
@@ -6050,6 +6053,29 @@ class Bot:
     lst = self.overlay_events.setdefault(channel_name, [])
     lst.append(ev)
     del lst[:-10]
+
+  async def so_overlay_watch(self, message):
+    """يلقط !so / !shoutout من الشات ويشغّل كليب في الـ Overlay، بغض النظر عن اللي يرد على الكوماند."""
+    if message.echo or not message.author.name:
+      return
+    m = re.match(r"^!(so|shoutout)\s+@?(\w{1,25})\b", message.content.strip(), re.I)
+    if not m:
+      return
+    ch = message.channel.name.lower()
+    username = message.author.name.lower()
+    if ch in self.store.data["banned"]:
+      return
+    level = user_level(message.author, username == OWNER)
+    entry = self.store.data["commands"].get(ch, {}).get(m.group(1).lower())
+    need = PERMS[entry["perm"]] if entry and entry.get("perm") in PERMS else PERMS["mod"]
+    if level < need:
+      return
+    target = m.group(2).lower()
+    clip = await self.twitch.random_clip(target)
+    if clip:
+      self.push_overlay(ch, target, clip)
+    else:
+      print(f"overlay: ما لقيت كليبات لـ {target}")
 
   def count_use(self, channel_name, cmd):
     d = self.usage.setdefault(channel_name, {})
@@ -6430,6 +6456,20 @@ try:
   extras.apply(sys.modules[__name__])
 except Exception as e:
   print(f"extras: {e}")
+
+# مراقب الشاوت آوت: يتركب بعد extras عشان ما يقدر أحد يتجاوزه
+_orig_event_message = Bot.event_message
+
+
+async def _event_message_so(self, message):
+  try:
+    asyncio.create_task(self.so_overlay_watch(message))
+  except Exception as e:
+    print(f"overlay watch: {e}")
+  return await _orig_event_message(self, message)
+
+
+Bot.event_message = _event_message_so
 
 
 if __name__ == "__main__":
