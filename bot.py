@@ -4246,7 +4246,7 @@ def make_web_app(bot):
       return jerr("لوحة التحكم مقفلة: ضيف DASHBOARD_PASSWORD في Render", 503)
     body = await jbody(request)
     now = time.time()
-    ip = client_ids(request)[0]
+    ip = client_ids(request)[0][-1]  # بصمة الجهاز (نص)
     recent = [x for x in login_fails.get(ip, []) if now - x < 600]
     overall = [x for x in login_fails.get("*", []) if now - x < 600]
     if len(recent) >= 6 or len(overall) >= 40:
