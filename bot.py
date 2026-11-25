@@ -7566,7 +7566,7 @@ def make_web_app(bot):
       target = str(opts.get("channel") or "").strip().lstrip("@#").lower()
       target = target.rsplit("/", 1)[-1]
       if target not in store.data["channels"]:
-        return dmsg(f"القناة {target} ما فيها ماجيك بوت. فعّله أول من {SITE_URL}/s", eph=True)
+        return dmsg(f"القناة {target} ما فيها ماجيك بوت. فعّله أول من {SITE_URL}/", eph=True)
       store.data["discord_guilds"][gid] = target
       await store.save()
       bot.audit(target, "discord", f"ربط سيرفر ديسكورد ({gid})")
@@ -8832,7 +8832,7 @@ class Bot:
         return True
       self.cmd_cooldown[bkey] = now
       if SITE_URL:
-        await say("bot_info", u=f"{SITE_URL}/s")
+        await say("bot_info", u=f"{SITE_URL}/")
       return True
 
     # ---------- !reminders on/off: الرسائل الدورية ----------
