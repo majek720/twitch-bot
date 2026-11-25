@@ -4149,6 +4149,7 @@ const BUILTIN_CMDS=[
  ["!volume 30","يغيّر صوت الأغاني: رقم من 0 إلى 100 أو +10 / -10 (مود)","Set the song volume: 0-100 or +10 / -10 (mod)"],
  ["!skip","تخطي الأغنية (مود)","Skip the song (mod)"],
  ["!permit اسم","يسمح لشخص بروابط دقيقة (مود)","Lets a viewer post links for a minute (mod)"],
+ ["!so اسم","شاوت آوت لستريمر مع رابطه ولعبته (مود)","Shout out a streamer with their link and game (mod)"],
  ["!streak","ستريكك: كم بث ورا بعض حضرت","Your watch streak"],
  ["!topstreak","أعلى ستريك بالقناة","Top streaks in the channel"],
  ["!link رمز","ربط حسابك بالديسكورد (الرمز من /link)","Link your Discord (code from /link)"],
@@ -5413,7 +5414,7 @@ YT_ID_RE = re.compile(
 URL_RE = re.compile(
     r"(?:https?://|www\.)\S+|\b[a-z0-9-]+\.(?:com|net|org|io|gg|tv|me|co|ly|xyz|info|sa|ae|app|dev|gl|be)\b(?:/\S*)?",
     re.I)
-EXTRA_CMDS = {"streak", "topstreak", "link", "quote", "addquote", "delquote", "poll", "endpoll"}
+EXTRA_CMDS = {"streak", "topstreak", "link", "quote", "addquote", "delquote", "poll", "endpoll", "so", "shoutout"}
 
 
 def find_cmd(cmds, name):
@@ -8713,6 +8714,32 @@ class Bot:
       self.cmd_cooldown[k] = now
       return False
 
+    # ---------- [جديد] !so اسم_الستريمر: شاوت آوت (للمودات) ----------
+    if cmd in ("so", "shoutout"):
+      if not is_mod:
+        return True
+      target = arg.split()[0].lstrip("@").lower() if arg else ""
+      if not re.fullmatch(r"\w{2,25}", target):
+        await reply("الصيغة: !so اسم_الستريمر", "Usage: !so streamer_name")
+        return True
+      if now - self.cmd_cooldown.get((ch, "!so", target), 0) < 30:
+        return True
+      self.cmd_cooldown[(ch, "!so", target)] = now
+      info = await self.twitch.user_info(target)
+      if not info:
+        await reply(f"ما لقيت قناة باسم {target}", f"I couldn't find a channel named {target}")
+        return True
+      name = info.get("display_name") or target
+      game = ""
+      try:
+        game, _ = await self.twitch.channel_info(target)
+      except Exception:
+        pass
+      g = (f" | Last playing: {game}" if en else f" | آخر لعبة: {game}") if game else ""
+      await message.channel.send((f"📣 Go follow {name} 👉 twitch.tv/{target}{g}" if en
+                                  else f"📣 تابعوا {name} قناة تستاهل 👉 twitch.tv/{target}{g}")[:490])
+      return True
+
     # ---------- [جديد] الستريك + ربط الديسكورد ----------
     if cmd in ("streak", "topstreak", "link"):
       if cmd == "link":
@@ -9051,11 +9078,8 @@ class Bot:
     await send(f"{author_mention} {text}"[:490])
 
 
-try:
-  import extras
-  extras.apply(sys.modules[__name__])
-except Exception as e:
-  print(f"extras: {e}")
+# [fix] extras.py القديم انلغى: كل ميزاته صارت داخل bot.py (حماية البيانات، تنظيف الذاكرة، حماية الدخول، !so)
+# وكان يضيف شريط أزرار أبيض يخرب التصميم الجديد. تقدر تحذف extras.py من GitHub.
 
 # مراقب الشاوت آوت: يتركب بعد extras عشان ما يقدر أحد يتجاوزه
 _orig_event_message = Bot.event_message
