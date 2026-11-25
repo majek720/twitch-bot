@@ -4778,9 +4778,7 @@ main{flex:1;min-width:0}
             <h3>تنبيهات الشات</h3>
             <p class="mut">البوت يشكر المتابعين والمشتركين واللي يسوون ريد تلقائياً في الشات. عدّل النص أو أوقف أي تنبيه.</p>
             <p class="hint" id="al-follow" style="margin:10px 0 0"></p>
-            <label class="chk" style="margin-top:12px"><input type="checkbox" id="al-so"><span>شاوت آوت تلقائي للي يسوي ريد (ومعه كليب في الـ Overlay)</span></label>
-            <div class="grid3"><div><label>أقل عدد بتس عشان يطلع التنبيه</label><input id="al-bits" type="number" min="1" dir="ltr"></div></div>
-            <button class="btn sm" id="al-save">حفظ</button>
+            <p class="hint" style="margin:6px 0 0">الشاوت آوت التلقائي وقت الريد صار في قسم «الشاوت آوت».</p>
           </div>
           <div id="allist"></div>
         </section>
@@ -5255,7 +5253,6 @@ function renderStats(){
 /* ---------- [جديد] تنبيهات الشات ---------- */
 function renderAlerts(){
   const a=CH.alerts||{list:[]};
-  $("#al-so").checked=!!a.raid_so;$("#al-bits").value=a.bits_min||1;
   $("#al-follow").textContent=t(a.follow_ready?"تنبيه المتابعة يشتغل لأن قناتك مربوطة.":"تنبيه المتابعة يحتاج ربط تويتش من الإعدادات.");
   const box=$("#allist");box.innerHTML="";
   (a.list||[]).forEach(x=>{
@@ -5265,12 +5262,21 @@ function renderAlerts(){
     const bw=d.querySelector(".bd");bw.textContent=t("متوقف");bw.hidden=x.on;
     d.querySelector(".hint").textContent=x.vars;
     const ta=d.querySelector("textarea");ta.value=x.text;
+    let bi=null;
+    if(x.key==="cheer"){
+      const w=document.createElement("div");w.style.cssText="display:flex;align-items:center;gap:10px;margin:10px 0 0";
+      w.innerHTML='<label style="margin:0" data-nt></label><input type="number" min="1" max="100000" dir="ltr" style="width:110px;margin:0">';
+      w.querySelector("label").textContent=t("أقل عدد بتس للتنبيه");
+      bi=w.querySelector("input");bi.value=a.bits_min||1;
+      ta.after(w);
+    }
+    const body=on=>Object.assign({key:x.key,text:ta.value,on},bi?{bits_min:parseInt(bi.value,10)||1}:{});
     d.querySelector(".sv").textContent=t("حفظ");
     d.querySelector(".tg").textContent=t(x.on?"إيقاف":"تشغيل");
     d.querySelector(".ts").textContent="🧪 "+t("تجربة");
     d.querySelector(".rs").textContent=t("استرجاع الافتراضي");
-    d.querySelector(".sv").onclick=()=>act(()=>api("POST",base()+"/alerts",{key:x.key,text:ta.value,on:x.on}),"تم الحفظ");
-    d.querySelector(".tg").onclick=()=>act(()=>api("POST",base()+"/alerts",{key:x.key,text:ta.value,on:!x.on}),"تم الحفظ");
+    d.querySelector(".sv").onclick=()=>act(()=>api("POST",base()+"/alerts",body(x.on)),"تم الحفظ");
+    d.querySelector(".tg").onclick=()=>act(()=>api("POST",base()+"/alerts",body(!x.on)),"تم الحفظ");
     d.querySelector(".ts").onclick=()=>act(()=>api("POST",base()+"/alerts/test",{key:x.key}),"تم الإرسال");
     d.querySelector(".rs").onclick=()=>act(()=>api("POST",base()+"/alerts",{key:x.key,text:"",on:true}),"تم الحفظ");
     box.appendChild(d);
@@ -5281,7 +5287,7 @@ function renderSO(){$("#so-raid").checked=!!((CH.alerts||{}).raid_so)}
 $("#so-raid").onchange=()=>act(()=>api("POST",base()+"/alerts",{raid_so:$("#so-raid").checked}),"تم الحفظ");
 Object.assign(EN,{"الشاوت آوت":"Shoutouts","المود يكتب في الشات":"A mod types in chat","، والبوت يرسل رابط قناته وآخر لعبة لعبها، ويطلع كليب من قناته على بثك.":", and the bot posts their channel link and last game, and plays one of their clips on your stream.",
 "شاوت آوت تلقائي لأي أحد يسوي ريد على قناتك":"Automatically shout out anyone who raids your channel","نفس الشاوت آوت ينرسل لحاله وقت الريد، ومعه الكليب.":"The same shoutout is sent automatically on raids, clip included.",
-"🎬 الكليب على البث (OBS)":"🎬 Clip on stream (OBS)","!so اسم_الستريمر":"!so streamer_name","زر «تجربة» يشغّل كليب عشوائي من قناتك. الكليب يظهر بس إذا الـ Overlay مفتوح في OBS.":"The Test button plays a random clip from your channel. It only shows if the overlay is open in OBS.","عشان يطلع الكليب على بثك، أضف هذا الرابط في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.":"To show the clip on stream, add this link in OBS: Sources, then Browser Source, size 1920×1080. Don't share it with anyone."});
+"🎬 الكليب على البث (OBS)":"🎬 Clip on stream (OBS)","أقل عدد بتس للتنبيه":"Minimum bits for the alert","الشاوت آوت التلقائي وقت الريد صار في قسم «الشاوت آوت».":"The automatic raid shoutout is now in the Shoutouts section.","!so اسم_الستريمر":"!so streamer_name","زر «تجربة» يشغّل كليب عشوائي من قناتك. الكليب يظهر بس إذا الـ Overlay مفتوح في OBS.":"The Test button plays a random clip from your channel. It only shows if the overlay is open in OBS.","عشان يطلع الكليب على بثك، أضف هذا الرابط في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.":"To show the clip on stream, add this link in OBS: Sources, then Browser Source, size 1920×1080. Don't share it with anyone."});
 for(const k in EN)AR[EN[k]]=k;
 /* ---------- [جديد] الستريك والديسكورد ---------- */
 function renderStreak(){
@@ -5343,7 +5349,6 @@ function renderLog(){
     box.appendChild(d);
   });
 }
-$("#al-save").onclick=()=>act(()=>api("POST",base()+"/alerts",{raid_so:$("#al-so").checked,bits_min:parseInt($("#al-bits").value,10)||1}),"تم الحفظ");
 $("#qt-add").onclick=()=>act(async()=>{await api("POST",base2()+"/quotes",{text:$("#qt-text").value});$("#qt-text").value=""},"تمت الإضافة");
 Object.assign(EN,{"تنبيهات الشات":"Chat alerts","النقاط":"Points","السحوبات":"Giveaways","الاقتباسات":"Quotes","السجل":"Log",
 "البوت يشكر المتابعين والمشتركين واللي يسوون ريد تلقائياً في الشات. عدّل النص أو أوقف أي تنبيه.":"The bot thanks followers, subscribers and raiders in chat automatically. Edit the text or turn any alert off.",
