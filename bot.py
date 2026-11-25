@@ -1228,6 +1228,21 @@ def sign(s):
   return hmac.new(b"streamer:" + SECRET, s.encode(), hashlib.sha256).hexdigest()
 
 
+def make_oauth_state(prefix):
+  core = f"{prefix}{secrets.token_urlsafe(12)}~{int(time.time())}"
+  return core + "~" + hmac.new(b"oauth:" + SECRET, core.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def oauth_state_ok(state):
+  try:
+    core, sig = state.rsplit("~", 1)
+    ts = int(core.rsplit("~", 1)[1])
+  except (ValueError, IndexError):
+    return False
+  good = hmac.new(b"oauth:" + SECRET, core.encode(), hashlib.sha256).hexdigest()[:32]
+  return hmac.compare_digest(sig.encode(), good.encode()) and 0 <= time.time() - ts < 600
+
+
 def make_session(login):
   p = f"{login}.{int(time.time()) + 60 * 60 * 24 * 30}"
   return f"{p}.{sign(p)}"
@@ -5079,7 +5094,7 @@ def make_web_app(bot):
   async def auth_start(mode, extra="", force=False):
     if not twitch.enabled:
       raise web.HTTPFound("/s")
-    state_val = mode + extra + secrets.token_urlsafe(16)
+    state_val = make_oauth_state(mode + extra)
     q = {
         "client_id": CLIENT_ID, "redirect_uri": redirect_uri,
         "response_type": "code", "state": state_val,
@@ -5164,7 +5179,12 @@ def make_web_app(bot):
     q = request.query
     state_val = q.get("state", "")
     cookie = request.cookies.get("ostate", "")
-    if not state_val or not hmac.compare_digest(state_val.encode(), cookie.encode()):
+    cookie_ok = bool(state_val) and hmac.compare_digest(state_val.encode(), cookie.encode())
+    # [fix] بعض المتصفحات (التطبيق المثبّت، حماية بريف) ما ترجّع الكوكي من تويتش، فكان يطلع «انتهت الجلسة».
+    # الحين الـ state نفسه موقّع بالسر وينتهي بعد 10 دقايق، فيكفي لحاله. إلا ربط حساب البوت (m)
+    # يظل يحتاج الكوكي عشان أحد ما يرسل للستريمر رابط يربط حساب غريب كبوت لقناته.
+    if not cookie_ok and not (state_val[:1] in ("l", "s", "c", "b") and oauth_state_ok(state_val)):
+      print(f"دخول تويتش: الجلسة ما تطابقت (host={request.host} cookie={'yes' if cookie else 'no'})")
       # [fix] بدل صفحة سودا: نرجعه لصفحة الدخول على الدومين الصحيح مع رسالة
       resp = web.HTTPFound((SITE_URL or "") + "/s?err=expired")
       resp.del_cookie("ostate")
