@@ -2907,7 +2907,7 @@ class Store:
         "filters": {},  # قناة -> إعدادات الحماية من السبام
         "counts": {},  # قناة -> عدادات $(count)
         "ai": {},  # قناة -> إعدادات الذكاء الاصطناعي
-        "alerts": {},  # قناة -> تنبيهات الشات (فولو، اشتراك، رايد، بتس)
+        "alerts": {},  # قناة -> تنبيهات الشات (فولو، اشتراك، ريد، بتس)
         "quotes": {},  # قناة -> قائمة الاقتباسات
         "audit": {},  # قناة -> سجل التغييرات (مين غيّر وش)
         "streaks": {},  # قناة -> {يوزر: {c: الستريك، b: الأعلى، last: آخر بث، n: عدد البثوث}}
@@ -3313,7 +3313,7 @@ class TwitchAPI:
     return st, d
 
   async def subscribe_chat(self, channel):
-    """يشترك في رسائل شات القناة (EventSub) باسم البوت، ومعها تنبيهات الاشتراكات والرايد والفولو."""
+    """يشترك في رسائل شات القناة (EventSub) باسم البوت، ومعها تنبيهات الاشتراكات والريد والفولو."""
     if not self.enabled:
       return False, "disabled"
     token = await self.get_app_token()
@@ -3327,7 +3327,7 @@ class TwitchAPI:
       self.app_token = None
     if st not in (202, 409):
       return False, f"{st} {d.get('message', '')}"
-    # [جديد] اشتراكات/إهداءات/رايد: نفس صلاحية الشات، ما تحتاج إعادة ربط
+    # [جديد] اشتراكات/إهداءات/ريد: نفس صلاحية الشات، ما تحتاج إعادة ربط
     try:
       st2, d2 = await self._sub(token, "channel.chat.notification", "1",
                                 {"broadcaster_user_id": bid, "user_id": sid})
@@ -3745,7 +3745,7 @@ const EN={
 "محاولات كثيرة، حاول بعد شوي":"Too many attempts, try again later",
 "الرد ما يبدأ بـ / أو .":"The reply can't start with / or ."
 };
-Object.assign(EN,{"!f يحوّل الكاتيقوري، و !settitle يغيّر العنوان": "!f switches the category and !settitle changes the title", "!permit يسمح لشخص بالروابط دقيقة وحدة": "!permit lets someone post links for one minute", "!poll سؤال | خيار | خيار من الشات مباشرة": "!poll question | option | option straight from chat", "!skip و !volume للمودات، و !wrongsong للمشاهد": "!skip and !volume for mods, !wrongsong for viewers", "!streak و !topstreak في الشات": "!streak and !topstreak in chat", "$(pick نعم|لا)": "$(pick yes|no)", "/streak و /top في الديسكورد بعد ربط الحساب بـ /link": "/streak and /top in Discord after linking with /link", "Chat magic, one command at a time • سحر الشات، كوماند بعد كوماند": "Chat magic, one command at a time", "أسماء بديلة (اختياري)": "Aliases (optional)", "مثال: dc, ديسكورد": "e.g. dc, server", "majek bot • سحر الشات، كوماند بعد كوماند": "majek bot • Chat magic, one command at a time", "أذكار وأدعية جاهزة تتغير كل مرة": "Ready-made adhkar and duas that change every time", "أذكار وأدعية وتذكيرات تنكتب بالشات بالفاصل اللي تبيه، وما تتكلم إذا الشات ساكت.": "Adhkar, duas and reminders posted at the interval you choose, and they stay quiet when chat is dead.", "أقدر أخلي المودات يعدلون؟": "Can my mods make changes?", "إعلان تلقائي في روم الديسكورد لما أحد يوصل رقم جديد": "Automatic Discord announcements when someone hits a milestone", "إيه، أضفهم من صفحة المودات ويدخلون بحساباتهم ويعدلون الكوماندات والاقتباسات.": "Yes. Add them on the Mods page and they log in with their own accounts to edit commands and quotes.", "إيه، كل المميزات مجانية.": "Yes, every feature is free.", "احفظ أحلى لحظات البث واطلبها بـ !quote": "Save the best stream moments and pull them up with !quote", "اضغط «فعّل البوت في قناتك» وادخل بحسابك.": "Press \"Add the bot to your channel\" and log in.", "اقتباسات": "Quotes", "البوت يتجاهل البوتات المعروفة ويرد بس على كوماندات قناتك، فتقدر تستخدمه معهم.": "The bot ignores known bots and only answers your channel's commands, so you can run it alongside them.", "البوت يحسب كم بث ورا بعض حضر كل مشاهد، ويحتفل بالأرقام الكبيرة. والمتابع يشوف ستريكه من سيرفر الديسكورد حقك.": "The bot counts how many streams in a row each viewer attends and celebrates big milestones. Viewers can check their streak in your Discord server.", "البوت يكتب باسم حسابك أو أي حساب تختاره": "The bot posts as your account or any account you choose", "الطابور يطلع في صفحة قناتك": "The queue shows on your channel page", "المشاهدين يطلبون من يوتيوب بالرابط أو بالاسم، والأغاني تشتغل داخل الموقع أو في OBS.": "Viewers request YouTube songs by link or name, and they play on the site or in OBS.", "تحدد مين يقدر يسأل وكم مرة": "Choose who can ask and how often", "تصويت تويتش": "Twitch polls", "تضيف البوت لسيرفرك من صفحة «الستريك والديسكورد» وتكتب /setup، والمتابع يكتب /link مرة وحدة ويربط حسابه، وبعدها /streak يطلع ستريكه.": "Add the bot to your server from the \"Streaks & Discord\" page and type /setup. Each viewer types /link once to connect their account, then /streak shows their streak.", "تطبيق على جوالك": "An app on your phone", "تعليمات خاصة بأسلوب قناتك": "Custom instructions in your channel's style", "تغيير اللعبة والعنوان": "Game and title changes", "ثبّت لوحة التحكم كتطبيق على الآيفون والأندرويد": "Install the dashboard as an app on iPhone and Android", "حد لكل مشاهد وحد لمدة الأغنية": "Per-viewer limits and a max song length", "حساب بوت خاص فيك": "Your own bot account", "ردود تلقائية على السلام ومساء الخير وباك وبرب": "Auto replies to salam, good evening, back and brb", "روابط، حروف كبيرة، رموز، تكرار، رسائل طويلة": "Links, caps, symbols, repetition, long messages", "زر تجربة يرسل التنبيه للشات قبل ما تعتمده": "A test button posts the alert to chat before you rely on it", "شاوت آوت تلقائي للرايد مع كليب في OBS": "Automatic raid shoutout with a clip in OBS", "شرط عدد رسائل الشات قبل كل تذكير": "A minimum number of chat messages before each reminder", "عدّل الكوماندات والتنبيهات من لوحة الستريمر بأي وقت.": "Edit commands and alerts from the streamer dashboard anytime.", "عشان البوت يقرأ الشات ويغيّر اللعبة والعنوان ويسوي كليبات.": "So the bot can read chat, change the game and title, and make clips.", "عندي بوت ثاني، يتعارضون؟": "I already use another bot. Will they clash?", "فريق المودات": "Mod team", "كليب من الشات": "Clips from chat", "كوماند يسوي كليب لآخر ثواني ويرسل الرابط": "A command that clips the last few seconds and posts the link", "كوماندات مخصصة": "Custom commands", "كيف أشيل البوت؟": "How do I remove the bot?", "كيف يشوف المتابع ستريكه في الديسكورد؟": "How do viewers see their streak in Discord?", "لا، البوت يشتغل على السحاب. حتى لو جهازك مطفي يرد ويحمي الشات.": "No, the bot runs in the cloud. Even with your PC off it replies and protects chat.", "لازم جهازي يكون شغال؟": "Does my PC need to be on?", "ما يكتب روابط ولا يدخل بالجدل": "No links and no arguing", "متغيرات مثل $(user) $(random) $(time) وأسماء بديلة وكول داون": "Variables like $(user) $(random) $(time), plus aliases and cooldowns", "من الإعدادات في لوحة الستريمر اضغط «إزالة البوت من قناتي» ويطلع فوراً.": "In the streamer dashboard settings press \"Remove the bot from my channel\" and it leaves right away.", "منشن البوت بأي سؤال ويرد بجملة أو جملتين، ويعرف اللعبة وعنوان البث.": "Mention the bot with any question and it answers in a sentence or two, knowing your game and stream title.", "مودات يعدلون الكوماندات، وسجل يوضح مين غيّر وش": "Mods edit commands, and a log shows who changed what", "نزّل نسخة من بيانات البوت (قنوات، كوماندات، ربط تويتش). لا تشاركها مع أحد.": "Download a copy of the bot's data (channels, commands, Twitch links). Don't share it with anyone.", "نسخة احتياطية وحالة البوت • Backup & status": "Backup & status", "نص كل تنبيه تكتبه أنت مع متغيرات مثل $(months)": "You write each alert's text, with variables like $(months)", "هل البوت مجاني؟": "Is the bot free?", "يحذف السبام ويكتم المخالف قبل ما يلاحظه أحد، ويلقط التحايل على الكلمات الممنوعة.": "Deletes spam and times out offenders before anyone notices, and catches tricks around banned words.", "يشكر المتابعين والمشتركين والإهداءات والبتس، ويرحّب بالرايد مع شاوت آوت وكليب يطلع على بثك.": "Thanks followers, subs, gifters and cheerers, and welcomes raids with a shoutout and a clip on your stream.", "يلقط التشكيل والتطويل والحروف المفرّقة (ك ل م ة)": "Catches diacritics, stretched letters and spaced-out letters", "⬇️ تحميل نسخة احتياطية": "⬇️ Download backup", "🩺 حالة البوت": "🩺 Bot status"});
+Object.assign(EN,{"!f يحوّل الكاتيقوري، و !settitle يغيّر العنوان": "!f switches the category and !settitle changes the title", "!permit يسمح لشخص بالروابط دقيقة وحدة": "!permit lets someone post links for one minute", "!poll سؤال | خيار | خيار من الشات مباشرة": "!poll question | option | option straight from chat", "!skip و !volume للمودات، و !wrongsong للمشاهد": "!skip and !volume for mods, !wrongsong for viewers", "!streak و !topstreak في الشات": "!streak and !topstreak in chat", "$(pick نعم|لا)": "$(pick yes|no)", "/streak و /top في الديسكورد بعد ربط الحساب بـ /link": "/streak and /top in Discord after linking with /link", "Chat magic, one command at a time • سحر الشات، كوماند بعد كوماند": "Chat magic, one command at a time", "أسماء بديلة (اختياري)": "Aliases (optional)", "مثال: dc, ديسكورد": "e.g. dc, server", "majek bot • سحر الشات، كوماند بعد كوماند": "majek bot • Chat magic, one command at a time", "أذكار وأدعية جاهزة تتغير كل مرة": "Ready-made adhkar and duas that change every time", "أذكار وأدعية وتذكيرات تنكتب بالشات بالفاصل اللي تبيه، وما تتكلم إذا الشات ساكت.": "Adhkar, duas and reminders posted at the interval you choose, and they stay quiet when chat is dead.", "أقدر أخلي المودات يعدلون؟": "Can my mods make changes?", "إعلان تلقائي في روم الديسكورد لما أحد يوصل رقم جديد": "Automatic Discord announcements when someone hits a milestone", "إيه، أضفهم من صفحة المودات ويدخلون بحساباتهم ويعدلون الكوماندات والاقتباسات.": "Yes. Add them on the Mods page and they log in with their own accounts to edit commands and quotes.", "إيه، كل المميزات مجانية.": "Yes, every feature is free.", "احفظ أحلى لحظات البث واطلبها بـ !quote": "Save the best stream moments and pull them up with !quote", "اضغط «فعّل البوت في قناتك» وادخل بحسابك.": "Press \"Add the bot to your channel\" and log in.", "اقتباسات": "Quotes", "البوت يتجاهل البوتات المعروفة ويرد بس على كوماندات قناتك، فتقدر تستخدمه معهم.": "The bot ignores known bots and only answers your channel's commands, so you can run it alongside them.", "البوت يحسب كم بث ورا بعض حضر كل مشاهد، ويحتفل بالأرقام الكبيرة. والمتابع يشوف ستريكه من سيرفر الديسكورد حقك.": "The bot counts how many streams in a row each viewer attends and celebrates big milestones. Viewers can check their streak in your Discord server.", "البوت يكتب باسم حسابك أو أي حساب تختاره": "The bot posts as your account or any account you choose", "الطابور يطلع في صفحة قناتك": "The queue shows on your channel page", "المشاهدين يطلبون من يوتيوب بالرابط أو بالاسم، والأغاني تشتغل داخل الموقع أو في OBS.": "Viewers request YouTube songs by link or name, and they play on the site or in OBS.", "تحدد مين يقدر يسأل وكم مرة": "Choose who can ask and how often", "تصويت تويتش": "Twitch polls", "تضيف البوت لسيرفرك من صفحة «الستريك والديسكورد» وتكتب /setup، والمتابع يكتب /link مرة وحدة ويربط حسابه، وبعدها /streak يطلع ستريكه.": "Add the bot to your server from the \"Streaks & Discord\" page and type /setup. Each viewer types /link once to connect their account, then /streak shows their streak.", "تطبيق على جوالك": "An app on your phone", "تعليمات خاصة بأسلوب قناتك": "Custom instructions in your channel's style", "تغيير اللعبة والعنوان": "Game and title changes", "ثبّت لوحة التحكم كتطبيق على الآيفون والأندرويد": "Install the dashboard as an app on iPhone and Android", "حد لكل مشاهد وحد لمدة الأغنية": "Per-viewer limits and a max song length", "حساب بوت خاص فيك": "Your own bot account", "ردود تلقائية على السلام ومساء الخير وباك وبرب": "Auto replies to salam, good evening, back and brb", "روابط، حروف كبيرة، رموز، تكرار، رسائل طويلة": "Links, caps, symbols, repetition, long messages", "زر تجربة يرسل التنبيه للشات قبل ما تعتمده": "A test button posts the alert to chat before you rely on it", "شاوت آوت تلقائي للريد مع كليب في OBS": "Automatic raid shoutout with a clip in OBS", "شرط عدد رسائل الشات قبل كل تذكير": "A minimum number of chat messages before each reminder", "عدّل الكوماندات والتنبيهات من لوحة الستريمر بأي وقت.": "Edit commands and alerts from the streamer dashboard anytime.", "عشان البوت يقرأ الشات ويغيّر اللعبة والعنوان ويسوي كليبات.": "So the bot can read chat, change the game and title, and make clips.", "عندي بوت ثاني، يتعارضون؟": "I already use another bot. Will they clash?", "فريق المودات": "Mod team", "كليب من الشات": "Clips from chat", "كوماند يسوي كليب لآخر ثواني ويرسل الرابط": "A command that clips the last few seconds and posts the link", "كوماندات مخصصة": "Custom commands", "كيف أشيل البوت؟": "How do I remove the bot?", "كيف يشوف المتابع ستريكه في الديسكورد؟": "How do viewers see their streak in Discord?", "لا، البوت يشتغل على السحاب. حتى لو جهازك مطفي يرد ويحمي الشات.": "No, the bot runs in the cloud. Even with your PC off it replies and protects chat.", "لازم جهازي يكون شغال؟": "Does my PC need to be on?", "ما يكتب روابط ولا يدخل بالجدل": "No links and no arguing", "متغيرات مثل $(user) $(random) $(time) وأسماء بديلة وكول داون": "Variables like $(user) $(random) $(time), plus aliases and cooldowns", "من الإعدادات في لوحة الستريمر اضغط «إزالة البوت من قناتي» ويطلع فوراً.": "In the streamer dashboard settings press \"Remove the bot from my channel\" and it leaves right away.", "منشن البوت بأي سؤال ويرد بجملة أو جملتين، ويعرف اللعبة وعنوان البث.": "Mention the bot with any question and it answers in a sentence or two, knowing your game and stream title.", "مودات يعدلون الكوماندات، وسجل يوضح مين غيّر وش": "Mods edit commands, and a log shows who changed what", "نزّل نسخة من بيانات البوت (قنوات، كوماندات، ربط تويتش). لا تشاركها مع أحد.": "Download a copy of the bot's data (channels, commands, Twitch links). Don't share it with anyone.", "نسخة احتياطية وحالة البوت • Backup & status": "Backup & status", "نص كل تنبيه تكتبه أنت مع متغيرات مثل $(months)": "You write each alert's text, with variables like $(months)", "هل البوت مجاني؟": "Is the bot free?", "يحذف السبام ويكتم المخالف قبل ما يلاحظه أحد، ويلقط التحايل على الكلمات الممنوعة.": "Deletes spam and times out offenders before anyone notices, and catches tricks around banned words.", "يشكر المتابعين والمشتركين والإهداءات والبتس، ويرحّب بالريد مع شاوت آوت وكليب يطلع على بثك.": "Thanks followers, subs, gifters and cheerers, and welcomes raids with a shoutout and a clip on your stream.", "يلقط التشكيل والتطويل والحروف المفرّقة (ك ل م ة)": "Catches diacritics, stretched letters and spaced-out letters", "⬇️ تحميل نسخة احتياطية": "⬇️ Download backup", "🩺 حالة البوت": "🩺 Bot status"});
 const AR={};for(const k in EN)AR[EN[k]]=k;
 let LANG="ar";
 try{if(localStorage.getItem("lang")==="en")LANG="en"}catch(e){}
@@ -4469,6 +4469,7 @@ main{flex:1;min-width:0}
       <a data-p="ai" class="own"><i>✨</i><span>الذكاء الاصطناعي</span></a>
       <a data-p="alerts" class="own"><i>🔔</i><span>تنبيهات الشات</span></a>
       <a data-p="streak" class="own"><i>🔥</i><span>الستريك والديسكورد</span></a>
+      <a data-p="so" class="own"><i>📣</i><span>الشاوت آوت</span></a>
       <a data-p="quotes"><i>💭</i><span>الاقتباسات</span></a>
       <a data-p="sim"><i>🧪</i><span>محاكي الكوماند</span></a>
       <a data-p="guide"><i>📖</i><span>دليل الكوماندات</span></a>
@@ -4775,9 +4776,9 @@ main{flex:1;min-width:0}
         <section class="pg own" id="p-alerts" hidden>
           <div class="panel">
             <h3>تنبيهات الشات</h3>
-            <p class="mut">البوت يشكر المتابعين والمشتركين واللي يسوون رايد تلقائياً في الشات. عدّل النص أو أوقف أي تنبيه.</p>
+            <p class="mut">البوت يشكر المتابعين والمشتركين واللي يسوون ريد تلقائياً في الشات. عدّل النص أو أوقف أي تنبيه.</p>
             <p class="hint" id="al-follow" style="margin:10px 0 0"></p>
-            <label class="chk" style="margin-top:12px"><input type="checkbox" id="al-so"><span>شاوت آوت تلقائي للي يسوي رايد (ومعه كليب في الـ Overlay)</span></label>
+            <label class="chk" style="margin-top:12px"><input type="checkbox" id="al-so"><span>شاوت آوت تلقائي للي يسوي ريد (ومعه كليب في الـ Overlay)</span></label>
             <div class="grid3"><div><label>أقل عدد بتس عشان يطلع التنبيه</label><input id="al-bits" type="number" min="1" dir="ltr"></div></div>
             <button class="btn sm" id="al-save">حفظ</button>
           </div>
@@ -4848,18 +4849,27 @@ main{flex:1;min-width:0}
           </div>
         </section>
 
-        <section class="pg own" id="p-set" hidden>
-          <div class="panel" style="margin-bottom:14px">
-            <h3>🎬 Overlay الشاوت آوت (OBS)</h3>
-            <p class="mut">لما أحد يكتب !so اسم_ستريمر يظهر كليب من قناته على بثك. أضف الرابط في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.</p>
+        <section class="pg own" id="p-so" hidden>
+          <div class="panel">
+            <h3>الشاوت آوت</h3>
+            <p class="mut">المود يكتب في الشات <b dir="ltr">!so اسم_الستريمر</b>، والبوت يرسل رابط قناته وآخر لعبة لعبها، ويطلع كليب من قناته على بثك.</p>
+            <div class="bubble" style="margin-top:12px" data-nt>📣 تابعوا Bigs قناة تستاهل 👉 twitch.tv/bigs | آخر لعبة: Fortnite</div>
+            <label class="chk" style="margin-top:14px"><input type="checkbox" id="so-raid"><span>شاوت آوت تلقائي لأي أحد يسوي ريد على قناتك</span></label>
+            <p class="hint" style="margin:4px 0 0">نفس الشاوت آوت ينرسل لحاله وقت الريد، ومعه الكليب.</p>
+          </div>
+          <div class="panel">
+            <h3>🎬 الكليب على البث (OBS)</h3>
+            <p class="mut">عشان يطلع الكليب على بثك، أضف هذا الرابط في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.</p>
             <div class="copyrow" style="margin-top:10px">
               <input id="ov-url" readonly>
               <button class="btn sm" id="ov-copy">نسخ</button>
               <button class="btn sm line" id="ov-test">تجربة</button>
-              <a class="btn sm line" id="ov-dbg" target="_blank">فحص</a>
             </div>
             <p class="hint" style="margin:6px 0 0">زر «تجربة» يشغّل كليب عشوائي من قناتك. الكليب يظهر بس إذا الـ Overlay مفتوح في OBS.</p>
           </div>
+        </section>
+
+        <section class="pg own" id="p-set" hidden>
           <div class="panel" style="margin-bottom:14px">
             <h3>متى يشتغل البوت في قناتي؟</h3>
             <p class="mut">يتحكم في الكوماندات والردود التلقائية والرسائل المجدولة. كوماندات الإدارة (مثل !addcmd) وتغيير اللعبة والعنوان تشتغل دائماً.</p>
@@ -4941,9 +4951,9 @@ Object.assign(EN,{"⚠️ أغاني سبوتيفاي حالياً ما تشتغ
 for(const k in EN)AR[EN[k]]=k;
 Object.assign(EN,{"القائمة الرئيسية":"Main","الأدوات":"Tools","الفريق والبوت":"Team & bot","النظام":"System","إدارة البث":"Stream manager","المؤقتات":"Timers","حماية الشات":"Chat moderation","دليل الكوماندات":"Commands guide","صفحة القناة العامة":"Public channel page","البلاغات والدعم":"Reports & support","اختصارات سريعة":"Quick actions","انتقل بسرعة لأهم الأدوات":"Jump to the most important tools","تغيير اللعبة بسرعة":"Change the game fast","سوّي اختصار لعبة (مثل !f للفورتنايت) وغيّر كاتيقوري البث من الشات بدون ما تفتح تويتش.":"Create a game shortcut (like !f for Fortnite) and change the stream category from chat without opening Twitch.","فتح صفحة الكوماندات":"Open the commands page","تحميل التطبيق":"Install app","⬇️ تحميل التطبيق":"⬇️ Install the app","لتثبيت التطبيق: في كروم أو إيدج على الكمبيوتر اضغط ⋮ ثم «تثبيت التطبيق». في الآيفون: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية».":"To install the app: in Chrome or Edge on a computer click ⋮ then \"Install app\". On iPhone: tap Share then \"Add to Home Screen\"."});
 for(const k in EN)AR[EN[k]]=k;
-const TITLES={alerts:"تنبيهات الشات",streak:"الستريك والديسكورد",quotes:"الاقتباسات",log:"السجل",ov:"الرئيسية",stream:"إدارة البث",cmd:"الكوماندات",auto:"المؤقتات",songs:"طلبات الأغاني",spam:"حماية الشات",ai:"الذكاء الاصطناعي",sim:"محاكي الكوماند",guide:"دليل الكوماندات",mods:"المودات",bot:"حساب البوت",set:"الإعدادات"};
+const TITLES={alerts:"تنبيهات الشات",streak:"الستريك والديسكورد",so:"الشاوت آوت",quotes:"الاقتباسات",log:"السجل",ov:"الرئيسية",stream:"إدارة البث",cmd:"الكوماندات",auto:"المؤقتات",songs:"طلبات الأغاني",spam:"حماية الشات",ai:"الذكاء الاصطناعي",sim:"محاكي الكوماند",guide:"دليل الكوماندات",mods:"المودات",bot:"حساب البوت",set:"الإعدادات"};
 const COLORS={ov:"#7c3aed",stream:"#0ea5e9",cmd:"#3b82f6",auto:"#f59e0b",songs:"#ec4899",spam:"#f43f5e",bot:"#0d9488",ai:"#c026d3",sim:"#8b5cf6",guide:"#14b8a6",mods:"#10b981",set:"#94a3b8"};
-const OWNPG=["auto","songs","spam","bot","ai","mods","set","alerts","streak","log"];
+const OWNPG=["auto","songs","spam","bot","ai","mods","set","alerts","streak","log","so"];
 const BUILTIN_CMDS=[
  ["!followage","من متى يتابع المشاهد القناة","How long a viewer has followed"],
  ["!accountage","عمر حساب المشاهد في تويتش","How old a viewer's account is"],
@@ -5039,7 +5049,7 @@ function render(){
   document.querySelectorAll(".own").forEach(x=>x.hidden=!own||(x.classList.contains("pg")&&x.id!=="p-"+PG));
   if(!own&&OWNPG.includes(PG))go("ov");
   renderTop();renderSim();renderCmds();renderBuiltin();renderStats();renderQuotes();
-  if(own){renderOwn();renderAuto();renderSongs();renderSpam();renderBot();renderAI();renderAlerts();renderStreak();renderLog()}
+  if(own){renderOwn();renderAuto();renderSongs();renderSpam();renderBot();renderAI();renderAlerts();renderStreak();renderLog();renderSO()}
 }
 function renderTop(){
   const u=CH.usage||{},k=Object.keys(u).sort((a,b)=>u[b]-u[a]).slice(0,5),max=k.length?u[k[0]]:1,box=$("#topbox");
@@ -5176,7 +5186,6 @@ function renderSongs(){
   const url=location.origin+c.player_path;
   $("#sr-playerurl").value=url;$("#sr-open").href=url;
   $("#ov-url").value=c.overlay_path?location.origin+c.overlay_path:"";
-  $("#ov-dbg").href=c.overlay_path?location.origin+c.overlay_path+"&debug=1":"#";
   renderQueue();
   if(SRP&&SRC!==c.player_path)srPlayer(true);
   $("#sr-play").textContent=t(SRP?"⏹ إيقاف المشغّل":"▶ تشغيل الأغاني من الموقع");
@@ -5267,6 +5276,13 @@ function renderAlerts(){
     box.appendChild(d);
   });
 }
+/* ---------- [جديد] الشاوت آوت ---------- */
+function renderSO(){$("#so-raid").checked=!!((CH.alerts||{}).raid_so)}
+$("#so-raid").onchange=()=>act(()=>api("POST",base()+"/alerts",{raid_so:$("#so-raid").checked}),"تم الحفظ");
+Object.assign(EN,{"الشاوت آوت":"Shoutouts","المود يكتب في الشات":"A mod types in chat","، والبوت يرسل رابط قناته وآخر لعبة لعبها، ويطلع كليب من قناته على بثك.":", and the bot posts their channel link and last game, and plays one of their clips on your stream.",
+"شاوت آوت تلقائي لأي أحد يسوي ريد على قناتك":"Automatically shout out anyone who raids your channel","نفس الشاوت آوت ينرسل لحاله وقت الريد، ومعه الكليب.":"The same shoutout is sent automatically on raids, clip included.",
+"🎬 الكليب على البث (OBS)":"🎬 Clip on stream (OBS)","!so اسم_الستريمر":"!so streamer_name","زر «تجربة» يشغّل كليب عشوائي من قناتك. الكليب يظهر بس إذا الـ Overlay مفتوح في OBS.":"The Test button plays a random clip from your channel. It only shows if the overlay is open in OBS.","عشان يطلع الكليب على بثك، أضف هذا الرابط في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.":"To show the clip on stream, add this link in OBS: Sources, then Browser Source, size 1920×1080. Don't share it with anyone."});
+for(const k in EN)AR[EN[k]]=k;
 /* ---------- [جديد] الستريك والديسكورد ---------- */
 function renderStreak(){
   const k=CH.streak||{top:[]},dc=CH.discord||{};
@@ -5330,10 +5346,10 @@ function renderLog(){
 $("#al-save").onclick=()=>act(()=>api("POST",base()+"/alerts",{raid_so:$("#al-so").checked,bits_min:parseInt($("#al-bits").value,10)||1}),"تم الحفظ");
 $("#qt-add").onclick=()=>act(async()=>{await api("POST",base2()+"/quotes",{text:$("#qt-text").value});$("#qt-text").value=""},"تمت الإضافة");
 Object.assign(EN,{"تنبيهات الشات":"Chat alerts","النقاط":"Points","السحوبات":"Giveaways","الاقتباسات":"Quotes","السجل":"Log",
-"البوت يشكر المتابعين والمشتركين واللي يسوون رايد تلقائياً في الشات. عدّل النص أو أوقف أي تنبيه.":"The bot thanks followers, subscribers and raiders in chat automatically. Edit the text or turn any alert off.",
-"شاوت آوت تلقائي للي يسوي رايد (ومعه كليب في الـ Overlay)":"Auto shoutout raiders (with a clip on the overlay)","أقل عدد بتس عشان يطلع التنبيه":"Minimum bits for the alert",
+"البوت يشكر المتابعين والمشتركين واللي يسوون ريد تلقائياً في الشات. عدّل النص أو أوقف أي تنبيه.":"The bot thanks followers, subscribers and raiders in chat automatically. Edit the text or turn any alert off.",
+"شاوت آوت تلقائي للي يسوي ريد (ومعه كليب في الـ Overlay)":"Auto shoutout raiders (with a clip on the overlay)","أقل عدد بتس عشان يطلع التنبيه":"Minimum bits for the alert",
 "تنبيه المتابعة يشتغل لأن قناتك مربوطة.":"Follow alerts work because your channel is linked.","تنبيه المتابعة يحتاج ربط تويتش من الإعدادات.":"Follow alerts need a Twitch link from Settings.",
-"متابعة جديدة":"New follower","اشتراك جديد":"New sub","تجديد اشتراك":"Resub","إهداء اشتراك":"Gift sub","إهداء اشتراكات للشات":"Community gift","رايد":"Raid","بتس":"Bits",
+"متابعة جديدة":"New follower","اشتراك جديد":"New sub","تجديد اشتراك":"Resub","إهداء اشتراك":"Gift sub","إهداء اشتراكات للشات":"Community gift","ريد":"Raid","بتس":"Bits",
 "متوقف":"Off","إيقاف":"Turn off","تشغيل":"Turn on","تجربة":"Test",
 "نظام النقاط":"Points system","المشاهدين ياخذون نقاط لما يشاركون بالشات وأنت لايف، ويقدرون يستخدمونها في السحوبات أو يرسلونها لبعض.":"Viewers earn points by chatting while you're live, and can use them in giveaways or send them to each other.",
 "اسم النقاط":"Points name","كم نقطة كل مرة":"Points each time","كل كم دقيقة":"Every how many minutes","مضاعف المشتركين":"Subscriber multiplier",
@@ -5844,6 +5860,7 @@ _ICON_PATHS = {
     "🌐": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/>',
     "⚙️": '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
     "🔔": '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+    "📣": '<path d="M3 10v4a1 1 0 0 0 1 1h3l6 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
     "🔥": '<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-3.8 2.5-5 .3 1.6 1 2.6 2 3 .3-2.8-.5-5.4.5-8z"/>',
     "🪙": '<ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/>',
     "🎁": '<rect x="3" y="9" width="18" height="4" rx="1"/><path d="M5 13v8h14v-8M12 9v12M12 9c-2-4-6-4-6-1.5S10 9 12 9zM12 9c2-4 6-4 6-1.5S14 9 12 9z"/>',
@@ -5996,12 +6013,12 @@ html{scroll-behavior:smooth}
     <div class="frow">
       <div class="ft">
         <h3>تنبيهات الشات</h3>
-        <p>يشكر المتابعين والمشتركين والإهداءات والبتس، ويرحّب بالرايد مع شاوت آوت وكليب يطلع على بثك.</p>
-        <ul><li>نص كل تنبيه تكتبه أنت مع متغيرات مثل $(months)</li><li>شاوت آوت تلقائي للرايد مع كليب في OBS</li><li>زر تجربة يرسل التنبيه للشات قبل ما تعتمده</li></ul>
+        <p>يشكر المتابعين والمشتركين والإهداءات والبتس، ويرحّب بالريد مع شاوت آوت وكليب يطلع على بثك.</p>
+        <ul><li>نص كل تنبيه تكتبه أنت مع متغيرات مثل $(months)</li><li>شاوت آوت تلقائي للريد مع كليب في OBS</li><li>زر تجربة يرسل التنبيه للشات قبل ما تعتمده</li></ul>
       </div>
       <div class="tr">
-        <div class="m ev"><span>Bigs سوّى رايد ومعه 120 مشاهد</span></div>
-        <div class="m bot"><b>majek_bot</b><span>رايد من Bigs ومعه 120 مشاهد، حيّاكم الله 🎉</span></div>
+        <div class="m ev"><span>Bigs سوّى ريد ومعه 120 مشاهد</span></div>
+        <div class="m bot"><b>majek_bot</b><span>ريد من Bigs ومعه 120 مشاهد، حيّاكم الله 🎉</span></div>
         <div class="m bot"><b>majek_bot</b><span>شكراً Fahad على تجديد الاشتراك، صار لك 7 شهر معنا 💛</span></div>
       </div>
     </div>
@@ -6116,8 +6133,8 @@ initLang();
     ["b","","","@sara22 وعليكم السلام ورحمة الله وبركاته، نورت البث"],
     ["u","fahad_x","#9FC3FF","!sr محمد عبده الأماكن"],
     ["b","","","@fahad_x تمت إضافة Mohammed Abdu - Al Amaken للطابور (رقم 2)"],
-    ["e","","","Bigs سوّى رايد ومعه 120 مشاهد"],
-    ["b","","","رايد من Bigs ومعه 120 مشاهد، حيّاكم الله 🎉"],
+    ["e","","","Bigs سوّى ريد ومعه 120 مشاهد"],
+    ["b","","","ريد من Bigs ومعه 120 مشاهد، حيّاكم الله 🎉"],
     ["u","noor","#B7E07A","@majek_bot اقترح لي اسم لفريقنا"],
     ["b","","","@noor وش رايك «صقور نجد»؟ اسم يخوّف الخصم 🦅"],
     ["u","spammer99","#9FC3FF","ادخلوا مـــوقعــي bit.ly/xx"],
@@ -7757,7 +7774,7 @@ ALERT_DEFAULTS = {
              "$(user) gifted a sub to $(recipient) 🎁", "$(user) $(recipient) $(tier)"),
     "community": ("إهداء اشتراكات للشات", "$(user) أهدى $(count) اشتراكات للشات 🎁🔥",
                   "$(user) gifted $(count) subs to the community 🎁🔥", "$(user) $(count) $(tier)"),
-    "raid": ("رايد", "رايد من $(user) ومعه $(viewers) مشاهد، حيّاكم الله 🎉",
+    "raid": ("ريد", "ريد من $(user) ومعه $(viewers) مشاهد، حيّاكم الله 🎉",
              "$(user) is raiding with $(viewers) viewers, welcome! 🎉", "$(user) $(viewers)"),
     "cheer": ("بتس", "شكراً $(user) على $(bits) بتس 💎", "Thanks $(user) for the $(bits) bits 💎", "$(user) $(bits)"),
 }
@@ -9412,7 +9429,7 @@ class Bot:
             "top": [{"user": u, "n": n} for u, n in top]}
 
   # ==========================================================
-  # [جديد] تنبيهات الشات (فولو، اشتراك، إهداء، رايد، بتس)
+  # [جديد] تنبيهات الشات (فولو، اشتراك، إهداء، ريد، بتس)
   # ==========================================================
   def alerts_cfg(self, ch):
     d = self.store.data["alerts"].setdefault(ch, {})
@@ -9913,4 +9930,4 @@ Bot.event_message = _event_message_so
 
 if __name__ == "__main__":
   bot = Bot()
-  bot.run()
+  bot.run()
