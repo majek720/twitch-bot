@@ -2083,7 +2083,7 @@ const EN={
 "تم إزالة البوت":"Bot removed","تمت الإزالة":"Removed","تمت إضافة المود":"Mod added",
 "تم تفعيل البوت وربط تويتش ✅":"Bot activated and Twitch linked ✅",
 "تم إلغاء الدخول":"Login cancelled","فشل الدخول مع تويتش، حاول مرة ثانية":"Twitch login failed, try again",
-"التفعيل الذاتي مقفل، كلم المطوّر":"Self-activation is disabled, contact the developer","انتهت جلسة الدخول، اضغط زر الدخول مرة ثانية":"The login session expired, press the login button again",
+"التفعيل الذاتي مقفل، كلم المطوّر":"Self-activation is disabled, contact the developer","انتهت جلسة الدخول، اضغط زر الدخول مرة ثانية":"The login session expired, press the login button again","تويتش رفض الدخول:":"Twitch refused the login:",
 "ما وافقت على الصلاحية المطلوبة":"You didn't grant the required permission","صار خطأ":"Something went wrong",
 "لوحة التحكم مقفلة: ضيف DASHBOARD_PASSWORD في Render":"The panel is locked: add DASHBOARD_PASSWORD in Render",
 "كلمة المرور غلط":"Wrong password","اسم القناة غير صحيح":"Invalid channel name",
@@ -2164,7 +2164,8 @@ function initLang(){
   });
   applyLang();
 }
-function toast(m,bad){m=t(m);const x=$("#toast");x.textContent=m;x.className="show"+(bad?" bad":"");setTimeout(()=>x.className="",2400)}
+let TOAST_T=null;
+function toast(m,bad){m=t(m);const x=$("#toast");x.textContent=m;x.className="show"+(bad?" bad":"");clearTimeout(TOAST_T);TOAST_T=setTimeout(()=>x.className="",bad?8000:2400)}
 async function api(method,path,body){
   const r=await fetch(path,{method,headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
   const d=await r.json().catch(()=>({}));
@@ -3812,7 +3813,8 @@ const qp=new URLSearchParams(location.search);
 if(qp.get("msg")==="ready")toast("تم تفعيل البوت وربط تويتش ✅");
 if(qp.get("msg")==="botset")toast("تم ربط حساب البوت ✅");
 const ERR={expired:"انتهت جلسة الدخول، اضغط زر الدخول مرة ثانية",cancel:"تم إلغاء الدخول",fail:"فشل الدخول مع تويتش، حاول مرة ثانية",not_joined:"التفعيل الذاتي مقفل، كلم المطوّر",scope:"ما وافقت على الصلاحية المطلوبة",wrong:"لازم تدخل بنفس حسابك"};
-if(qp.get("err"))toast(ERR[qp.get("err")]||"صار خطأ",1);
+if(qp.get("err")==="twitch")toast(t("تويتش رفض الدخول:")+" "+(qp.get("why")||""),1);
+else if(qp.get("err"))toast(ERR[qp.get("err")]||"صار خطأ",1);
 const goto=qp.get("go");
 if(location.search)history.replaceState(null,"","/s");
 //REPORT_JS
@@ -5190,7 +5192,12 @@ def make_web_app(bot):
       resp.del_cookie("ostate")
       raise resp
     if q.get("error") or not q.get("code"):
-      raise web.HTTPFound("/s?err=cancel")
+      # [fix] نطبع سبب تويتش بدل «تم إلغاء الدخول» بس
+      why = str(q.get("error_description") or q.get("error") or "no code")[:160]
+      print(f"دخول تويتش: تويتش رجّع خطأ: {q.get('error')} | {q.get('error_description')}")
+      if q.get("error") == "access_denied":
+        raise web.HTTPFound("/s?err=cancel")
+      raise web.HTTPFound("/s?" + urlencode({"err": "twitch", "why": why}))
     st, tok = await twitch.form(TOKEN_URL, {
         "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET, "code": q["code"],
         "grant_type": "authorization_code", "redirect_uri": redirect_uri,
