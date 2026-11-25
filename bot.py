@@ -2068,7 +2068,7 @@ const EN={
 "تم إزالة البوت":"Bot removed","تمت الإزالة":"Removed","تمت إضافة المود":"Mod added",
 "تم تفعيل البوت وربط تويتش ✅":"Bot activated and Twitch linked ✅",
 "تم إلغاء الدخول":"Login cancelled","فشل الدخول مع تويتش، حاول مرة ثانية":"Twitch login failed, try again",
-"التفعيل الذاتي مقفل، كلم المطوّر":"Self-activation is disabled, contact the developer",
+"التفعيل الذاتي مقفل، كلم المطوّر":"Self-activation is disabled, contact the developer","انتهت جلسة الدخول، اضغط زر الدخول مرة ثانية":"The login session expired, press the login button again",
 "ما وافقت على الصلاحية المطلوبة":"You didn't grant the required permission","صار خطأ":"Something went wrong",
 "لوحة التحكم مقفلة: ضيف DASHBOARD_PASSWORD في Render":"The panel is locked: add DASHBOARD_PASSWORD in Render",
 "كلمة المرور غلط":"Wrong password","اسم القناة غير صحيح":"Invalid channel name",
@@ -3796,7 +3796,7 @@ $("#logout").onclick=async()=>{await api("POST","/s/api/logout");onAuth({enabled
 const qp=new URLSearchParams(location.search);
 if(qp.get("msg")==="ready")toast("تم تفعيل البوت وربط تويتش ✅");
 if(qp.get("msg")==="botset")toast("تم ربط حساب البوت ✅");
-const ERR={cancel:"تم إلغاء الدخول",fail:"فشل الدخول مع تويتش، حاول مرة ثانية",not_joined:"التفعيل الذاتي مقفل، كلم المطوّر",scope:"ما وافقت على الصلاحية المطلوبة",wrong:"لازم تدخل بنفس حسابك"};
+const ERR={expired:"انتهت جلسة الدخول، اضغط زر الدخول مرة ثانية",cancel:"تم إلغاء الدخول",fail:"فشل الدخول مع تويتش، حاول مرة ثانية",not_joined:"التفعيل الذاتي مقفل، كلم المطوّر",scope:"ما وافقت على الصلاحية المطلوبة",wrong:"لازم تدخل بنفس حسابك"};
 if(qp.get("err"))toast(ERR[qp.get("err")]||"صار خطأ",1);
 const goto=qp.get("go");
 if(location.search)history.replaceState(null,"","/s");
@@ -5090,6 +5090,11 @@ def make_web_app(bot):
     return state_val, AUTH_URL + "?" + urlencode(q)
 
   def go_auth(request, state_val, url):
+    # [fix] لازم الدخول يبدأ من نفس الدومين اللي يرجع له تويتش (SITE_URL)، وإلا الكوكي يضيع
+    # ويطلع «انتهت جلسة الدخول». لو بدأ من دومين ثاني نحوّله أول للدومين الصحيح
+    host = request.host.lower().split(":")[0]
+    if site_host and host != site_host:
+      raise web.HTTPFound(SITE_URL + request.path_qs)
     resp = web.HTTPFound(url)
     resp.set_cookie("ostate", state_val, max_age=600, httponly=True,
                     samesite="Lax", secure=is_https(request))
@@ -5160,7 +5165,10 @@ def make_web_app(bot):
     state_val = q.get("state", "")
     cookie = request.cookies.get("ostate", "")
     if not state_val or not hmac.compare_digest(state_val.encode(), cookie.encode()):
-      return web.Response(text="انتهت جلسة الدخول، ارجع للموقع وحاول مرة ثانية", status=400)
+      # [fix] بدل صفحة سودا: نرجعه لصفحة الدخول على الدومين الصحيح مع رسالة
+      resp = web.HTTPFound((SITE_URL or "") + "/s?err=expired")
+      resp.del_cookie("ostate")
+      raise resp
     if q.get("error") or not q.get("code"):
       raise web.HTTPFound("/s?err=cancel")
     st, tok = await twitch.form(TOKEN_URL, {
