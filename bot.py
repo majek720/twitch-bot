@@ -116,6 +116,7 @@ BOT_LOGIN = (os.environ.get("BOT_LOGIN") or "majek_bot").strip().lower()
 MOD_SCOPE = "channel:manage:moderators"
 CHANNEL_BOT_SCOPE = "channel:bot"
 POLL_SCOPE = "channel:manage:polls"  # [جديد] لكوماند !poll
+CHATTERS_SCOPE = "moderator:read:chatters"  # [جديد] لساعات المتابعة (مين موجود في البث)
 EVENTSUB_TYPES = {"channel.chat.message", "channel.chat.notification", "channel.follow"}
 EVENTSUB_SECRET = hashlib.sha256(b"eventsub:" + SECRET).hexdigest()
 
@@ -126,8 +127,8 @@ CLIP_COOLDOWN = 30  # أقل فاصل بين كليبين في نفس القنا
 BOT_MOD_SCOPES = "moderator:manage:chat_messages moderator:manage:banned_users"  # للحماية من السبام
 BOT_SCOPES = "user:bot user:read:chat user:write:chat " + BOT_MOD_SCOPES
 SCOPES = {
-    "s": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE} {CLIPS_SCOPE} {POLL_SCOPE}",
-    "c": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE} {CLIPS_SCOPE} {POLL_SCOPE}",
+    "s": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE} {CLIPS_SCOPE} {POLL_SCOPE} {CHATTERS_SCOPE}",
+    "c": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE} {CLIPS_SCOPE} {POLL_SCOPE} {CHATTERS_SCOPE}",
     "b": BOT_SCOPES,  # حساب البوت الافتراضي
     "m": BOT_SCOPES,  # حساب بوت يختاره الستريمر لقناته
 }
@@ -2915,6 +2916,8 @@ class Store:
         "streak_cfg": {},  # قناة -> إعدادات الستريك
         "discord_links": {},  # آيدي الديسكورد -> يوزر تويتش
         "discord_guilds": {},  # آيدي سيرفر الديسكورد -> قناة تويتش
+        "xp": {},  # [جديد] قناة -> {يوزر: {x: XP، w: دقايق المتابعة، m: الرسائل، lm: آخر XP من رسالة}}
+        "xp_cfg": {},  # [جديد] قناة -> إعدادات المستويات
     }
     # [patch-v2]
     self._save_lock = asyncio.Lock()  # يمنع كتابتين تتداخلان
@@ -3004,7 +3007,7 @@ class Store:
       self.data["autos"] = loaded.get("autos", {})
       for k in ("botacct", "bot_auth", "report_bans", "sr", "filters", "counts", "ai",
                 "alerts", "quotes", "audit", "streaks", "streak_meta", "streak_cfg",
-                "discord_links", "discord_guilds"):
+                "discord_links", "discord_guilds", "xp", "xp_cfg"):
         self.data[k] = loaded.get(k, {})
       self.data["reports"] = loaded.get("reports", [])
       self.data["es_fp"] = loaded.get("es_fp", "")
@@ -3470,6 +3473,32 @@ class TwitchAPI:
     if st == 200 and d.get("data"):
       return d["data"][0]
     return None
+
+  async def chatters(self, channel):
+    """[جديد] مين موجود في شات القناة الحين (يحتاج صلاحية moderator:read:chatters). None = ما نقدر."""
+    info = self.store.data["tokens"].get(channel)
+    if not info or not info.get("chatters"):
+      return None
+    token = await self.user_token(channel)
+    if not token:
+      return None
+    out, cursor = set(), None
+    for _ in range(5):
+      params = {"broadcaster_id": info["user_id"], "moderator_id": info["user_id"], "first": "1000"}
+      if cursor:
+        params["after"] = cursor
+      st, d = await self.call("GET", "chat/chatters", token, params=params)
+      if st != 200:
+        if st in (401, 403):
+          info["chatters"] = False
+          self.store.save_soon(30)
+        return out or None
+      out |= {str(x.get("user_login") or "").lower() for x in d.get("data") or []}
+      cursor = (d.get("pagination") or {}).get("cursor")
+      if not cursor:
+        break
+    out.discard("")
+    return out
 
   async def followed_at(self, channel, user_id):
     """يرجع (تاريخ المتابعة، كود الخطأ): not_linked / expired / refused / not_following"""
@@ -4469,6 +4498,7 @@ main{flex:1;min-width:0}
       <a data-p="ai" class="own"><i>✨</i><span>الذكاء الاصطناعي</span></a>
       <a data-p="alerts" class="own"><i>🔔</i><span>تنبيهات الشات</span></a>
       <a data-p="streak" class="own"><i>🔥</i><span>الستريك والديسكورد</span></a>
+      <a data-p="lv" class="own"><i>⭐</i><span>المستويات</span></a>
       <a data-p="so" class="own"><i>📣</i><span>الشاوت آوت</span></a>
       <a data-p="quotes"><i>💭</i><span>الاقتباسات</span></a>
       <a data-p="sim"><i>🧪</i><span>محاكي الكوماند</span></a>
@@ -4831,6 +4861,33 @@ main{flex:1;min-width:0}
             </div>
           </div>
         </section>
+        <section class="pg own" id="p-lv" hidden>
+          <div class="panel">
+            <h3>المستويات وساعات المتابعة</h3>
+            <p class="mut">المشاهد يجمع XP لما يكتب بالشات ولما يتابع البث، ومع الوقت يطلع مستواه. والبوت يحسب كم ساعة تابع كل واحد قناتك.</p>
+            <div class="tool" style="margin:12px 0 6px">
+              <button class="skchip lvchip" data-lv="on">مفعّل</button>
+              <button class="skchip lvchip" data-lv="off">متوقف</button>
+            </div>
+            <label class="chk"><input type="checkbox" id="lv-ann"><span>البوت يكتب بالشات لما أحد يطلع مستوى جديد</span></label>
+            <div class="grid3">
+              <div><label>XP لكل رسالة (مرة كل دقيقة)</label><input id="lv-msg" type="number" min="0" max="1000" dir="ltr"></div>
+              <div><label>XP لكل 5 دقايق متابعة</label><input id="lv-watch" type="number" min="0" max="1000" dir="ltr"></div>
+            </div>
+            <button class="btn sm" id="lv-save">حفظ</button>
+            <p class="hint" id="lv-scope" style="margin:12px 0 0"></p>
+            <p class="hint" style="margin:8px 0 0">كوماندات الشات: !rank مستواك • !watchtime ساعات متابعتك • !top الأعلى مستوى. وفي الديسكورد: /rank و /toplevel</p>
+          </div>
+          <div class="panel">
+            <h3>المتصدرين</h3>
+            <div class="tool" style="margin:0 0 12px">
+              <button class="skchip lvtab on" data-t="x">المستوى</button>
+              <button class="skchip lvtab" data-t="w">ساعات المتابعة</button>
+              <button class="skchip lvtab" data-t="s">الستريك</button>
+            </div>
+            <div id="lvlist"></div>
+          </div>
+        </section>
 
         <section class="pg" id="p-quotes" hidden>
           <div class="panel">
@@ -4954,9 +5011,9 @@ Object.assign(EN,{"⚠️ أغاني سبوتيفاي حالياً ما تشتغ
 for(const k in EN)AR[EN[k]]=k;
 Object.assign(EN,{"القائمة الرئيسية":"Main","الأدوات":"Tools","الفريق والبوت":"Team & bot","النظام":"System","إدارة البث":"Stream manager","المؤقتات":"Timers","حماية الشات":"Chat moderation","دليل الكوماندات":"Commands guide","صفحة القناة العامة":"Public channel page","البلاغات والدعم":"Reports & support","اختصارات سريعة":"Quick actions","انتقل بسرعة لأهم الأدوات":"Jump to the most important tools","تغيير اللعبة بسرعة":"Change the game fast","سوّي اختصار لعبة (مثل !f للفورتنايت) وغيّر كاتيقوري البث من الشات بدون ما تفتح تويتش.":"Create a game shortcut (like !f for Fortnite) and change the stream category from chat without opening Twitch.","فتح صفحة الكوماندات":"Open the commands page","تحميل التطبيق":"Install app","⬇️ تحميل التطبيق":"⬇️ Install the app","لتثبيت التطبيق: في كروم أو إيدج على الكمبيوتر اضغط ⋮ ثم «تثبيت التطبيق». في الآيفون: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية».":"To install the app: in Chrome or Edge on a computer click ⋮ then \"Install app\". On iPhone: tap Share then \"Add to Home Screen\"."});
 for(const k in EN)AR[EN[k]]=k;
-const TITLES={alerts:"تنبيهات الشات",streak:"الستريك والديسكورد",so:"الشاوت آوت",quotes:"الاقتباسات",log:"السجل",ov:"الرئيسية",stream:"إدارة البث",cmd:"الكوماندات",auto:"المؤقتات",songs:"طلبات الأغاني",spam:"حماية الشات",ai:"الذكاء الاصطناعي",sim:"محاكي الكوماند",guide:"دليل الكوماندات",mods:"المودات",bot:"حساب البوت",set:"الإعدادات"};
+const TITLES={alerts:"تنبيهات الشات",streak:"الستريك والديسكورد",lv:"المستويات",so:"الشاوت آوت",quotes:"الاقتباسات",log:"السجل",ov:"الرئيسية",stream:"إدارة البث",cmd:"الكوماندات",auto:"المؤقتات",songs:"طلبات الأغاني",spam:"حماية الشات",ai:"الذكاء الاصطناعي",sim:"محاكي الكوماند",guide:"دليل الكوماندات",mods:"المودات",bot:"حساب البوت",set:"الإعدادات"};
 const COLORS={ov:"#7c3aed",stream:"#0ea5e9",cmd:"#3b82f6",auto:"#f59e0b",songs:"#ec4899",spam:"#f43f5e",bot:"#0d9488",ai:"#c026d3",sim:"#8b5cf6",guide:"#14b8a6",mods:"#10b981",set:"#94a3b8"};
-const OWNPG=["auto","songs","spam","bot","ai","mods","set","alerts","streak","log","so"];
+const OWNPG=["auto","songs","spam","bot","ai","mods","set","alerts","streak","log","so","lv"];
 const BUILTIN_CMDS=[
  ["!followage","من متى يتابع المشاهد القناة","How long a viewer has followed"],
  ["!accountage","عمر حساب المشاهد في تويتش","How old a viewer's account is"],
@@ -5052,7 +5109,7 @@ function render(){
   document.querySelectorAll(".own").forEach(x=>x.hidden=!own||(x.classList.contains("pg")&&x.id!=="p-"+PG));
   if(!own&&OWNPG.includes(PG))go("ov");
   renderTop();renderSim();renderCmds();renderBuiltin();renderStats();renderQuotes();
-  if(own){renderOwn();renderAuto();renderSongs();renderSpam();renderBot();renderAI();renderAlerts();renderStreak();renderLog();renderSO()}
+  if(own){renderOwn();renderAuto();renderSongs();renderSpam();renderBot();renderAI();renderAlerts();renderStreak();renderLog();renderSO();renderLV()}
 }
 function renderTop(){
   const u=CH.usage||{},k=Object.keys(u).sort((a,b)=>u[b]-u[a]).slice(0,5),max=k.length?u[k[0]]:1,box=$("#topbox");
@@ -5287,6 +5344,32 @@ function renderAlerts(){
     box.appendChild(d);
   });
 }
+/* ---------- [جديد] المستويات ---------- */
+let LVTAB="x";
+const fmtW=m=>{const h=Math.floor(m/60),mm=m%60;return LANG==="en"?(h?h+"h "+mm+"m":mm+"m"):(h?h+" س"+(mm?" "+mm+" د":""):mm+" د")};
+function renderLV(){
+  const v=CH.levels||{top:[],topw:[]};
+  document.querySelectorAll(".lvchip").forEach(x=>x.classList.toggle("on",x.dataset.lv===(v.on?"on":"off")));
+  $("#lv-ann").checked=!!v.announce;$("#lv-msg").value=v.msg??10;$("#lv-watch").value=v.watch??5;
+  $("#lv-scope").textContent=t(v.chatters?"✅ ساعات المتابعة تنحسب لكل اللي في البث، حتى اللي ما يكتبون.":"ساعات المتابعة الحين تنحسب بس للي يكتبون بالشات. عشان تنحسب لكل اللي في البث، اضغط «إعادة الربط» في الإعدادات مرة وحدة.");
+  document.querySelectorAll(".lvtab").forEach(x=>x.classList.toggle("on",x.dataset.t===LVTAB));
+  let L=(LVTAB==="w"?v.topw:v.top)||[];
+  if(LVTAB==="s")L=[...(v.top||[])].filter(x=>x.s>0).sort((a,b)=>b.s-a.s);
+  const box=$("#lvlist");box.innerHTML="";
+  if(!L.length){box.innerHTML='<p class="empty">'+t("ما أحد عنده مستوى للحين")+'</p>';return}
+  L.slice(0,50).forEach((x,i)=>{
+    const d=document.createElement("div");d.className="lb"+(i<3?" p"+(i+1):"");
+    d.innerHTML='<span class="rk" data-nt></span><b dir="ltr" data-nt></b><em data-nt></em>';
+    d.querySelector(".rk").textContent=i+1;d.querySelector("b").textContent=x.user;
+    d.querySelector("em").textContent="⭐ "+x.lv+"  •  ⏱ "+fmtW(x.w)+"  •  🔥 "+x.s;
+    box.appendChild(d);
+  });
+}
+document.querySelectorAll(".lvchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/levels",{on:b.dataset.lv==="on"}),"تم الحفظ"));
+document.querySelectorAll(".lvtab").forEach(b=>b.onclick=()=>{LVTAB=b.dataset.t;renderLV()});
+$("#lv-save").onclick=()=>act(()=>api("POST",base()+"/levels",{announce:$("#lv-ann").checked,msg:parseInt($("#lv-msg").value,10)||0,watch:parseInt($("#lv-watch").value,10)||0}),"تم الحفظ");
+Object.assign(EN,{"المستويات":"Levels","المستويات وساعات المتابعة":"Levels & watch time","المشاهد يجمع XP لما يكتب بالشات ولما يتابع البث، ومع الوقت يطلع مستواه. والبوت يحسب كم ساعة تابع كل واحد قناتك.":"Viewers earn XP by chatting and watching, and level up over time. The bot also tracks how many hours each viewer has watched your channel.","البوت يكتب بالشات لما أحد يطلع مستوى جديد":"Post in chat when someone levels up","XP لكل رسالة (مرة كل دقيقة)":"XP per message (once a minute)","XP لكل 5 دقايق متابعة":"XP per 5 minutes watched","كوماندات الشات: !rank مستواك • !watchtime ساعات متابعتك • !top الأعلى مستوى. وفي الديسكورد: /rank و /toplevel":"Chat commands: !rank your level • !watchtime your watch time • !top top levels. In Discord: /rank and /toplevel","المتصدرين":"Leaderboard","المستوى":"Level","ساعات المتابعة":"Watch time","ما أحد عنده مستوى للحين":"Nobody has a level yet","✅ ساعات المتابعة تنحسب لكل اللي في البث، حتى اللي ما يكتبون.":"✅ Watch time counts for everyone in the stream, even lurkers.","ساعات المتابعة الحين تنحسب بس للي يكتبون بالشات. عشان تنحسب لكل اللي في البث، اضغط «إعادة الربط» في الإعدادات مرة وحدة.":"Watch time currently only counts viewers who chat. To count everyone in the stream, press Relink in Settings once.",});
+for(const k in EN)AR[EN[k]]=k;
 /* ---------- [جديد] الشاوت آوت ---------- */
 function renderSO(){$("#so-raid").checked=!!((CH.alerts||{}).raid_so)}
 $("#so-raid").onchange=()=>act(()=>api("POST",base()+"/alerts",{raid_so:$("#so-raid").checked}),"تم الحفظ");
@@ -5887,6 +5970,7 @@ _ICON_PATHS = {
     "⚙️": '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
     "🔔": '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
     "📣": '<path d="M3 10v4a1 1 0 0 0 1 1h3l6 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
+    "⭐": '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>',
     "🔥": '<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-3.8 2.5-5 .3 1.6 1 2.6 2 3 .3-2.8-.5-5.4.5-8z"/>',
     "🪙": '<ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/>',
     "🎁": '<rect x="3" y="9" width="18" height="4" rx="1"/><path d="M5 13v8h14v-8M12 9v12M12 9c-2-4-6-4-6-1.5S10 9 12 9zM12 9c2-4 6-4 6-1.5S14 9 12 9z"/>',
@@ -6267,7 +6351,7 @@ YT_ID_RE = re.compile(
 URL_RE = re.compile(
     r"(?:https?://|www\.)\S+|\b[a-z0-9-]+\.(?:com|net|org|io|gg|tv|me|co|ly|xyz|info|sa|ae|app|dev|gl|be)\b(?:/\S*)?",
     re.I)
-EXTRA_CMDS = {"streak", "topstreak", "link", "quote", "addquote", "delquote", "poll", "endpoll", "so", "shoutout"}
+EXTRA_CMDS = {"rank", "level", "watchtime", "top", "streak", "topstreak", "link", "quote", "addquote", "delquote", "poll", "endpoll", "so", "shoutout"}
 
 
 def find_cmd(cmds, name):
@@ -6964,7 +7048,8 @@ def make_web_app(bot):
       else:
         store.data["tokens"][login_name] = {
             "refresh": tok["refresh_token"], "user_id": user["id"],
-            "clips": CLIPS_SCOPE in scopes, "polls": POLL_SCOPE in scopes}
+            "clips": CLIPS_SCOPE in scopes, "polls": POLL_SCOPE in scopes,
+            "chatters": CHATTERS_SCOPE in scopes}
         twitch.user_access[login_name] = (tok["access_token"], time.time() + tok.get("expires_in", 3600))
         await store.save()
         try:
@@ -7062,6 +7147,7 @@ def make_web_app(bot):
         # [جديد]
         "alerts": bot.alerts_view(ch) if own else {},
         "streak": bot.streak_view(ch, own),
+        "levels": bot.xp_view(ch, own),
         "discord": discord_view(ch) if own else {},
         "quotes": store.data["quotes"].get(ch, [])[-200:],
         "audit": store.data["audit"].get(ch, [])[:60] if own else [],
@@ -7537,6 +7623,26 @@ def make_web_app(bot):
         "endpoint": (SITE_URL + "/discord/interactions") if SITE_URL else "",
     }
 
+  async def s_levels(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    cfg = bot.xp_cfg(ch)
+    for k in ("on", "announce"):
+      if k in b:
+        cfg[k] = bool(b[k])
+    for k, hi in (("msg", 1000), ("watch", 1000)):
+      if k in b:
+        try:
+          cfg[k] = max(0, min(hi, int(b[k])))
+        except (TypeError, ValueError):
+          return jerr("صار خطأ")
+    await store.save()
+    bot.audit(ch, a[0], "عدّل إعدادات المستويات")
+    return web.json_response({"ok": True})
+
   async def s_streak(request):
     a, err = access(request, owner_only=True)
     if err:
@@ -7648,6 +7754,39 @@ def make_web_app(bot):
                         {"name": "بثوث حضرها", "value": str(rec.get("n", 0)), "inline": True}],
              "footer": {"text": f"قناة {ch} • majek bot"}}
       return dmsg(embeds=[emb])
+
+    if name == "rank":
+      who = str(opts.get("user") or "").strip().lstrip("@").lower() or store.data["discord_links"].get(uid)
+      if not who:
+        return dmsg("اربط حسابك أول: اكتب /link، أو اكتب اسمك: /rank user:اسمك", eph=True)
+      r = store.data["xp"].get(ch, {}).get(who)
+      if not r:
+        return dmsg(f"**{who}** ما عنده مستوى في قناة {ch} للحين. يجمع XP لما يكتب ويتابع البث ⭐")
+      lv, cur, need = xp_level(r.get("x", 0))
+      fill = round(12 * cur / need) if need else 0
+      bar = "🟧" * fill + "⬛" * (12 - fill)
+      sc = bot.streak_eff(ch, store.data["streaks"].get(ch, {}).get(who), bot.cached_live_sid(ch))
+      emb = {"title": f"⭐ {who} • مستوى {lv}", "color": color,
+             "description": f"{bar}\n`{cur} / {need} XP` باقي {need - cur} للمستوى {lv + 1}",
+             "fields": [{"name": "الترتيب", "value": f"#{bot.xp_rank(ch, who)}", "inline": True},
+                        {"name": "ساعات المتابعة", "value": fmt_watch(r.get("w", 0)), "inline": True},
+                        {"name": "الستريك", "value": f"🔥 {sc}", "inline": True},
+                        {"name": "الرسائل", "value": f"{r.get('m', 0):,}", "inline": True}],
+             "thumbnail": {"url": f"{SITE_URL}/icon-192.png?v=2"} if SITE_URL else None,
+             "footer": {"text": f"قناة {ch} • majek bot"}}
+      if not emb["thumbnail"]:
+        emb.pop("thumbnail")
+      return dmsg(embeds=[emb])
+
+    if name == "toplevel":
+      top = bot.xp_top(ch, 10)
+      if not top:
+        return dmsg("ما أحد عنده مستوى للحين في هذي القناة")
+      medal = ["🥇", "🥈", "🥉"]
+      lines = [f"{medal[i] if i < 3 else str(i + 1) + '.'} **{x['user']}** ⭐ {x['lv']} • ⏱ {fmt_watch(x['w'])}"
+               for i, x in enumerate(top)]
+      return dmsg(embeds=[{"title": f"الأعلى مستوى في قناة {ch}", "color": color, "description": "\n".join(lines),
+                           "footer": {"text": "majek bot"}}])
 
     if name == "top":
       top = bot.streak_top(ch, 10)
@@ -7768,6 +7907,7 @@ def make_web_app(bot):
   r.add_post("/s/api/channel/{channel}/quotes", s_quote_add)
   r.add_delete("/s/api/channel/{channel}/quotes/{n}", s_quote_del)
   r.add_post("/s/api/channel/{channel}/streak", s_streak)
+  r.add_post("/s/api/channel/{channel}/levels", s_levels)
   r.add_post("/discord/interactions", discord_interactions)
   # مشغّل الأغاني
   r.add_get("/overlay/{channel}", overlay_page)
@@ -7897,6 +8037,36 @@ def expand_args(text, query, lang="ar"):
 DISCORD_APP_ID = os.environ.get("DISCORD_APP_ID", "").strip()
 DISCORD_PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY", "").strip()
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
+XP_DEFAULTS = {"on": True, "announce": True, "msg": 10, "watch": 5}  # [جديد] المستويات
+XP_TICK = 300  # كل 5 دقايق نحسب المتابعة
+MAX_XP_USERS = 20000
+
+
+def xp_need(lv):
+  """كم XP يحتاج المستوى lv عشان يطلع للي بعده."""
+  return 5 * lv * lv + 50 * lv + 100
+
+
+def xp_level(x):
+  """يرجع (المستوى، XP داخل المستوى، XP المطلوب للمستوى الجاي)."""
+  lv = 0
+  x = max(0, int(x))
+  while x >= xp_need(lv) and lv < 1000:
+    x -= xp_need(lv)
+    lv += 1
+  return lv, x, xp_need(lv)
+
+
+def fmt_watch(mins, en=False):
+  h, m = divmod(int(mins), 60)
+  if en:
+    return f"{h}h {m}m" if h else f"{m}m"
+  def ar(n, one, two, few):
+    return one if n == 1 else two if n == 2 else f"{n} {few}" if 3 <= n <= 10 else f"{n} {one}"
+  hs, ms = ar(h, "ساعة", "ساعتين", "ساعات"), ar(m, "دقيقة", "دقيقتين", "دقايق")
+  return (hs + (f" و {ms}" if m else "")) if h else (ms if m else "0 دقيقة")
+
+
 STREAK_TZ_OFFSET = 3 * 3600  # [جديد] يوم الستريك بتوقيت السعودية
 STREAK_MERGE_GAP = 3 * 3600  # [جديد] انقطاع أقل من 3 ساعات = نفس البث
 STREAK_MILESTONES = {3, 5, 7, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 300, 365, 500}
@@ -8013,6 +8183,9 @@ DISCORD_COMMANDS = [
     {"name": "streak", "description": "ستريك المشاهدة حقك • Your watch streak",
      "options": [{"type": 3, "name": "user", "description": "يوزر تويتش (اختياري) • Twitch username", "required": False}]},
     {"name": "top", "description": "أعلى ستريك في القناة • Top watch streaks"},
+    {"name": "rank", "description": "مستواك وساعات متابعتك • Your level and watch time",
+     "options": [{"type": 3, "name": "user", "description": "يوزر تويتش (اختياري) • Twitch username", "required": False}]},
+    {"name": "toplevel", "description": "الأعلى مستوى في القناة • Top levels"},
     {"name": "link", "description": "اربط حساب تويتش حقك • Link your Twitch account"},
     {"name": "setup", "description": "اربط السيرفر بقناة تويتش (للمسؤولين) • Link this server to a Twitch channel",
      "default_member_permissions": "32", "dm_permission": False,
@@ -8233,6 +8406,7 @@ class Bot:
     self.stats = {}  # [جديد] قناة -> إحصائيات الشات من آخر تشغيل
     self.follow_last = {}  # [جديد] قناة -> آخر تنبيه فولو
     self.stream_ids = {}  # [جديد] قناة -> (وقت، رقم البث الحالي) للستريك
+    self.recent_chat = {}  # [جديد] قناة -> {يوزر: آخر رسالة} لساعات المتابعة بدون صلاحية
     self.link_codes = {}  # [جديد] رمز ربط الديسكورد -> (آيدي الديسكورد، وقت الانتهاء)
 
   def run(self):
@@ -8258,6 +8432,7 @@ class Bot:
     asyncio.create_task(self.periodic_reminders())
     asyncio.create_task(self.resub_loop())
     asyncio.create_task(self.keepalive_loop())
+    asyncio.create_task(self.xp_loop())
     asyncio.create_task(discord_register_commands())
     if self.irc:
       asyncio.create_task(self.irc.run())
@@ -9650,6 +9825,41 @@ class Bot:
           await reply(f"أعلى ستريك: {line}{link}", f"Top streaks: {line}{link}")
         return True
 
+    # ---------- [جديد] المستويات وساعات المتابعة ----------
+    if cmd in ("rank", "level", "watchtime", "top"):
+      if not self.xp_cfg(ch)["on"]:
+        return True
+      if cooldown(cmd, 15 if cmd == "top" else 5):
+        return True
+      if cmd == "top":
+        top = self.xp_top(ch, 5)
+        if not top:
+          await reply("ما أحد عنده مستوى للحين", "No levels yet")
+        else:
+          lv_ar = " • ".join(f"{i + 1}) {x['user']} م{x['lv']}" for i, x in enumerate(top))
+          lv_en = " • ".join(f"{i + 1}) {x['user']} Lv{x['lv']}" for i, x in enumerate(top))
+          link = f" | {SITE_URL}/c/{ch}" if SITE_URL else ""
+          await reply(f"🏆 الأعلى مستوى: {lv_ar}{link}", f"🏆 Top levels: {lv_en}{link}")
+        return True
+      who = arg.split()[0].lstrip("@").lower() if arg else user
+      r = self.store.data["xp"].get(ch, {}).get(who)
+      if not r:
+        await reply(f"{'ما عندك' if who == user else who + ' ما عنده'} مستوى للحين، اكتب بالشات وتابع البث وتجمع XP ⭐",
+                    f"{'You have' if who == user else who + ' has'} no level yet, chat and watch streams to earn XP ⭐")
+        return True
+      if cmd == "watchtime":
+        pre_ar = "تابعت" if who == user else f"{who} تابع"
+        pre_en = "You've watched" if who == user else f"{who} has watched"
+        await reply(f"{pre_ar} القناة {fmt_watch(r.get('w', 0))} ⏱", f"{pre_en} for {fmt_watch(r.get('w', 0), True)} ⏱")
+        return True
+      lv, cur, need = xp_level(r.get("x", 0))
+      rk = self.xp_rank(ch, who)
+      sc = self.streak_eff(ch, self.store.data["streaks"].get(ch, {}).get(who), self.cached_live_sid(ch))
+      name = "" if who == user else f"{who}: "
+      await reply(f"{name}⭐ مستوى {lv} ({cur}/{need} XP) | ⏱ {fmt_watch(r.get('w', 0))} متابعة | 🔥 ستريك {sc} | الترتيب #{rk}",
+                  f"{name}⭐ Level {lv} ({cur}/{need} XP) | ⏱ {fmt_watch(r.get('w', 0), True)} watched | 🔥 streak {sc} | rank #{rk}")
+      return True
+
     # ---------- الاقتباسات ----------
     if cmd in ("quote", "addquote", "delquote"):
       qs = self.store.data["quotes"].setdefault(ch, [])
@@ -9912,6 +10122,113 @@ class Bot:
                   "broken": self.streak_broken(ch)})
     return out
 
+  # ---------- [جديد] المستويات والـ XP وساعات المتابعة ----------
+  def xp_cfg(self, ch):
+    d = self.store.data["xp_cfg"].setdefault(ch, {})
+    for k, v in XP_DEFAULTS.items():
+      d.setdefault(k, v)
+    return d
+
+  def xp_rec(self, ch, user):
+    d = self.store.data["xp"].setdefault(ch, {})
+    r = d.get(user)
+    if r is None:
+      r = d[user] = {"x": 0, "w": 0, "m": 0, "lm": 0}
+      if len(d) > MAX_XP_USERS:
+        for k in sorted(d, key=lambda u: d[u].get("x", 0))[:len(d) - MAX_XP_USERS]:
+          if k != user:
+            del d[k]
+    return r
+
+  def xp_skip(self, ch, user):
+    return user == ch or user in KNOWN_BOTS or user in (BOT_LOGIN, self.twitch.bot_login(ch))
+
+  async def xp_add(self, ch, user, amt, announce=True):
+    r = self.xp_rec(ch, user)
+    before = xp_level(r["x"])[0]
+    r["x"] += int(amt)
+    after = xp_level(r["x"])[0]
+    if announce and after > before and self.xp_cfg(ch)["announce"]:
+      en = self.lang_of(ch) == "en"
+      await self.send_chat(ch, f"🎉 @{user} leveled up to {after}! Check yours with !rank" if en
+                           else f"🎉 @{user} ارتفع مستواك إلى {after}! شوف مستواك بـ !rank")
+    return after > before
+
+  async def xp_chat(self, ch, user):
+    try:
+      cfg = self.xp_cfg(ch)
+      if not cfg["on"] or self.xp_skip(ch, user) or not self.cached_live_sid(ch):
+        return
+      self.recent_chat.setdefault(ch, {})[user] = time.time()
+      r = self.xp_rec(ch, user)
+      r["m"] = r.get("m", 0) + 1
+      now = time.time()
+      if now - r.get("lm", 0) >= 60:
+        r["lm"] = int(now)
+        await self.xp_add(ch, user, cfg["msg"])
+      self.store.save_soon(120)
+    except Exception as e:
+      print(f"خطأ XP: {e}")
+
+  async def xp_loop(self):
+    """كل 5 دقايق: كل اللي في البث ياخذون دقايق متابعة و XP."""
+    await asyncio.sleep(60)
+    while True:
+      try:
+        for ch in list(self.store.data["channels"]):
+          if ch in self.store.data["banned"]:
+            continue
+          cfg = self.xp_cfg(ch)
+          if not cfg["on"] or not await self.current_stream_id(ch):
+            self.recent_chat.pop(ch, None)
+            continue
+          viewers = await self.twitch.chatters(ch)
+          if viewers is None:  # بدون صلاحية: نحسب اللي كتبوا آخر 10 دقايق
+            rc = self.recent_chat.get(ch, {})
+            viewers = {u for u, t in rc.items() if time.time() - t < 600}
+          shouts = 0
+          for u in viewers:
+            if self.xp_skip(ch, u):
+              continue
+            self.xp_rec(ch, u)["w"] += XP_TICK // 60
+            up = await self.xp_add(ch, u, cfg["watch"], announce=shouts < 3)
+            shouts += 1 if up else 0
+          self.store.save_soon(120)
+          await asyncio.sleep(1)
+      except Exception as e:
+        print(f"خطأ حلقة المتابعة: {e}")
+      await asyncio.sleep(XP_TICK)
+
+  def xp_rank(self, ch, user):
+    d = self.store.data["xp"].get(ch, {})
+    if user not in d:
+      return 0
+    x = d[user].get("x", 0)
+    return 1 + sum(1 for r in d.values() if r.get("x", 0) > x)
+
+  def xp_top(self, ch, n=10, key="x"):
+    d = self.store.data["xp"].get(ch, {})
+    rows = sorted(d.items(), key=lambda kv: -kv[1].get(key, 0))[:n]
+    live = self.cached_live_sid(ch)
+    sk = self.store.data["streaks"].get(ch, {})
+    out = []
+    for u, r in rows:
+      if r.get(key, 0) <= 0:
+        continue
+      lv, cur, need = xp_level(r.get("x", 0))
+      out.append({"user": u, "lv": lv, "x": r.get("x", 0), "cur": cur, "need": need, "w": r.get("w", 0),
+                  "m": r.get("m", 0), "s": self.streak_eff(ch, sk.get(u), live)})
+    return out
+
+  def xp_view(self, ch, own):
+    cfg = self.xp_cfg(ch)
+    out = {"on": bool(cfg["on"]), "top": self.xp_top(ch, 50), "topw": self.xp_top(ch, 50, "w")}
+    if own:
+      info = self.store.data["tokens"].get(ch) or {}
+      out.update({"announce": bool(cfg["announce"]), "msg": cfg["msg"], "watch": cfg["watch"],
+                  "chatters": bool(info.get("chatters"))})
+    return out
+
   def new_link_code(self, discord_id):
     now = time.time()
     for k in [k for k, v in self.link_codes.items() if v[1] < now]:
@@ -9937,6 +10254,8 @@ class Bot:
     lsid = self.cached_live_sid(channel_name)
     if not (lsid and srec and srec.get("last") == lsid):
       asyncio.create_task(self.track_streak(channel_name, username))
+    if lsid:
+      asyncio.create_task(self.xp_chat(channel_name, username))  # [جديد] XP
     if message.cheer:
       asyncio.create_task(self.maybe_cheer_alert(channel_name, {"cheer": message.cheer}, message.author.name))
 
