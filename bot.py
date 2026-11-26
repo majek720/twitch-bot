@@ -4498,7 +4498,6 @@ main{flex:1;min-width:0}
       <a data-p="ai" class="own"><i>✨</i><span>الذكاء الاصطناعي</span></a>
       <a data-p="alerts" class="own"><i>🔔</i><span>تنبيهات الشات</span></a>
       <a data-p="streak" class="own"><i>🔥</i><span>الستريك والديسكورد</span></a>
-      <a data-p="lv" class="own"><i>⭐</i><span>المستويات</span></a>
       <a data-p="so" class="own"><i>📣</i><span>الشاوت آوت</span></a>
       <a data-p="quotes"><i>💭</i><span>الاقتباسات</span></a>
       <a data-p="sim"><i>🧪</i><span>محاكي الكوماند</span></a>
@@ -4860,9 +4859,7 @@ main{flex:1;min-width:0}
               <p class="hint" style="margin:10px 0 0">من إعدادات الروم في الديسكورد: Integrations ثم Webhooks ثم New Webhook وانسخ الرابط.</p>
             </div>
           </div>
-        </section>
-        <section class="pg own" id="p-lv" hidden>
-          <div class="panel">
+                  <div class="panel" style="margin-top:14px">
             <h3>المستويات وساعات المتابعة</h3>
             <p class="mut">المشاهد يجمع XP لما يكتب بالشات ولما يتابع البث، ومع الوقت يطلع مستواه. والبوت يحسب كم ساعة تابع كل واحد قناتك.</p>
             <div class="tool" style="margin:12px 0 6px">
@@ -4887,6 +4884,7 @@ main{flex:1;min-width:0}
             </div>
             <div id="lvlist"></div>
           </div>
+        
         </section>
 
         <section class="pg" id="p-quotes" hidden>
@@ -5011,9 +5009,9 @@ Object.assign(EN,{"⚠️ أغاني سبوتيفاي حالياً ما تشتغ
 for(const k in EN)AR[EN[k]]=k;
 Object.assign(EN,{"القائمة الرئيسية":"Main","الأدوات":"Tools","الفريق والبوت":"Team & bot","النظام":"System","إدارة البث":"Stream manager","المؤقتات":"Timers","حماية الشات":"Chat moderation","دليل الكوماندات":"Commands guide","صفحة القناة العامة":"Public channel page","البلاغات والدعم":"Reports & support","اختصارات سريعة":"Quick actions","انتقل بسرعة لأهم الأدوات":"Jump to the most important tools","تغيير اللعبة بسرعة":"Change the game fast","سوّي اختصار لعبة (مثل !f للفورتنايت) وغيّر كاتيقوري البث من الشات بدون ما تفتح تويتش.":"Create a game shortcut (like !f for Fortnite) and change the stream category from chat without opening Twitch.","فتح صفحة الكوماندات":"Open the commands page","تحميل التطبيق":"Install app","⬇️ تحميل التطبيق":"⬇️ Install the app","لتثبيت التطبيق: في كروم أو إيدج على الكمبيوتر اضغط ⋮ ثم «تثبيت التطبيق». في الآيفون: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية».":"To install the app: in Chrome or Edge on a computer click ⋮ then \"Install app\". On iPhone: tap Share then \"Add to Home Screen\"."});
 for(const k in EN)AR[EN[k]]=k;
-const TITLES={alerts:"تنبيهات الشات",streak:"الستريك والديسكورد",lv:"المستويات",so:"الشاوت آوت",quotes:"الاقتباسات",log:"السجل",ov:"الرئيسية",stream:"إدارة البث",cmd:"الكوماندات",auto:"المؤقتات",songs:"طلبات الأغاني",spam:"حماية الشات",ai:"الذكاء الاصطناعي",sim:"محاكي الكوماند",guide:"دليل الكوماندات",mods:"المودات",bot:"حساب البوت",set:"الإعدادات"};
+const TITLES={alerts:"تنبيهات الشات",streak:"الستريك والديسكورد",so:"الشاوت آوت",quotes:"الاقتباسات",log:"السجل",ov:"الرئيسية",stream:"إدارة البث",cmd:"الكوماندات",auto:"المؤقتات",songs:"طلبات الأغاني",spam:"حماية الشات",ai:"الذكاء الاصطناعي",sim:"محاكي الكوماند",guide:"دليل الكوماندات",mods:"المودات",bot:"حساب البوت",set:"الإعدادات"};
 const COLORS={ov:"#7c3aed",stream:"#0ea5e9",cmd:"#3b82f6",auto:"#f59e0b",songs:"#ec4899",spam:"#f43f5e",bot:"#0d9488",ai:"#c026d3",sim:"#8b5cf6",guide:"#14b8a6",mods:"#10b981",set:"#94a3b8"};
-const OWNPG=["auto","songs","spam","bot","ai","mods","set","alerts","streak","log","so","lv"];
+const OWNPG=["auto","songs","spam","bot","ai","mods","set","alerts","streak","log","so"];
 const BUILTIN_CMDS=[
  ["!followage","من متى يتابع المشاهد القناة","How long a viewer has followed"],
  ["!accountage","عمر حساب المشاهد في تويتش","How old a viewer's account is"],
