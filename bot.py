@@ -118,7 +118,10 @@ MOD_SCOPE = "channel:manage:moderators"
 CHANNEL_BOT_SCOPE = "channel:bot"
 POLL_SCOPE = "channel:manage:polls"  # [جديد] لكوماند !poll
 CHATTERS_SCOPE = "moderator:read:chatters"  # [جديد] لساعات المتابعة (مين موجود في البث)
-EVENTSUB_TYPES = {"channel.chat.message", "channel.chat.notification", "channel.follow"}
+REWARDS_SCOPE = "channel:manage:redemptions"  # [جديد] مكافآت نقاط القناة
+EXTRA_SCOPES = "channel:edit:commercial channel:manage:raids moderator:manage:chat_settings"  # [جديد] إعلان، ريد، أوضاع الشات
+EVENTSUB_TYPES = {"channel.chat.message", "channel.chat.notification", "channel.follow",
+                  "channel.channel_points_custom_reward_redemption.add"}
 EVENTSUB_SECRET = hashlib.sha256(b"eventsub:" + SECRET).hexdigest()
 
 # الصلاحيات حسب نوع الدخول: s/c = ستريمر، b = حساب البوت نفسه
@@ -128,8 +131,8 @@ CLIP_COOLDOWN = 30  # أقل فاصل بين كليبين في نفس القنا
 BOT_MOD_SCOPES = "moderator:manage:chat_messages moderator:manage:banned_users"  # للحماية من السبام
 BOT_SCOPES = "user:bot user:read:chat user:write:chat " + BOT_MOD_SCOPES
 SCOPES = {
-    "s": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE} {CLIPS_SCOPE} {POLL_SCOPE} {CHATTERS_SCOPE}",
-    "c": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE} {CLIPS_SCOPE} {POLL_SCOPE} {CHATTERS_SCOPE}",
+    "s": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE} {CLIPS_SCOPE} {POLL_SCOPE} {CHATTERS_SCOPE} {REWARDS_SCOPE} {EXTRA_SCOPES}",
+    "c": f"{GAME_SCOPE} {MOD_SCOPE} {CHANNEL_BOT_SCOPE} {FOLLOWERS_SCOPE} {CLIPS_SCOPE} {POLL_SCOPE} {CHATTERS_SCOPE} {REWARDS_SCOPE} {EXTRA_SCOPES}",
     "b": BOT_SCOPES,  # حساب البوت الافتراضي
     "m": BOT_SCOPES,  # حساب بوت يختاره الستريمر لقناته
 }
@@ -2918,6 +2921,11 @@ class Store:
         "discord_guilds": {},  # آيدي سيرفر الديسكورد -> قناة تويتش
         "xp": {},  # [جديد] قناة -> {يوزر: {x: XP، w: دقايق المتابعة، m: الرسائل، lm: آخر XP من رسالة}}
         "xp_cfg": {},  # [جديد] قناة -> إعدادات المستويات
+        "actions": {},  # [جديد] قناة -> قائمة الأوامر التلقائية
+        "golive": {},  # [جديد] قناة -> إعلان بداية البث في الديسكورد
+        "firstw": {},  # [جديد] قناة -> ترحيب أول كلمة
+        "seen_users": {},  # [جديد] قناة -> {يوزر: 1} اللي كتبوا بالقناة قبل (لأول كلمة)
+        "rewards_cfg": {},  # [جديد] قناة -> {رقم المكافأة: {auto: none/fulfill/refund}}
     }
     # [patch-v2]
     self._save_lock = asyncio.Lock()  # يمنع كتابتين تتداخلان
@@ -3007,7 +3015,8 @@ class Store:
       self.data["autos"] = loaded.get("autos", {})
       for k in ("botacct", "bot_auth", "report_bans", "sr", "filters", "counts", "ai",
                 "alerts", "audit", "streaks", "streak_meta", "streak_cfg",
-                "discord_links", "discord_guilds", "xp", "xp_cfg"):
+                "discord_links", "discord_guilds", "xp", "xp_cfg", "actions", "golive", "firstw",
+                "seen_users", "rewards_cfg"):
         self.data[k] = loaded.get(k, {})
       self.data["reports"] = loaded.get("reports", [])
       self.data["es_fp"] = loaded.get("es_fp", "")
@@ -3221,6 +3230,67 @@ class TwitchAPI:
       return False, "expired"
     return False, "refused"
 
+  async def bc_call(self, channel, method, path, params=None, body=None):
+    """[جديد] طلب بتوكن الستريمر مع broadcaster_id. يرجع (الحالة، البيانات)، والحالة 0 لو مو مربوط."""
+    if not self.enabled:
+      return 0, {"message": "disabled"}
+    info = self.store.data["tokens"].get(channel)
+    if not info:
+      return 0, {"message": "not_linked"}
+    token = await self.user_token(channel)
+    if not token:
+      return 0, {"message": "expired"}
+    p = {"broadcaster_id": info["user_id"]}
+    p.update(params or {})
+    return await self.call(method, path, token, params=p, body=body)
+
+  async def rewards_list(self, channel):
+    st, d = await self.bc_call(channel, "GET", "channel_points/custom_rewards")
+    if st != 200:
+      return None, st, str(d.get("message") or "")
+    st2, d2 = await self.bc_call(channel, "GET", "channel_points/custom_rewards", {"only_manageable_rewards": "true"})
+    mine = {x["id"] for x in (d2.get("data") or [])} if st2 == 200 else set()
+    out = []
+    for x in d.get("data") or []:
+      gc = x.get("global_cooldown_setting") or {}
+      ms = x.get("max_per_stream_setting") or {}
+      mu = x.get("max_per_user_per_stream_setting") or {}
+      out.append({"id": x["id"], "title": x.get("title", ""), "cost": x.get("cost", 0), "prompt": x.get("prompt", ""),
+                  "color": x.get("background_color") or "#9146FF", "enabled": bool(x.get("is_enabled")),
+                  "paused": bool(x.get("is_paused")), "input": bool(x.get("is_user_input_required")),
+                  "skip": bool(x.get("should_redemptions_skip_request_queue")),
+                  "cd": gc.get("global_cooldown_seconds", 0) if gc.get("is_enabled") else 0,
+                  "max": ms.get("max_per_stream", 0) if ms.get("is_enabled") else 0,
+                  "maxu": mu.get("max_per_user_per_stream", 0) if mu.get("is_enabled") else 0,
+                  "mine": x["id"] in mine})
+    out.sort(key=lambda r: r["cost"])
+    return out, 200, ""
+
+  async def redemption_status(self, channel, reward_id, red_id, status):
+    st, _ = await self.bc_call(channel, "PATCH", "channel_points/custom_rewards/redemptions",
+                               {"reward_id": reward_id, "id": red_id}, {"status": status})
+    return st == 200
+
+  async def chat_mode(self, channel, body):
+    info = self.store.data["tokens"].get(channel) or {}
+    st, _ = await self.bc_call(channel, "PATCH", "chat/settings", {"moderator_id": info.get("user_id", "")}, body)
+    return st == 200
+
+  async def run_ad(self, channel, length):
+    info = self.store.data["tokens"].get(channel) or {}
+    st, d = await self.bc_call(channel, "POST", "channels/commercial", None,
+                               {"broadcaster_id": info.get("user_id", ""), "length": length})
+    return st == 200, str(d.get("message") or "")
+
+  async def start_raid(self, channel, target):
+    tid = await self.user_id(target)
+    if not tid:
+      return False
+    info = self.store.data["tokens"].get(channel) or {}
+    st, _ = await self.call("POST", "raids", await self.user_token(channel) or "",
+                            params={"from_broadcaster_id": info.get("user_id", ""), "to_broadcaster_id": tid})
+    return st == 200
+
   async def set_game(self, channel, game_name):
     """يرجع (نجح؟، اسم اللعبة أو كود الخطأ)."""
     if not self.enabled:
@@ -3358,6 +3428,11 @@ class TwitchAPI:
                                   {"broadcaster_user_id": bid, "moderator_user_id": bid})
         if st3 not in (202, 409):
           print(f"تنبيه الفولو {channel}: {st3} {d3.get('message', '')}")
+        if self.store.data["tokens"][channel].get("rewards"):  # [جديد] مكافآت نقاط القناة
+          st4, d4 = await self._sub(token, "channel.channel_points_custom_reward_redemption.add", "1",
+                                    {"broadcaster_user_id": bid})
+          if st4 not in (202, 409):
+            print(f"مكافآت النقاط {channel}: {st4} {d4.get('message', '')}")
     except Exception as e:
       print(f"خطأ اشتراك التنبيهات {channel}: {e}")
     return True, ""
@@ -3542,6 +3617,16 @@ class TwitchAPI:
       return False
     st, _ = await self.call("DELETE", "moderation/chat", token, params={
         "broadcaster_id": bid, "moderator_id": sid, "message_id": message_id})
+    return st == 204
+
+  async def clear_chat(self, channel):
+    """[جديد] يمسح كل رسائل الشات (زر في الريموت)."""
+    token = await self.bot_user_token(channel)
+    bid = await self.user_id(channel)
+    _, sid = await self.bot_ident(channel)
+    if not (token and bid and sid):
+      return False
+    st, _ = await self.call("DELETE", "moderation/chat", token, params={"broadcaster_id": bid, "moderator_id": sid})
     return st == 204
 
   async def timeout_user(self, channel, user_id, seconds, reason):
@@ -4462,6 +4547,25 @@ main{flex:1;min-width:0}
 .panel h3 .cntb{margin-inline-start:6px;vertical-align:middle}
 .grid2>.panel h3{margin-bottom:10px}
 .copyrow{display:flex;gap:8px;flex-wrap:wrap}
+.deck{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-top:12px}
+.deck button{aspect-ratio:1;border-radius:16px;background:var(--raise);border:1px solid var(--line2);color:var(--tx);font:inherit;font-size:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;padding:8px;text-align:center;transition:transform .08s}
+.deck button:active{transform:scale(.95)}
+.deck button b{font-size:26px;font-weight:400;line-height:1}
+.deck button.gold{background:linear-gradient(160deg,var(--sf),#c47f1d);color:var(--sfink);border-color:var(--sf);font-weight:700}
+.deck button.hot{background:linear-gradient(160deg,#C9472E,#8b2d1c);border-color:#C9472E}
+.deck button.busy{opacity:.55;pointer-events:none}
+.step{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start;background:var(--deep);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px}
+.step .n{width:26px;height:26px;border-radius:50%;background:var(--raise);display:grid;place-items:center;font-size:12px;color:var(--mut);margin-top:6px}
+.step b{display:block;font-size:13px;margin-bottom:6px}
+.step input,.step textarea,.step select{margin:0 0 6px}
+.step .two{display:grid;grid-template-columns:1fr 110px;gap:8px}
+.dows{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.dows label{display:flex;gap:6px;align-items:center;margin:0;padding:6px 10px;border:1px solid var(--line2);border-radius:99px;font-size:13px;color:var(--tx);cursor:pointer}
+.dows input{width:auto;margin:0}
+.actrow .meta{color:var(--mut);font-size:13px;margin-top:4px}
+.rwdot{width:14px;height:14px;border-radius:4px;display:inline-block;vertical-align:-2px;margin-inline-end:8px}
+.deck button.paused{opacity:.5}
+.actrow.off{opacity:.55}
 .copyrow input{margin:0;direction:ltr;flex:1;min-width:200px;color:var(--mut)}
 .copyrow .btn{width:auto}
 #srplayer{border-color:var(--line)!important}
@@ -4505,18 +4609,22 @@ main{flex:1;min-width:0}
     <div class="nav" id="nav">
       <div class="sec">القائمة الرئيسية</div>
       <a data-p="ov" class="on"><i>🏠</i><span>الرئيسية</span></a>
-      <a data-p="stream"><i>📡</i><span>إدارة البث</span></a>
-      <div class="sec">الأدوات</div>
+      <a data-p="deck"><i>🎛️</i><span>ريموت البث</span></a>
+      <div class="sec">الشات</div>
       <a data-p="cmd"><i>⌨️</i><span>الكوماندات</span></a>
-      <a data-p="auto" class="own"><i>⏰</i><span>المؤقتات</span></a>
-      <a data-p="songs" class="own"><i>🎵</i><span>طلبات الأغاني</span></a>
+      <a data-p="guide"><i>📖</i><span>دليل الكوماندات</span></a>
       <a data-p="spam" class="own"><i>🛡️</i><span>حماية الشات</span></a>
       <a data-p="ai" class="own"><i>✨</i><span>الذكاء الاصطناعي</span></a>
-      <a data-p="alerts" class="own"><i>🔔</i><span>تنبيهات الشات</span></a>
-      <a data-p="streak" class="own"><i>🔥</i><span>الستريك والديسكورد</span></a>
+      <div class="sec own">التفاعل</div>
+      <a data-p="alerts" class="own"><i>🔔</i><span>التنبيهات والترحيب</span></a>
+      <a data-p="act" class="own"><i>⚡</i><span>الأوامر التلقائية</span></a>
+      <a data-p="cp" class="own"><i>🪙</i><span>نقاط القناة</span></a>
       <a data-p="so" class="own"><i>📣</i><span>الشاوت آوت</span></a>
-      <a data-p="sim"><i>🧪</i><span>محاكي الكوماند</span></a>
-      <a data-p="guide"><i>📖</i><span>دليل الكوماندات</span></a>
+      <a data-p="songs" class="own"><i>🎵</i><span>طلبات الأغاني</span></a>
+      <a data-p="streak" class="own"><i>🔥</i><span>الستريك والمستويات</span></a>
+      <div class="sec own">الربط</div>
+      <a data-p="dc" class="own"><i>💬</i><span>الديسكورد</span></a>
+      <a data-p="obs" class="own"><i>🎥</i><span>OBS والأوفرلاي</span></a>
       <div class="sec own">الفريق والبوت</div>
       <a data-p="mods" class="own"><i>👥</i><span>المودات</span></a>
       <a data-p="bot" class="own"><i>🤖</i><span>حساب البوت</span></a>
@@ -4581,10 +4689,10 @@ main{flex:1;min-width:0}
               <p class="hint" style="margin:0 0 10px">انتقل بسرعة لأهم الأدوات</p>
               <div class="qgrid">
                 <button data-go="cmd"><b>⌨️</b><span>الكوماندات</span></button>
-                <button data-go="auto" class="own"><b>⏰</b><span>المؤقتات</span></button>
+                <button data-go="act" class="own"><b>⚡</b><span>الأوامر التلقائية</span></button>
                 <button data-go="songs" class="own"><b>🎵</b><span>طلبات الأغاني</span></button>
                 <button data-go="spam" class="own"><b>🛡️</b><span>حماية الشات</span></button>
-                <button data-go="stream"><b>📡</b><span>إدارة البث</span></button>
+                <button data-go="deck"><b>🎛️</b><span>ريموت البث</span></button>
                 <button data-go="guide"><b>📖</b><span>دليل الكوماندات</span></button>
               </div>
             </div>
@@ -4598,7 +4706,17 @@ main{flex:1;min-width:0}
           </div>
         </section>
 
-        <section class="pg" id="p-stream" hidden>
+
+        <section class="pg" id="p-deck" hidden>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>أزرار البث</h3>
+            <p class="mut">تحكم بالبث من جوالك وأنت تلعب. الأزرار تشمل اختصارات الألعاب حقتك، والأوامر التلقائية اللي فعّلت فيها «زر في الريموت».</p>
+            <div class="deck" id="deckgrid"></div>
+            <div id="deckrw" hidden>
+              <div class="sub">مكافآت نقاط القناة</div>
+              <div class="deck" id="deckrwgrid"></div>
+            </div>
+          </div>
           <div class="panel" style="margin-bottom:14px">
             <h3>عنوان البث</h3>
             <p class="mut" id="curtitle" data-nt style="margin:6px 0 0"></p>
@@ -4609,14 +4727,16 @@ main{flex:1;min-width:0}
             <p class="hint" id="titlehint" style="margin:8px 0 0" hidden>يحتاج ربط تويتش من الإعدادات عشان يشتغل</p>
           </div>
           <div class="panel">
-            <h3>تغيير اللعبة بسرعة</h3>
-            <p class="mut" style="margin:6px 0 12px">سوّي اختصار لعبة (مثل !f للفورتنايت) وغيّر كاتيقوري البث من الشات بدون ما تفتح تويتش.</p>
-            <button class="btn" data-go="cmd">فتح صفحة الكوماندات</button>
+            <h3>رسالة سريعة بالشات</h3>
+            <div class="tool" style="margin:10px 0 0">
+              <input id="deckmsg" maxlength="450" placeholder="اكتب رسالة يرسلها البوت">
+              <button class="btn" id="decksend">إرسال</button>
+            </div>
           </div>
         </section>
 
-        <section class="pg" id="p-sim" hidden>
-            <div class="panel">
+        <section class="pg" id="p-guide" hidden>
+          <div class="panel">
               <h3>محاكي الكوماند</h3>
               <p class="hint" style="margin:0 0 10px">جرّب الكوماند قبل ما ينشر. يستخدم نفس المتغيرات</p>
               <select id="simcmd"></select>
@@ -4626,9 +4746,6 @@ main{flex:1;min-width:0}
               </div>
               <div class="bubble" id="simout" data-nt></div>
             </div>
-        </section>
-
-        <section class="pg" id="p-guide" hidden>
           <div class="panel">
             <h3>كوماندات الشات الأساسية</h3>
             <p class="hint" style="margin:0 0 6px">للستريمر والمودات. اضغط 📋 للنسخ</p>
@@ -4653,45 +4770,6 @@ main{flex:1;min-width:0}
           <div id="cmdlist"></div>
         </section>
 
-        <section class="pg own" id="p-auto" hidden>
-          <div class="panel" style="margin-bottom:14px">
-            <h3>الرسائل الدورية</h3>
-            <p class="mut">تشتغل أثناء البث فقط. هذا المفتاح يشغّل أو يوقف كل الرسائل المجدولة اللي تحته</p>
-            <div class="tool" style="margin:12px 0 0">
-              <button class="rchip" data-rm="on">مفعّلة</button>
-              <button class="rchip" data-rm="off">متوقفة</button>
-            </div>
-          </div>
-          <div class="panel" style="margin-bottom:14px">
-            <h3>الرسائل المجدولة</h3>
-            <p class="mut">أدعية وأذكار وتذكيرات تنكتب تلقائياً بالفاصل اللي تحدده. تقدر تعدل الافتراضية أو تحذفها وتضيف رسائلك.</p>
-            <div id="tmlist" style="margin-top:12px"></div>
-            <div class="cmd col" id="tmform" hidden>
-              <label>نص الرسالة</label>
-              <textarea id="tmtext" placeholder="مثال: اللهم صلِّ وسلم على نبينا محمد"></textarea>
-              <p class="hint" id="tmhint" hidden>اتركه فاضي وتبقى الرسالة تختار عشوائي من القائمة الجاهزة، أو اكتب نص خاص فيه عشان يستبدلها.</p>
-              <label>كل كم دقيقة؟</label>
-              <input id="tmevery" type="number" min="5" max="1440" value="30" dir="ltr">
-              <p class="hint" id="tmmin"></p>
-              <label>بعد كم رسالة بالشات؟ (0 = بدون شرط)</label>
-              <input id="tmlines" type="number" min="0" max="100" value="0" dir="ltr">
-              <p class="hint">الرسالة ما تنرسل إلا إذا كتب الشات هذا العدد من الرسائل من آخر مرة، عشان ما يتكلم البوت والشات ميت.</p>
-              <div class="tool" style="margin:0">
-                <button class="btn" id="tmsave">حفظ</button>
-                <button class="btn ghost" id="tmcancel">إلغاء</button>
-              </div>
-            </div>
-            <div class="acts" style="justify-content:flex-start">
-              <button class="btn" id="tmnew">رسالة جديدة</button>
-              <button class="btn line" id="tmreset">استرجاع الرسائل الافتراضية</button>
-            </div>
-          </div>
-          <div class="panel">
-            <h3>الردود التلقائية</h3>
-            <p class="mut">ردود البوت على السلام ومساء الخير وباك وبرب. تقدر تعدل النص أو تحذف الرد. الرد يبدأ دائماً بمنشن للمشاهد، وتقدر تستخدم $(user).</p>
-            <div id="aulist" style="margin-top:12px"></div>
-          </div>
-        </section>
 
         <section class="pg own" id="p-songs" hidden>
           <div class="panel" style="margin-bottom:14px">
@@ -4719,12 +4797,7 @@ main{flex:1;min-width:0}
           </div>
           <div class="panel" style="margin-bottom:14px">
             <h3>مشغّل الأغاني</h3>
-            <p class="mut">افتح الرابط في تبويب، أو حطه Browser Source في OBS. لا تشاركه مع أحد.</p>
-            <div class="copyrow" style="margin-top:10px">
-              <input id="sr-playerurl" readonly>
-              <button class="btn sm" id="sr-copy">نسخ</button>
-              <a class="btn sm" id="sr-open" target="_blank">فتح</a>
-            </div>
+            <p class="mut">شغّل الأغاني هنا من الموقع، أو حط رابط المشغّل في OBS من صفحة <a href="#" data-go="obs">OBS والأوفرلاي</a>.</p>
             <div class="tool" style="margin-top:12px"><button class="btn sm" id="sr-play">▶ تشغيل الأغاني من الموقع</button></div>
             <p class="hint" style="margin:6px 0 0">يشغّل الأغاني هنا داخل الموقع نفسه. لا تشغّل مشغّل ثاني (مثل OBS) بنفس الوقت وإلا بيشتغلون مرتين.</p>
             <p class="hint" style="margin:6px 0 0">🎧 روابط أغاني سبوتيفاي تشتغل: البوت يدوّر نفس الأغنية في يوتيوب ويشغلها.</p>
@@ -4818,11 +4891,21 @@ main{flex:1;min-width:0}
 
 
         <section class="pg own" id="p-alerts" hidden>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>ترحيب أول كلمة</h3>
+            <p class="mut">البوت يرحّب بالمشاهد أول مرة يكتب في قناتك، ويرحّب باللي يرجعون أول رسالة لهم في كل بث.</p>
+            <label class="chk" style="margin-top:10px"><input type="checkbox" id="fw-ever"><span>ترحيب بأول مرة يكتب فيها المشاهد بالقناة</span></label>
+            <input id="fw-evertext" maxlength="300">
+            <label class="chk" style="margin-top:12px"><input type="checkbox" id="fw-stream"><span>ترحيب بأول رسالة له في كل بث</span></label>
+            <input id="fw-streamtext" maxlength="300">
+            <p class="hint" style="margin:4px 0 10px">المتغير: $(user). اللي كتبوا بالقناة قبل ما ينحسبون «أول مرة».</p>
+            <button class="btn sm" id="fw-save">حفظ</button>
+          </div>
           <div class="panel">
             <h3>تنبيهات الشات</h3>
             <p class="mut">البوت يشكر المتابعين والمشتركين واللي يسوون ريد تلقائياً في الشات. عدّل النص أو أوقف أي تنبيه.</p>
             <p class="hint" id="al-follow" style="margin:10px 0 0"></p>
-            <p class="hint" style="margin:6px 0 0">الشاوت آوت التلقائي وقت الريد صار في قسم «الشاوت آوت».</p>
+            <p class="hint" style="margin:6px 0 0">الشاوت آوت التلقائي وقت الريد في صفحة «الشاوت آوت». وإذا تبي أكثر من رسالة (صوت، ديسكورد، انتظار...) سوّ <a href="#" data-go="act">أمر تلقائي</a>.</p>
           </div>
           <div id="allist"></div>
         </section>
@@ -4839,7 +4922,7 @@ main{flex:1;min-width:0}
             <button class="btn sm" id="sk-save">حفظ</button>
             <p class="hint" style="margin:12px 0 0">كوماندات الشات: !streak ستريكك • !topstreak الأعلى</p>
           </div>
-          <div class="grid2">
+          <div>
             <div class="panel">
               <h3>أعلى ستريك الحين</h3>
               <div id="sklist"></div>
@@ -4848,30 +4931,6 @@ main{flex:1;min-width:0}
                 <p class="hint" style="margin:0 0 8px">آخر 30 يوم. اضغط «إرجاع» ويرجع ستريكه كأنه ما فوّت شي.</p>
                 <div id="skbrklist"></div>
               </div>
-            </div>
-            <div class="panel" id="dcpanel">
-              <h3>الديسكورد</h3>
-              <p class="mut" id="dc-state"></p>
-              <div id="dc-ready" hidden>
-                <a class="btn" id="dc-invite" target="_blank" rel="noopener">أضف البوت لسيرفرك</a>
-                <ol class="steps2">
-                  <li>اضغط الزر واختر سيرفرك</li>
-                  <li>في السيرفر اكتب: <b dir="ltr" id="dc-setup"></b></li>
-                  <li>كل متابع يكتب /link مرة وحدة ويحط الرمز في شات تويتش</li>
-                  <li>بعدها /streak يطلع ستريكه، و /top يطلع الأعلى</li>
-                </ol>
-              </div>
-              <div id="dc-off" hidden>
-                <p class="hint" style="margin:0 0 8px">عشان يشتغل لازم صاحب البوت يسوي تطبيق ديسكورد ويحط هذا الرابط في Interactions Endpoint URL:</p>
-                <div class="copyrow"><input id="dc-endpoint" readonly><button class="btn sm" id="dc-copy">نسخ</button></div>
-              </div>
-              <div class="sub">إعلانات الستريك في روم بالديسكورد (اختياري)</div>
-              <input id="sk-hook" dir="ltr" placeholder="https://discord.com/api/webhooks/...">
-              <div class="tool" style="margin:0">
-                <button class="btn sm" id="sk-hooksave">حفظ الرابط</button>
-                <button class="btn sm line" id="sk-hooktest">تجربة</button>
-              </div>
-              <p class="hint" style="margin:10px 0 0">من إعدادات الروم في الديسكورد: Integrations ثم Webhooks ثم New Webhook وانسخ الرابط.</p>
             </div>
           </div>
                   <div class="panel" style="margin-top:14px">
@@ -4924,19 +4983,210 @@ main{flex:1;min-width:0}
             <div class="bubble" style="margin-top:12px" data-nt>📣 تابعوا Bigs قناة تستاهل 👉 twitch.tv/bigs | آخر لعبة: Fortnite</div>
             <label class="chk" style="margin-top:14px"><input type="checkbox" id="so-raid"><span>شاوت آوت تلقائي لأي أحد يسوي ريد على قناتك</span></label>
             <p class="hint" style="margin:4px 0 0">نفس الشاوت آوت ينرسل لحاله وقت الريد، ومعه الكليب.</p>
-          </div>
-          <div class="panel">
-            <h3>🎬 الكليب على البث (OBS)</h3>
-            <p class="mut">عشان يطلع الكليب على بثك، أضف هذا الرابط في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.</p>
-            <div class="copyrow" style="margin-top:10px">
-              <input id="ov-url" readonly>
-              <button class="btn sm" id="ov-copy">نسخ</button>
-              <button class="btn sm line" id="ov-test">تجربة</button>
-            </div>
-            <p class="hint" style="margin:6px 0 0">زر «تجربة» يشغّل كليب عشوائي من قناتك. الكليب يظهر بس إذا الـ Overlay مفتوح في OBS.</p>
+            <p class="hint" style="margin:8px 0 0">الكليب يطلع على البث من الأوفرلاي. رابطه في صفحة <a href="#" data-go="obs">OBS والأوفرلاي</a>.</p>
           </div>
         </section>
 
+        <section class="pg own" id="p-act" hidden>
+          <div class="tool acttabs" style="margin:0 0 14px">
+            <button class="skchip attab on" data-at="a">الأوامر</button>
+            <button class="skchip attab" data-at="t">الرسائل الدورية</button>
+            <button class="skchip attab" data-at="r">الردود التلقائية</button>
+          </div>
+          <div data-atp="t" hidden>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>الرسائل الدورية</h3>
+            <p class="mut">تشتغل أثناء البث فقط. هذا المفتاح يشغّل أو يوقف كل الرسائل المجدولة اللي تحته</p>
+            <div class="tool" style="margin:12px 0 0">
+              <button class="rchip" data-rm="on">مفعّلة</button>
+              <button class="rchip" data-rm="off">متوقفة</button>
+            </div>
+          </div>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>الرسائل المجدولة</h3>
+            <p class="mut">أدعية وأذكار وتذكيرات تنكتب تلقائياً بالفاصل اللي تحدده. تقدر تعدل الافتراضية أو تحذفها وتضيف رسائلك.</p>
+            <div id="tmlist" style="margin-top:12px"></div>
+            <div class="cmd col" id="tmform" hidden>
+              <label>نص الرسالة</label>
+              <textarea id="tmtext" placeholder="مثال: اللهم صلِّ وسلم على نبينا محمد"></textarea>
+              <p class="hint" id="tmhint" hidden>اتركه فاضي وتبقى الرسالة تختار عشوائي من القائمة الجاهزة، أو اكتب نص خاص فيه عشان يستبدلها.</p>
+              <label>كل كم دقيقة؟</label>
+              <input id="tmevery" type="number" min="5" max="1440" value="30" dir="ltr">
+              <p class="hint" id="tmmin"></p>
+              <label>بعد كم رسالة بالشات؟ (0 = بدون شرط)</label>
+              <input id="tmlines" type="number" min="0" max="100" value="0" dir="ltr">
+              <p class="hint">الرسالة ما تنرسل إلا إذا كتب الشات هذا العدد من الرسائل من آخر مرة، عشان ما يتكلم البوت والشات ميت.</p>
+              <div class="tool" style="margin:0">
+                <button class="btn" id="tmsave">حفظ</button>
+                <button class="btn ghost" id="tmcancel">إلغاء</button>
+              </div>
+            </div>
+            <div class="acts" style="justify-content:flex-start">
+              <button class="btn" id="tmnew">رسالة جديدة</button>
+              <button class="btn line" id="tmreset">استرجاع الرسائل الافتراضية</button>
+            </div>
+          </div>
+          </div>
+          <div data-atp="r" hidden>
+          <div class="panel">
+            <h3>الردود التلقائية</h3>
+            <p class="mut">ردود البوت على السلام ومساء الخير وباك وبرب. تقدر تعدل النص أو تحذف الرد. الرد يبدأ دائماً بمنشن للمشاهد، وتقدر تستخدم $(user).</p>
+            <div id="aulist" style="margin-top:12px"></div>
+          </div>
+          </div>
+          <div data-atp="a">
+          <div class="panel" style="margin-bottom:14px">
+            <div class="chead" style="margin-bottom:6px"><h3 style="margin:0">الأوامر التلقائية</h3><button class="btn sm plus" id="actnew">أمر جديد</button></div>
+            <p class="mut">«إذا صار كذا، سوِّ كذا». كل أمر له حدث يشغّله وخطوات يسويها ورا بعض، مثل رسالة ثم انتظار ثم صوت ثم إعلان بالديسكورد.</p>
+            <div class="tool" style="margin:10px 0 0;flex-wrap:wrap">
+              <span class="hint" style="margin:0">قوالب جاهزة:</span>
+              <button class="btn sm line acttpl" data-tpl="raid">ريد كبير</button>
+              <button class="btn sm line acttpl" data-tpl="water">تذكير بعد ساعتين بث</button>
+              <button class="btn sm line acttpl" data-tpl="sound">كوماند صوت</button>
+              <button class="btn sm line acttpl" data-tpl="friday">تذكير موعد البث</button>
+              <button class="btn sm line acttpl" data-tpl="duel">تحدي 1v1</button>
+            </div>
+          </div>
+          <div class="panel" id="actform" hidden style="margin-bottom:14px">
+            <h3 id="actftitle">أمر جديد</h3>
+            <label>اسم الأمر</label>
+            <input id="act-name" maxlength="60" placeholder="مثال: ترحيب بالريد">
+            <label>متى يشتغل؟</label>
+            <select id="act-trig"></select>
+            <div id="act-tv"></div>
+            <div class="sub">وش يسوي؟</div>
+            <div id="act-steps"></div>
+            <div class="tool" style="margin:8px 0 0">
+              <select id="act-addstep" style="max-width:260px"></select>
+              <button class="btn sm line" id="act-addbtn">+ خطوة</button>
+            </div>
+            <p class="hint" style="margin:8px 0 0;direction:ltr;text-align:start" data-nt id="act-vars"></p>
+            <div class="grid3" style="margin-top:6px">
+              <div><label>كول داون (ثواني)</label><input id="act-cd" type="number" min="0" max="3600" dir="ltr"></div>
+              <div id="act-permw"><label>مين يقدر يشغّله؟</label><select id="act-perm">
+                <option value="everyone">الكل</option><option value="sub">المشتركين وفوق</option><option value="vip">VIP وفوق</option><option value="mod">المودات فقط</option><option value="broadcaster">الستريمر فقط</option></select></div>
+            </div>
+            <label class="chk" style="margin-top:12px"><input type="checkbox" id="act-deck"><span>زر في الريموت (تشغّله بضغطة من صفحة ريموت البث)</span></label>
+            <label class="chk"><input type="checkbox" id="act-q"><span>ينتظر دوره (ما يشتغل مع أمر ثاني بنفس الوقت، عشان الأصوات ما تتداخل)</span></label>
+            <div class="tool" style="margin:12px 0 0">
+              <button class="btn" id="act-save">حفظ</button>
+              <button class="btn ghost" id="act-cancel">إلغاء</button>
+            </div>
+          </div>
+          <div id="actlist"></div>
+          </div>
+        </section>
+        <section class="pg own" id="p-cp" hidden>
+          <div class="panel" style="margin-bottom:14px">
+            <div class="chead" style="margin-bottom:6px"><h3 style="margin:0">مكافآت نقاط القناة</h3><button class="btn sm plus" id="cpnew">مكافأة جديدة</button></div>
+            <p class="mut">سوّ مكافآت تويتش وعدّلها ووقّفها من هنا، واربط كل وحدة بأمر تلقائي، مثل «اشرب ماي» تشغّل صوت، أو «اقرأ رسالتي» تقرأ نص المشاهد بصوت على البث.</p>
+            <div id="cp-warn" class="bubble" style="margin-top:12px" hidden>
+              <span id="cp-warntext"></span>
+              <div style="margin-top:10px"><a class="btn sm" href="/auth/connect">إعادة الربط</a></div>
+            </div>
+            <p class="hint" style="margin:10px 0 0">المكافآت اللي سويتها قبل من لوحة تويتش تقدر تربطها بأوامر، بس تويتش ما يسمح لأي بوت يعدّلها أو يقبل طلباتها. سوّها من هنا عشان تتحكم فيها كاملة.</p>
+          </div>
+          <div class="panel" id="cpform" hidden style="margin-bottom:14px">
+            <h3 id="cpftitle">مكافأة جديدة</h3>
+            <div class="grid3">
+              <div style="grid-column:span 2"><label>اسم المكافأة</label><input id="cp-title" maxlength="45" placeholder="مثال: اشرب ماي"></div>
+              <div><label>السعر (نقاط)</label><input id="cp-cost" type="number" min="1" dir="ltr"></div>
+            </div>
+            <label>وصف (اختياري)</label>
+            <input id="cp-prompt" maxlength="200">
+            <div class="grid3">
+              <div><label>كول داون (ثواني)</label><input id="cp-cd" type="number" min="0" dir="ltr"></div>
+              <div><label>أقصى عدد بالبث</label><input id="cp-max" type="number" min="0" dir="ltr"></div>
+              <div><label>أقصى عدد لكل مشاهد بالبث</label><input id="cp-maxu" type="number" min="0" dir="ltr"></div>
+            </div>
+            <p class="hint" style="margin:4px 0 0">صفر = بدون حد</p>
+            <div class="tool" style="margin:10px 0 0;align-items:center">
+              <label style="margin:0">اللون</label><input id="cp-color" type="color" value="#9146FF" style="width:56px;height:38px;padding:2px">
+            </div>
+            <label class="chk" style="margin-top:10px"><input type="checkbox" id="cp-input"><span>المشاهد يكتب نص مع الطلب</span></label>
+            <label class="chk"><input type="checkbox" id="cp-skip"><span>تنقبل الطلبات لحالها في تويتش (بدون طابور)</span></label>
+            <label class="chk"><input type="checkbox" id="cp-enabled" checked><span>مفعّلة</span></label>
+            <div class="tool" style="margin:12px 0 0">
+              <button class="btn" id="cp-save">حفظ</button>
+              <button class="btn ghost" id="cp-cancel">إلغاء</button>
+            </div>
+          </div>
+          <div id="cplist"></div>
+        </section>
+        <section class="pg own" id="p-dc" hidden>
+          <div class="panel" id="dcpanel" style="margin-bottom:14px">
+              <h3>بوت الديسكورد (/streak و /rank)</h3>
+              <p class="mut" id="dc-state"></p>
+              <div id="dc-ready" hidden>
+                <a class="btn" id="dc-invite" target="_blank" rel="noopener">أضف البوت لسيرفرك</a>
+                <ol class="steps2">
+                  <li>اضغط الزر واختر سيرفرك</li>
+                  <li>في السيرفر اكتب: <b dir="ltr" id="dc-setup"></b></li>
+                  <li>كل متابع يكتب /link مرة وحدة ويحط الرمز في شات تويتش</li>
+                  <li>بعدها /streak و /rank يطلعون ستريكه ومستواه، و /top و /toplevel يطلعون الأعلى</li>
+                </ol>
+              </div>
+              <div id="dc-off" hidden>
+                <p class="hint" style="margin:0 0 8px">عشان يشتغل لازم صاحب البوت يسوي تطبيق ديسكورد ويحط هذا الرابط في Interactions Endpoint URL:</p>
+                <div class="copyrow"><input id="dc-endpoint" readonly><button class="btn sm" id="dc-copy">نسخ</button></div>
+              </div>
+            </div>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>إعلان بداية البث</h3>
+            <p class="mut">أول ما تفتح البث، البوت يرسل إعلان بالديسكورد فيه العنوان واللعبة وصورة البث.</p>
+            <div class="tool" style="margin:12px 0 6px">
+              <button class="skchip glchip" data-gl="on">مفعّل</button>
+              <button class="skchip glchip" data-gl="off">متوقف</button>
+            </div>
+            <label>رابط الويب هوك للروم</label>
+            <input id="gl-hook" dir="ltr" placeholder="https://discord.com/api/webhooks/...">
+            <label>نص الإعلان</label>
+            <input id="gl-text" maxlength="400">
+            <label>رقم الرتبة اللي ينمنشن (اختياري)</label>
+            <input id="gl-role" dir="ltr" placeholder="123456789012345678">
+            <p class="hint" style="margin:4px 0 10px">فعّل Developer Mode في ديسكورد، وبعدها كلك يمين على الرتبة ثم Copy Role ID. والمتغيرات: $(channel) $(url) $(game) $(title)</p>
+            <div class="tool" style="margin:0">
+              <button class="btn sm" id="gl-save">حفظ</button>
+              <button class="btn sm line" id="gl-test">تجربة</button>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>إعلانات الستريك</h3>
+            <p class="mut">لما أحد يوصل ستريك جديد (3، 5، 10...)، البوت يعلن في روم بالديسكورد.</p>
+              <input id="sk-hook" dir="ltr" placeholder="https://discord.com/api/webhooks/...">
+              <div class="tool" style="margin:0">
+                <button class="btn sm" id="sk-hooksave">حفظ الرابط</button>
+                <button class="btn sm line" id="sk-hooktest">تجربة</button>
+              </div>
+              
+            <p class="hint" style="margin:10px 0 0">من إعدادات الروم في الديسكورد: Integrations ثم Webhooks ثم New Webhook وانسخ الرابط.</p>
+          </div>
+        </section>
+        <section class="pg own" id="p-obs" hidden>
+          <div class="panel" style="margin-bottom:14px">
+            <h3>الأوفرلاي (كليبات، أصوات، قراءة بصوت)</h3>
+            <p class="mut">رابط واحد يطلع فيه كليب الشاوت آوت، والأصوات والقراءة بصوت من الأوامر التلقائية. أضفه في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.</p>
+            <div class="copyrow" style="margin-top:10px">
+              <input id="ov-url" readonly>
+              <button class="btn sm" id="ov-copy">نسخ</button>
+            </div>
+            <div class="tool" style="margin:12px 0 0">
+              <button class="btn sm line" id="ov-test">🎬 تجربة كليب</button>
+              <button class="btn sm line" id="ov-snd">🔔 تجربة صوت</button>
+              <button class="btn sm line" id="ov-tts">🗣 تجربة قراءة</button>
+            </div>
+            <p class="hint" style="margin:8px 0 0">في OBS فعّل «Control audio via OBS» في إعدادات السورس عشان تسمع الأصوات في البث.</p>
+          </div>
+          <div class="panel">
+            <h3>مشغّل الأغاني</h3>
+            <p class="mut">حطه Browser Source ثاني في OBS، أو افتحه في تبويب. لا تشغّله مع مشغّل الموقع بنفس الوقت.</p>
+            <div class="copyrow" style="margin-top:10px">
+              <input id="sr-playerurl" readonly>
+              <button class="btn sm" id="sr-copy">نسخ</button>
+              <a class="btn sm" id="sr-open" target="_blank">فتح</a>
+            </div>
+          </div>
+        </section>
         <section class="pg own" id="p-set" hidden>
           <div class="panel" style="margin-bottom:14px">
             <h3>متى يشتغل البوت في قناتي؟</h3>
@@ -5019,9 +5269,9 @@ Object.assign(EN,{"🎧 روابط أغاني سبوتيفاي تشتغل: ال�
 for(const k in EN)AR[EN[k]]=k;
 Object.assign(EN,{"القائمة الرئيسية":"Main","الأدوات":"Tools","الفريق والبوت":"Team & bot","النظام":"System","إدارة البث":"Stream manager","المؤقتات":"Timers","حماية الشات":"Chat moderation","دليل الكوماندات":"Commands guide","صفحة القناة العامة":"Public channel page","البلاغات والدعم":"Reports & support","اختصارات سريعة":"Quick actions","انتقل بسرعة لأهم الأدوات":"Jump to the most important tools","تغيير اللعبة بسرعة":"Change the game fast","سوّي اختصار لعبة (مثل !f للفورتنايت) وغيّر كاتيقوري البث من الشات بدون ما تفتح تويتش.":"Create a game shortcut (like !f for Fortnite) and change the stream category from chat without opening Twitch.","فتح صفحة الكوماندات":"Open the commands page","تحميل التطبيق":"Install app","⬇️ تحميل التطبيق":"⬇️ Install the app","لتثبيت التطبيق: في كروم أو إيدج على الكمبيوتر اضغط ⋮ ثم «تثبيت التطبيق». في الآيفون: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية».":"To install the app: in Chrome or Edge on a computer click ⋮ then \"Install app\". On iPhone: tap Share then \"Add to Home Screen\"."});
 for(const k in EN)AR[EN[k]]=k;
-const TITLES={alerts:"تنبيهات الشات",streak:"الستريك والديسكورد",so:"الشاوت آوت",log:"السجل",ov:"الرئيسية",stream:"إدارة البث",cmd:"الكوماندات",auto:"المؤقتات",songs:"طلبات الأغاني",spam:"حماية الشات",ai:"الذكاء الاصطناعي",sim:"محاكي الكوماند",guide:"دليل الكوماندات",mods:"المودات",bot:"حساب البوت",set:"الإعدادات"};
+const TITLES={cp:"نقاط القناة",act:"الأوامر التلقائية",deck:"ريموت البث",dc:"الديسكورد",obs:"OBS والأوفرلاي",alerts:"التنبيهات والترحيب",streak:"الستريك والمستويات",so:"الشاوت آوت",log:"السجل",ov:"الرئيسية",stream:"إدارة البث",cmd:"الكوماندات",auto:"المؤقتات",songs:"طلبات الأغاني",spam:"حماية الشات",ai:"الذكاء الاصطناعي",sim:"محاكي الكوماند",guide:"دليل الكوماندات",mods:"المودات",bot:"حساب البوت",set:"الإعدادات"};
 const COLORS={ov:"#7c3aed",stream:"#0ea5e9",cmd:"#3b82f6",auto:"#f59e0b",songs:"#ec4899",spam:"#f43f5e",bot:"#0d9488",ai:"#c026d3",sim:"#8b5cf6",guide:"#14b8a6",mods:"#10b981",set:"#94a3b8"};
-const OWNPG=["auto","songs","spam","bot","ai","mods","set","alerts","streak","log","so"];
+const OWNPG=["auto","songs","spam","bot","ai","mods","set","alerts","streak","log","so","act","dc","obs","cp"];
 const BUILTIN_CMDS=[
  ["!followage","من متى يتابع المشاهد القناة","How long a viewer has followed"],
  ["!accountage","عمر حساب المشاهد في تويتش","How old a viewer's account is"],
@@ -5068,6 +5318,8 @@ function go(p){
   $("#app").style.setProperty("--pc",COLORS[p]||"#7c3aed");
   $("#ptitle").textContent=t(TITLES[p]);
   $("#side").classList.remove("open");$("#bd").hidden=true;
+  if(p==="cp")renderCP(true);
+  if(p==="deck")renderDeckRw();
 }
 const openModal=()=>{$("#modal").hidden=false};
 const closeModal=()=>{$("#modal").hidden=true};
@@ -5126,7 +5378,8 @@ function render(){
   document.querySelectorAll(".own").forEach(x=>x.hidden=!own||(x.classList.contains("pg")&&x.id!=="p-"+PG));
   if(!own&&OWNPG.includes(PG))go("ov");
   renderTop();renderSim();renderCmds();renderBuiltin();renderStats();
-  if(own){renderOwn();renderAuto();renderSongs();renderSpam();renderBot();renderAI();renderAlerts();renderStreak();renderLog();renderSO();renderLV()}
+  if(own){renderOwn();renderAuto();renderSongs();renderSpam();renderBot();renderAI();renderAlerts();renderStreak();renderLog();renderSO();renderLV();renderActs();renderFW();renderGL()}
+  renderDeck();
 }
 function renderTop(){
   const u=CH.usage||{},k=Object.keys(u).sort((a,b)=>u[b]-u[a]).slice(0,5),max=k.length?u[k[0]]:1,box=$("#topbox");
@@ -5361,6 +5614,282 @@ function renderAlerts(){
     box.appendChild(d);
   });
 }
+
+/* ---------- [جديد] ريموت البث ---------- */
+function renderDeck(){
+  const g=$("#deckgrid");if(!g)return;g.innerHTML="";
+  const key=(ic,label,cls,fn)=>{const b=document.createElement("button");if(cls)b.className=cls;
+    b.innerHTML='<b data-nt></b><span data-nt></span>';b.querySelector("b").textContent=ic;b.querySelector("span").textContent=label;
+    b.onclick=async()=>{b.classList.add("busy");try{await fn()}finally{b.classList.remove("busy")}};g.appendChild(b)};
+  const deck=(body,msg)=>act(()=>api("POST",base()+"/deck",body),msg);
+  key("🎬",t("كليب"),"gold",()=>deck({k:"clip"},"تم إنشاء الكليب"));
+  key("🧹",t("مسح الشات"),"hot",()=>{if(confirm(t("متأكد تبي تمسح الشات كامل؟")))return deck({k:"clear"},"تم مسح الشات")});
+  key("📺",t("إعلان 60ث"),"",()=>deck({k:"ad"},"تم تشغيل الإعلان"));
+  key("🐢",t("سلو مود"),"",()=>deck({k:"chatmode",v:"slow_on"},"تم تشغيل السلو مود"));
+  key("🐇",t("إلغاء السلو"),"",()=>deck({k:"chatmode",v:"slow_off"},"تم إلغاء السلو مود"));
+  key("😀",t("إيموت فقط"),"",()=>deck({k:"chatmode",v:"emote_on"},"تم"));
+  key("💬",t("إلغاء الإيموت فقط"),"",()=>deck({k:"chatmode",v:"emote_off"},"تم"));
+  Object.keys(CH.commands).filter(n=>CH.commands[n].type==="game").sort().forEach(n=>{
+    const gm=CH.commands[n].game;key("🎮",gm,"",()=>deck({k:"game",v:gm},"تم تغيير اللعبة"))});
+  (CH.deck||[]).forEach(x=>key("⚡",x.name,"",()=>deck({k:"action",v:x.id},"تم التشغيل")));
+}
+$("#decksend").onclick=()=>act(async()=>{await api("POST",base()+"/deck",{k:"say",v:$("#deckmsg").value});$("#deckmsg").value=""},"تم الإرسال");
+
+/* ---------- [جديد] الأوامر التلقائية ---------- */
+let AEDIT=null;
+document.querySelectorAll(".attab").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".attab").forEach(x=>x.classList.toggle("on",x===b));
+  document.querySelectorAll("[data-atp]").forEach(p=>p.hidden=p.dataset.atp!==b.dataset.at)});
+const AVARS="$(user) $(viewers) $(bits) $(months) $(count) $(reward) $(cost) $(message) $(args) $(target) $(game) $(title) $(channel) $(url) $(pick أ|ب) $(random 1-10)";
+const DOWS=["الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت","الأحد"];
+const tl=(m,k)=>m&&m[k]?(LANG==="en"?m[k][1]:m[k][0]):k;
+function trigText(tr){
+  const A=CH.auto2||{},T=A.triggers||{},kind=(T[tr.t]||[])[2],en=LANG==="en";let s=tl(T,tr.t);
+  if(tr.t==="command")s+=" !"+tr.v;
+  else if(tr.t==="keyword")s+=" «"+tr.v+"»";
+  else if(tr.t==="schedule")s+=" "+(tr.dow||[]).map(d=>t(DOWS[d])).join("، ")+" "+tr.hm;
+  else if(tr.t==="reward"){const r=((RW&&RW.rewards)||[]).find(x=>x.id===tr.v);s+=r?" «"+r.title+"»":""}
+  else if(tr.t==="live_after")s=(en?"After ":"بعد ")+tr.v+(en?" min live":" دقيقة بث");
+  else if(kind&&tr.v)s+=(en?" ≥ ":" من ")+tr.v;
+  return s;
+}
+function renderActs(){
+  const A=CH.auto2||{list:[]},box=$("#actlist");if(!box)return;box.innerHTML="";
+  const ts=$("#act-trig");if(!ts.options.length){Object.keys(A.triggers||{}).forEach(k=>ts.add(new Option(tl(A.triggers,k),k)))}
+  else [...ts.options].forEach(o=>o.textContent=tl(A.triggers,o.value));
+  const as=$("#act-addstep");if(!as.options.length){Object.keys(A.steps||{}).forEach(k=>as.add(new Option(tl(A.steps,k),k)))}
+  else [...as.options].forEach(o=>o.textContent=tl(A.steps,o.value));
+  $("#act-vars").textContent=t("المتغيرات:")+" "+AVARS;
+  if(!A.list.length){box.innerHTML='<p class="empty">'+t("ما فيه أوامر تلقائية للحين. ابدأ بقالب جاهز أو اضغط «أمر جديد».")+'</p>';return}
+  A.list.forEach(x=>{
+    const d=document.createElement("div");d.className="cmd col actrow"+(x.on?"":" off");
+    d.innerHTML='<div class="chead"><b data-nt></b><span><button class="btn sm line ts"></button> <button class="ic ed">✏️</button><button class="ic del">🗑</button></span></div><div class="meta" data-nt></div><div class="tool" style="margin:10px 0 0"><button class="btn sm tg"></button></div>';
+    d.querySelector("b").textContent=(x.deck?"🎛️ ":"")+x.name;
+    d.querySelector(".meta").textContent="⚡ "+trigText(x.trig)+"  ←  "+x.steps.map(s=>tl(A.steps,s.t)).join(" + ");
+    d.querySelector(".ts").textContent="▶ "+t("تجربة");
+    d.querySelector(".tg").textContent=t(x.on?"إيقاف":"تشغيل");
+    d.querySelector(".tg").onclick=()=>act(()=>api("POST",base()+"/actions",{toggle:x.id}),"تم الحفظ");
+    d.querySelector(".ts").onclick=()=>act(()=>api("POST",base()+"/actions",{test:x.id}),"تم التشغيل");
+    d.querySelector(".ed").onclick=()=>openAct(JSON.parse(JSON.stringify(x)));
+    d.querySelector(".del").onclick=()=>{if(ask("تحذف الأمر «{n}»؟",x.name))act(()=>api("POST",base()+"/actions",{delete:x.id}),"تم الحذف")};
+    box.appendChild(d);
+  });
+}
+function trigFields(){
+  const A=CH.auto2||{},tt=$("#act-trig").value,kind=((A.triggers||{})[tt]||[])[2],box=$("#act-tv"),tr=AEDIT.trig||{};
+  box.innerHTML="";
+  const lab=txt=>{const l=document.createElement("label");l.textContent=t(txt);box.appendChild(l)};
+  const inp=(type,val,ph)=>{const i=document.createElement("input");i.type=type;i.id="act-v";i.value=val??"";if(ph)i.placeholder=ph;if(type==="number"){i.min=0;i.dir="ltr"}box.appendChild(i);return i};
+  const L={months:"أقل عدد شهور",count:"أقل عدد إهداءات",viewers:"أقل عدد مشاهدين",bits:"أقل عدد بتس",amount:"أقل مبلغ",minutes:"بعد كم دقيقة من بداية البث؟"};
+  if(L[kind]){lab(L[kind]);inp("number",tr.t===tt?tr.v:(kind==="minutes"?120:0))}
+  else if(kind==="name"){lab("اسم الكوماند");inp("text",tr.t===tt?"!"+(tr.v||""):"","!hydrate")}
+  else if(kind==="text"){lab("الكلمة (إذا انكتبت بأي رسالة)");inp("text",tr.t===tt?tr.v:"")}
+  else if(kind==="reward"){lab("المكافأة");const sel=document.createElement("select");sel.id="act-v";box.appendChild(sel);
+    const fill=()=>{sel.innerHTML="";const L=(RW&&RW.rewards)||[];
+      if(!L.length)sel.add(new Option(t(RW&&RW.ok?"ما عندك مكافآت، سوّها من صفحة نقاط القناة":"اربط المكافآت من صفحة نقاط القناة"),""));
+      L.forEach(r=>sel.add(new Option(r.title+" (🪙 "+r.cost+")",r.id)));if(tr.t===tt&&tr.v)sel.value=tr.v};
+    fill();if(!RW)loadRewards().then(fill)}
+  else if(kind==="schedule"){
+    lab("الأيام");const w=document.createElement("div");w.className="dows";
+    DOWS.forEach((d,i)=>{const l=document.createElement("label");l.innerHTML='<input type="checkbox"><span data-nt></span>';l.querySelector("span").textContent=t(d);
+      const c=l.querySelector("input");c.value=i;c.checked=(tr.t===tt?(tr.dow||[]):[4]).includes(i);w.appendChild(l)});
+    box.appendChild(w);lab("الساعة (بتوقيت السعودية)");const i=inp("time",tr.t===tt?tr.hm:"21:00");i.id="act-hm";i.dir="ltr";
+  }
+  $("#act-permw").hidden=!(tt==="command"||tt==="keyword");
+}
+function stepRow(st,i){
+  const A=CH.auto2||{},d=document.createElement("div");d.className="step";
+  d.innerHTML='<span class="n" data-nt></span><div class="f"><b data-nt></b></div><button class="ic del">✕</button>';
+  d.querySelector(".n").textContent=i+1;d.querySelector("b").textContent=tl(A.steps,st.t);
+  const f=d.querySelector(".f");
+  const add=(tag,key,ph,type)=>{const e=document.createElement(tag);if(type)e.type=type;e.value=st[key]??"";if(ph)e.placeholder=t(ph);
+    if(type==="number"||key==="u"||(st.t==="sound"&&key==="v"))e.dir="ltr";if(tag==="textarea")e.style.minHeight="56px";
+    e.oninput=()=>{st[key]=type==="number"?parseInt(e.value,10):e.value};f.appendChild(e);return e};
+  if(st.t==="say")add("textarea","v","نص الرسالة");
+  else if(st.t==="tts")add("textarea","v","النص اللي ينقرا بصوت");
+  else if(st.t==="title")add("input","v","العنوان الجديد");
+  else if(st.t==="game")add("input","v","اسم اللعبة");
+  else if(st.t==="shoutout")add("input","v","$(user) أو اسم القناة");
+  else if(st.t==="wait"){if(st.n==null)st.n=5;add("input","n","كم ثانية؟","number")}
+  else if(st.t==="clip"){if(st.n==null)st.n=30;add("input","n","كم ثانية؟","number")}
+  else if(st.t==="sound"){const w=document.createElement("div");w.className="two";f.appendChild(w);
+    add("input","v","https://... رابط ملف صوت mp3");if(st.n==null)st.n=80;add("input","n","الصوت %","number");
+    w.append(...[...f.querySelectorAll("input")])}
+  else if(st.t==="discord"){add("textarea","v","رسالة الديسكورد");add("input","u","رابط ويب هوك (اختياري، الافتراضي روم إعلان البث)")}
+  else if(st.t==="reward"){const sel=document.createElement("select"),md=document.createElement("select");
+    const fill=()=>{sel.innerHTML="";((RW&&RW.rewards)||[]).filter(r=>r.mine).forEach(r=>sel.add(new Option(r.title,r.id)));
+      if(!st.v&&sel.options.length)st.v=sel.options[0].value;sel.value=st.v||""};
+    fill();if(!RW)loadRewards().then(fill);sel.onchange=()=>{st.v=sel.value};
+    md.add(new Option(t("وقّفها"),"0"));md.add(new Option(t("شغّلها"),"1"));md.value=String(st.n||0);md.onchange=()=>{st.n=+md.value};
+    f.append(sel,md)}
+  else if(st.t==="chatmode"){const sel=document.createElement("select");
+    [["slow_on","تشغيل السلو مود"],["slow_off","إلغاء السلو مود"],["emote_on","إيموت فقط"],["emote_off","إلغاء الإيموت فقط"],["followers_on","المتابعين فقط"],["followers_off","إلغاء المتابعين فقط"],["subs_on","المشتركين فقط"],["subs_off","إلغاء المشتركين فقط"]].forEach(([v,l])=>sel.add(new Option(t(l),v)));
+    if(!st.v)st.v="slow_on";sel.value=st.v;f.appendChild(sel);if(st.n==null)st.n=30;const n=add("input","n","ثواني السلو مود","number");
+    const sync=()=>{n.hidden=sel.value!=="slow_on"};sel.onchange=()=>{st.v=sel.value;sync()};sync()}
+  else if(st.t==="ad"){const sel=document.createElement("select");[30,60,90,120,150,180].forEach(v=>sel.add(new Option(v+(LANG==="en"?" s":" ثانية"),v)));
+    if(!st.n)st.n=60;sel.value=st.n;sel.onchange=()=>{st.n=+sel.value};f.appendChild(sel)}
+  else if(st.t==="raid")add("input","v","اسم القناة أو $(target)");
+  else if(st.t==="duel"){if(st.n==null)st.n=60;if(st.v==null)st.v=DUELTXT;
+    const l=document.createElement("label");l.textContent=t("مدة التايم للخسران (ثواني)");l.style.margin="0 0 4px";f.appendChild(l);add("input","n","60","number");
+    const l2=document.createElement("label");l2.textContent=t("رسالة النتيجة");l2.style.margin="4px 0";f.appendChild(l2);add("textarea","v","");
+    const h=document.createElement("p");h.className="hint";h.style.margin="0";h.textContent=t("المشاهد يكتب @اسم مع المكافأة. إذا المنشن غلط أو الشخص مو بالشات ترجع نقاطه. المتغيرات: $(user) $(target) $(winner) $(loser) $(seconds)");f.appendChild(h)}
+  else if(st.t==="run"){const sel=document.createElement("select");
+    (A.list||[]).filter(x=>x.id!==AEDIT.id).forEach(x=>sel.add(new Option(x.name,x.id)));
+    if(!st.v&&sel.options.length)st.v=sel.options[0].value;sel.value=st.v||"";sel.onchange=()=>{st.v=sel.value};f.appendChild(sel)}
+  d.querySelector(".del").onclick=()=>{AEDIT.steps.splice(i,1);drawSteps()};
+  return d;
+}
+function drawSteps(){const b=$("#act-steps");b.innerHTML="";AEDIT.steps.forEach((s,i)=>b.appendChild(stepRow(s,i)))}
+function openAct(a){
+  AEDIT=a||{name:"",on:true,trig:{t:"follow"},steps:[{t:"say",v:""}],cd:0,perm:"everyone",deck:false};
+  $("#actftitle").textContent=t(a&&a.id?"تعديل أمر":"أمر جديد");
+  $("#act-name").value=AEDIT.name;$("#act-trig").value=AEDIT.trig.t;$("#act-cd").value=AEDIT.cd||0;
+  $("#act-perm").value=AEDIT.perm||"everyone";$("#act-deck").checked=!!AEDIT.deck;$("#act-q").checked=!!AEDIT.q;
+  trigFields();drawSteps();$("#actform").hidden=false;$("#actform").scrollIntoView({behavior:"smooth",block:"start"});
+}
+$("#act-trig").onchange=()=>{AEDIT.trig={t:$("#act-trig").value};trigFields()};
+$("#act-addbtn").onclick=()=>{if(AEDIT.steps.length>=15)return toast("الحد 15 خطوة",1);AEDIT.steps.push({t:$("#act-addstep").value});drawSteps()};
+$("#actnew").onclick=()=>openAct(null);
+$("#act-cancel").onclick=()=>{$("#actform").hidden=true;AEDIT=null};
+$("#act-save").onclick=()=>{
+  const tt=$("#act-trig").value,tr={t:tt},v=$("#act-v");
+  if(v)tr.v=v.value;
+  if(tt==="schedule"){tr.hm=$("#act-hm").value;tr.dow=[...document.querySelectorAll("#act-tv .dows input:checked")].map(x=>+x.value)}
+  const body={action:Object.assign({},AEDIT,{name:$("#act-name").value,trig:tr,cd:+$("#act-cd").value||0,perm:$("#act-perm").value,deck:$("#act-deck").checked,q:$("#act-q").checked})};
+  act(async()=>{await api("POST",base()+"/actions",body);$("#actform").hidden=true;AEDIT=null},"تم الحفظ");
+};
+const DUELTXT="⚔️ $(user) ضد $(target)... 🎲 الفائز $(winner) 🏆 و $(loser) ياخذ تايم $(seconds) ثانية 😵";
+const ATPL={
+  raid:{name:"ريد كبير",trig:{t:"raid",v:10},steps:[{t:"say",v:"حيّاكم الله يا جماعة $(user) 🎉 $(viewers) مشاهد!"},{t:"wait",n:5},{t:"shoutout",v:"$(user)"},{t:"tts",v:"شكراً $(user) على الريد"}]},
+  water:{name:"تذكير بعد ساعتين بث",trig:{t:"live_after",v:120},steps:[{t:"say",v:"صار لنا ساعتين 💧 خذوا بريك واشربوا ماي"}]},
+  sound:{name:"صوت تصفيق",trig:{t:"command",v:"clap"},cd:30,steps:[{t:"sound",v:"",n:80},{t:"say",v:"👏👏👏"}]},
+  duel:{name:"تحدي 1v1",trig:{t:"reward",v:""},steps:[{t:"duel",n:60,v:DUELTXT}]},
+  friday:{name:"تذكير موعد البث",trig:{t:"schedule",hm:"20:00",dow:[4]},steps:[{t:"discord",v:"⏰ البث بعد ساعة! تجهزوا 🔥"}]}
+};
+document.querySelectorAll(".acttpl").forEach(b=>b.onclick=()=>openAct(Object.assign({on:true,cd:0,perm:"everyone",deck:false},JSON.parse(JSON.stringify(ATPL[b.dataset.tpl])))));
+
+
+/* ---------- [جديد] مكافآت نقاط القناة ---------- */
+let RW=null,RWEDIT=null;
+async function loadRewards(){
+  if(!CH||CH.role!=="owner")return {ok:false,rewards:[]};
+  try{RW=await api("GET",base()+"/rewards")}catch(e){RW={ok:false,rewards:[],error:e.message}}
+  return RW;
+}
+async function renderCP(fetch){
+  const box=$("#cplist");if(!box)return;
+  if(fetch||!RW){box.innerHTML='<p class="empty">…</p>';await loadRewards()}
+  const w=$("#cp-warn");w.hidden=!!RW.ok;
+  $("#cp-warntext").textContent=RW.ok?"":t(RW.need==="relink"?"عشان تتحكم بالمكافآت لازم تعطي البوت صلاحية جديدة. اضغط «إعادة الربط» ووافق.":(RW.error||"صار خطأ"));
+  w.querySelector("a").hidden=!(RW.need==="relink"||!RW.ok);
+  box.innerHTML="";
+  if(RW.ok&&!RW.rewards.length){box.innerHTML='<p class="empty">'+t("ما عندك مكافآت للحين. اضغط «مكافأة جديدة».")+'</p>';return}
+  RW.rewards.forEach(r=>{
+    const d=document.createElement("div");d.className="cmd col actrow"+(r.enabled&&!r.paused?"":" off");
+    d.innerHTML='<div class="chead"><b data-nt><span class="rwdot"></span><span class="rt"></span></b><span><button class="ic ed">✏️</button><button class="ic del">🗑</button></span></div><div class="meta" data-nt></div><div class="tool" style="margin:10px 0 0;flex-wrap:wrap"><button class="btn sm ps"></button><button class="btn sm line en"></button><select class="au" style="max-width:340px;margin:0"></select><button class="btn sm line ac"></button></div>';
+    d.querySelector(".rwdot").style.background=r.color;d.querySelector(".rt").textContent=r.title;
+    const bits=["🪙 "+r.cost.toLocaleString("en-US")];
+    if(r.cd)bits.push("⏱ "+r.cd+(LANG==="en"?"s":"ث"));
+    if(r.input)bits.push(t("يكتب نص"));
+    bits.push(t(r.mine?"من majek bot":"من لوحة تويتش (ما تتعدل)"));
+    d.querySelector(".meta").textContent=bits.join("  •  ");
+    const ps=d.querySelector(".ps"),en=d.querySelector(".en"),au=d.querySelector(".au");
+    ps.textContent=t(r.paused?"استئناف":"إيقاف مؤقت");en.textContent=t(r.enabled?"تعطيل":"تفعيل");
+    [["none","لما أحد يستبدلها: اتركها بالطابور"],["fulfill","اقبلها تلقائياً"],["refund","اقبلها إذا اشتغل أمر، وإلا رجّع النقاط"]].forEach(([v,l])=>au.add(new Option(t(l),v)));
+    au.value=r.auto||"none";
+    d.querySelector(".ac").textContent="⚡ "+t("أمر تلقائي لها");
+    const mine=r.mine;
+    [ps,en,au,d.querySelector(".ed"),d.querySelector(".del")].forEach(x=>{if(!mine){x.disabled=true;x.title=t("تويتش ما يسمح تعديلها لأنها انسوت من لوحة تويتش")}});
+    const upd=(body,msg)=>act(async()=>{await api("POST",base()+"/rewards",Object.assign({id:r.id},body));await renderCP(true)},msg);
+    ps.onclick=()=>upd({reward:{paused:!r.paused}},"تم الحفظ");
+    en.onclick=()=>upd({reward:{enabled:!r.enabled}},"تم الحفظ");
+    au.onchange=()=>upd({auto:au.value},"تم الحفظ");
+    d.querySelector(".ed").onclick=()=>openCP(r);
+    d.querySelector(".del").onclick=()=>{if(ask("تحذف المكافأة «{n}»؟",r.title))upd({delete:true},"تم الحذف")};
+    d.querySelector(".ac").onclick=()=>{go("act");openAct({name:r.title,on:true,trig:{t:"reward",v:r.id},steps:[{t:"say",v:"$(user) استبدل «$(reward)» 🎉"}],cd:0,perm:"everyone",deck:false})};
+    box.appendChild(d);
+  });
+}
+function openCP(r){
+  RWEDIT=r||null;$("#cpftitle").textContent=t(r?"تعديل مكافأة":"مكافأة جديدة");
+  $("#cp-title").value=r?r.title:"";$("#cp-cost").value=r?r.cost:500;$("#cp-prompt").value=r?r.prompt:"";
+  $("#cp-cd").value=r?r.cd:0;$("#cp-max").value=r?r.max:0;$("#cp-maxu").value=r?r.maxu:0;
+  $("#cp-color").value=r?r.color:"#9146FF";$("#cp-input").checked=r?r.input:false;$("#cp-skip").checked=r?r.skip:false;$("#cp-enabled").checked=r?r.enabled:true;
+  $("#cpform").hidden=false;$("#cpform").scrollIntoView({behavior:"smooth",block:"start"});
+}
+$("#cpnew").onclick=()=>openCP(null);
+$("#cp-cancel").onclick=()=>{$("#cpform").hidden=true};
+$("#cp-save").onclick=()=>{
+  const reward={title:$("#cp-title").value,cost:+$("#cp-cost").value,prompt:$("#cp-prompt").value,cd:+$("#cp-cd").value||0,max:+$("#cp-max").value||0,
+    maxu:+$("#cp-maxu").value||0,color:$("#cp-color").value,input:$("#cp-input").checked,skip:$("#cp-skip").checked,enabled:$("#cp-enabled").checked};
+  act(async()=>{await api("POST",base()+"/rewards",{id:RWEDIT?RWEDIT.id:"",reward});$("#cpform").hidden=true;await renderCP(true)},"تم الحفظ");
+};
+async function renderDeckRw(){
+  const w=$("#deckrw"),g=$("#deckrwgrid");if(!w||!CH||CH.role!=="owner"||!CH.rewards_ok){if(w)w.hidden=true;return}
+  await loadRewards();const L=(RW.rewards||[]).filter(r=>r.mine&&r.enabled);
+  w.hidden=!L.length;g.innerHTML="";
+  L.forEach(r=>{const b=document.createElement("button");b.className=r.paused?"paused":"";
+    b.innerHTML='<b data-nt>🪙</b><span data-nt></span><small data-nt></small>';b.querySelector("span").textContent=r.title;
+    b.querySelector("small").textContent=t(r.paused?"موقفة":"شغالة");
+    b.onclick=()=>act(async()=>{await api("POST",base()+"/deck",{k:"reward",v:r.id,pause:!r.paused});await renderDeckRw()},"تم الحفظ");g.appendChild(b)});
+}
+/* ---------- [جديد] أول كلمة، إعلان البث، OBS ---------- */
+function renderFW(){const f=(CH.auto2||{}).firstw||{};$("#fw-ever").checked=!!f.ever_on;$("#fw-stream").checked=!!f.stream_on;$("#fw-evertext").value=f.ever_text||"";$("#fw-streamtext").value=f.stream_text||""}
+$("#fw-save").onclick=()=>act(()=>api("POST",base()+"/firstw",{ever_on:$("#fw-ever").checked,stream_on:$("#fw-stream").checked,ever_text:$("#fw-evertext").value,stream_text:$("#fw-streamtext").value}),"تم الحفظ");
+function renderGL(){const g=(CH.auto2||{}).golive||{};
+  document.querySelectorAll(".glchip").forEach(x=>x.classList.toggle("on",x.dataset.gl===(g.on?"on":"off")));
+  $("#gl-text").value=g.text||"";$("#gl-role").value=g.role||"";
+  $("#gl-hook").placeholder=g.hook_set?t("محفوظ ✅ (اكتب رابط جديد عشان تغيّره)"):"https://discord.com/api/webhooks/..."}
+document.querySelectorAll(".glchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/golive",{on:b.dataset.gl==="on"}),"تم الحفظ"));
+$("#gl-save").onclick=()=>{const body={text:$("#gl-text").value,role:$("#gl-role").value};if($("#gl-hook").value.trim())body.hook=$("#gl-hook").value.trim();
+  act(async()=>{await api("POST",base()+"/golive",body);$("#gl-hook").value=""},"تم الحفظ")};
+$("#gl-test").onclick=()=>act(()=>api("POST",base()+"/golive",{test:true}),"تم الإرسال");
+$("#ov-snd").onclick=()=>act(()=>api("POST",base()+"/overlayfx",{kind:"sound"}),"تم الإرسال");
+$("#ov-tts").onclick=()=>act(()=>api("POST",base()+"/overlayfx",{kind:"tts"}),"تم الإرسال");
+document.querySelectorAll("a[data-go]").forEach(a=>a.addEventListener("click",e=>e.preventDefault()));
+// [جديد] زر «تحميل التطبيق» ما يطلع للي داخلين من الجوال أو من التطبيق نفسه
+if(/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)||(window.matchMedia&&(matchMedia("(display-mode: standalone)").matches||matchMedia("(max-width: 820px)").matches)))
+  document.querySelectorAll('[data-act="install"]').forEach(x=>x.remove());
+Object.assign(EN,{"ريموت البث":"Stream remote","الشات":"Chat","التفاعل":"Engagement","الربط":"Integrations","المؤقتات والردود":"Timers & replies",
+"التنبيهات والترحيب":"Alerts & greetings","الأوامر التلقائية":"Actions","الستريك والمستويات":"Streaks & levels","الديسكورد":"Discord","OBS والأوفرلاي":"OBS & overlay",
+"أزرار البث":"Stream buttons","تحكم بالبث من جوالك وأنت تلعب. الأزرار تشمل اختصارات الألعاب حقتك، والأوامر التلقائية اللي فعّلت فيها «زر في الريموت».":"Control your stream from your phone while you play. Buttons include your game shortcuts and any action with \"Remote button\" turned on.",
+"رسالة سريعة بالشات":"Quick chat message","اكتب رسالة يرسلها البوت":"Type a message for the bot to send","مسح الشات":"Clear chat","متأكد تبي تمسح الشات كامل؟":"Clear the whole chat?","تم مسح الشات":"Chat cleared","تم إنشاء الكليب":"Clip created","تم تغيير اللعبة":"Game changed","تم التشغيل":"Started",
+"أمر جديد":"New action","«إذا صار كذا، سوِّ كذا». كل أمر له حدث يشغّله وخطوات يسويها ورا بعض، مثل رسالة ثم انتظار ثم صوت ثم إعلان بالديسكورد.":"\"When this happens, do that.\" Each action has a trigger and steps that run in order, like a message, then a wait, then a sound, then a Discord post.",
+"قوالب جاهزة:":"Templates:","تحدي 1v1":"1v1 duel","مدة التايم للخسران (ثواني)":"Loser timeout (seconds)","رسالة النتيجة":"Result message",
+"المشاهد يكتب @اسم مع المكافأة. إذا المنشن غلط أو الشخص مو بالشات ترجع نقاطه. المتغيرات: $(user) $(target) $(winner) $(loser) $(seconds)":"The viewer types @name with the reward. If the mention is wrong or the person isn't in chat, points are refunded. Variables: $(user) $(target) $(winner) $(loser) $(seconds)","نقاط القناة":"Channel points","مكافآت نقاط القناة":"Channel point rewards","مكافأة جديدة":"New reward","تعديل مكافأة":"Edit reward",
+"سوّ مكافآت تويتش وعدّلها ووقّفها من هنا، واربط كل وحدة بأمر تلقائي، مثل «اشرب ماي» تشغّل صوت، أو «اقرأ رسالتي» تقرأ نص المشاهد بصوت على البث.":"Create, edit and pause Twitch rewards here, and link each one to an action, like \"Drink water\" playing a sound or \"Read my message\" reading the viewer's text aloud on stream.",
+"المكافآت اللي سويتها قبل من لوحة تويتش تقدر تربطها بأوامر، بس تويتش ما يسمح لأي بوت يعدّلها أو يقبل طلباتها. سوّها من هنا عشان تتحكم فيها كاملة.":"Rewards you made in the Twitch dashboard can trigger actions, but Twitch doesn't let any bot edit them or approve their redemptions. Create them here for full control.",
+"اسم المكافأة":"Reward name","مثال: اشرب ماي":"e.g. Drink water","السعر (نقاط)":"Cost (points)","وصف (اختياري)":"Description (optional)","أقصى عدد بالبث":"Max per stream","أقصى عدد لكل مشاهد بالبث":"Max per viewer per stream","صفر = بدون حد":"Zero = no limit","اللون":"Color",
+"المشاهد يكتب نص مع الطلب":"Viewer enters text","تنقبل الطلبات لحالها في تويتش (بدون طابور)":"Skip the request queue in Twitch","مفعّلة":"On",
+"عشان تتحكم بالمكافآت لازم تعطي البوت صلاحية جديدة. اضغط «إعادة الربط» ووافق.":"To manage rewards, give the bot a new permission. Press Relink and approve.","ما عندك مكافآت للحين. اضغط «مكافأة جديدة».":"No rewards yet. Press New reward.",
+"يكتب نص":"Text input","من majek bot":"From majek bot","من لوحة تويتش (ما تتعدل)":"From Twitch dashboard (read-only)","استئناف":"Resume","إيقاف مؤقت":"Pause","تعطيل":"Disable",
+"لما أحد يستبدلها: اتركها بالطابور":"On redeem: leave it in the queue","اقبلها تلقائياً":"Approve automatically","اقبلها إذا اشتغل أمر، وإلا رجّع النقاط":"Approve if an action ran, otherwise refund",
+"أمر تلقائي لها":"Action for it","تويتش ما يسمح تعديلها لأنها انسوت من لوحة تويتش":"Twitch doesn't allow editing rewards made in its dashboard","تحذف المكافأة «{n}»؟":"Delete the reward \"{n}\"?",
+"مكافآت نقاط القناة ":"Channel point rewards","موقفة":"Paused","شغالة":"Active","المكافأة":"Reward","ما عندك مكافآت، سوّها من صفحة نقاط القناة":"No rewards, create them on the Channel points page","اربط المكافآت من صفحة نقاط القناة":"Connect rewards on the Channel points page",
+"وقّفها":"Pause it","شغّلها":"Resume it","تشغيل السلو مود":"Slow mode on","إلغاء السلو مود":"Slow mode off","إيموت فقط":"Emote-only","إلغاء الإيموت فقط":"Emote-only off","المتابعين فقط":"Followers-only","إلغاء المتابعين فقط":"Followers-only off","المشتركين فقط":"Subs-only","إلغاء المشتركين فقط":"Subs-only off",
+"ثواني السلو مود":"Slow mode seconds","اسم القناة أو $(target)":"Channel name or $(target)","إعلان 60ث":"60s ad","سلو مود":"Slow mode","إلغاء السلو":"Slow off","تم تشغيل الإعلان":"Ad started","تم تشغيل السلو مود":"Slow mode on","تم إلغاء السلو مود":"Slow mode off","تم":"Done",
+"ينتظر دوره (ما يشتغل مع أمر ثاني بنفس الوقت، عشان الأصوات ما تتداخل)":"Wait its turn (don't run alongside another action, so sounds don't overlap)","الأوامر":"Actions","الرسائل الدورية":"Periodic messages","الردود التلقائية":"Auto replies","ريد كبير":"Big raid","تذكير بعد ساعتين بث":"Reminder after 2 hours live","كوماند صوت":"Sound command","تذكير موعد البث":"Stream schedule reminder",
+"اسم الأمر":"Action name","مثال: ترحيب بالريد":"e.g. Raid welcome","متى يشتغل؟":"When does it run?","وش يسوي؟":"What does it do?","+ خطوة":"+ Step","كول داون (ثواني)":"Cooldown (seconds)","مين يقدر يشغّله؟":"Who can run it?",
+"زر في الريموت (تشغّله بضغطة من صفحة ريموت البث)":"Remote button (run it with one tap from the Stream remote page)","تعديل أمر":"Edit action","المتغيرات:":"Variables:",
+"ما فيه أوامر تلقائية للحين. ابدأ بقالب جاهز أو اضغط «أمر جديد».":"No actions yet. Start from a template or press New action.","تحذف الأمر «{n}»؟":"Delete the action \"{n}\"?","الحد 15 خطوة":"Max 15 steps",
+"أقل عدد شهور":"Minimum months","أقل عدد إهداءات":"Minimum gifts","أقل عدد مشاهدين":"Minimum viewers","أقل عدد بتس":"Minimum bits","أقل مبلغ":"Minimum amount","بعد كم دقيقة من بداية البث؟":"How many minutes after going live?",
+"اسم الكوماند":"Command name","الكلمة (إذا انكتبت بأي رسالة)":"Word (if it appears in any message)","الأيام":"Days","الساعة (بتوقيت السعودية)":"Time (Saudi time)",
+"الإثنين":"Mon","الثلاثاء":"Tue","الأربعاء":"Wed","الخميس":"Thu","الجمعة":"Fri","السبت":"Sat","الأحد":"Sun",
+"نص الرسالة":"Message text","النص اللي ينقرا بصوت":"Text to read aloud","العنوان الجديد":"New title","اسم اللعبة":"Game name","$(user) أو اسم القناة":"$(user) or a channel name","كم ثانية؟":"How many seconds?",
+"https://... رابط ملف صوت mp3":"https://... mp3 sound URL","الصوت %":"Volume %","رسالة الديسكورد":"Discord message","رابط ويب هوك (اختياري، الافتراضي روم إعلان البث)":"Webhook URL (optional, defaults to the go-live channel)",
+"ترحيب أول كلمة":"First words","البوت يرحّب بالمشاهد أول مرة يكتب في قناتك، ويرحّب باللي يرجعون أول رسالة لهم في كل بث.":"The bot greets viewers the first time they ever chat, and greets returning viewers on their first message each stream.",
+"ترحيب بأول مرة يكتب فيها المشاهد بالقناة":"Greet first-time chatters","ترحيب بأول رسالة له في كل بث":"Greet the first message of each stream","المتغير: $(user). اللي كتبوا بالقناة قبل ما ينحسبون «أول مرة».":"Variable: $(user). Viewers who chatted before don't count as first-time.",
+"بوت الديسكورد (/streak و /rank)":"Discord bot (/streak & /rank)","بعدها /streak و /rank يطلعون ستريكه ومستواه، و /top و /toplevel يطلعون الأعلى":"Then /streak and /rank show their streak and level, and /top and /toplevel show the leaders",
+"إعلان بداية البث":"Go-live announcement","أول ما تفتح البث، البوت يرسل إعلان بالديسكورد فيه العنوان واللعبة وصورة البث.":"When you go live, the bot posts in Discord with your title, game and a stream preview.",
+"رابط الويب هوك للروم":"Channel webhook URL","نص الإعلان":"Announcement text","رقم الرتبة اللي ينمنشن (اختياري)":"Role ID to mention (optional)",
+"فعّل Developer Mode في ديسكورد، وبعدها كلك يمين على الرتبة ثم Copy Role ID. والمتغيرات: $(channel) $(url) $(game) $(title)":"Turn on Developer Mode in Discord, then right-click the role and Copy Role ID. Variables: $(channel) $(url) $(game) $(title)",
+"إعلانات الستريك":"Streak announcements","لما أحد يوصل ستريك جديد (3، 5، 10...)، البوت يعلن في روم بالديسكورد.":"When someone reaches a streak milestone (3, 5, 10...), the bot announces it in a Discord channel.",
+"الأوفرلاي (كليبات، أصوات، قراءة بصوت)":"Overlay (clips, sounds, text-to-speech)","رابط واحد يطلع فيه كليب الشاوت آوت، والأصوات والقراءة بصوت من الأوامر التلقائية. أضفه في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.":"One link for shoutout clips, plus sounds and text-to-speech from actions. Add it in OBS: Sources, then Browser Source, size 1920×1080. Don't share it.",
+"🎬 تجربة كليب":"🎬 Test clip","🔔 تجربة صوت":"🔔 Test sound","🗣 تجربة قراءة":"🗣 Test TTS","في OBS فعّل «Control audio via OBS» في إعدادات السورس عشان تسمع الأصوات في البث.":"In OBS, turn on \"Control audio via OBS\" in the source settings so sounds reach your stream.",
+"حطه Browser Source ثاني في OBS، أو افتحه في تبويب. لا تشغّله مع مشغّل الموقع بنفس الوقت.":"Add it as another Browser Source in OBS, or open it in a tab. Don't run it alongside the site player.",
+"شغّل الأغاني هنا من الموقع، أو حط رابط المشغّل في OBS من صفحة":"Play songs here on the site, or put the player link in OBS from the page","الكليب يطلع على البث من الأوفرلاي. رابطه في صفحة":"The clip shows on stream through the overlay. Its link is on the page",
+"الشاوت آوت التلقائي وقت الريد في صفحة «الشاوت آوت». وإذا تبي أكثر من رسالة (صوت، ديسكورد، انتظار...) سوّ":"The automatic raid shoutout is on the Shoutouts page. For more than one message (sound, Discord, waits...) make an","أمر تلقائي":"action"});
+for(const k in EN)AR[EN[k]]=k;
 /* ---------- [جديد] المستويات ---------- */
 let LVTAB="x";
 const fmtW=m=>{const h=Math.floor(m/60),mm=m%60;return LANG==="en"?(h?h+"h "+mm+"m":mm+"m"):(h?h+" س"+(mm?" "+mm+" د":""):mm+" د")};
@@ -5799,6 +6328,20 @@ function play(ev){
   },(ev.dur+2)*1000);
 }
 function next(){if(!playing&&queue.length)play(queue.shift())}
+// [جديد] أصوات وقراءة نص من الأوامر التلقائية
+function sound(e){
+  dbg("sound "+(e.url||"beep"));
+  if(!e.url){try{const c=new (window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();
+    o.frequency.value=880;g.gain.value=.15;o.connect(g);g.connect(c.destination);o.start();setTimeout(()=>{o.stop();c.close()},350)}catch(x){}return}
+  try{const a=new Audio(e.url);a.volume=Math.max(.05,Math.min(1,(e.vol||80)/100));a.play().catch(x=>dbg("sound blocked: "+x))}catch(x){dbg("sound error "+x)}
+}
+function speak(e){
+  dbg("tts "+e.text);
+  try{const u=new SpeechSynthesisUtterance(String(e.text||"").slice(0,300));
+    u.lang=e.lang==="en"?"en-US":"ar-SA";
+    const v=speechSynthesis.getVoices().find(v=>v.lang&&v.lang.toLowerCase().startsWith(e.lang==="en"?"en":"ar"));if(v)u.voice=v;
+    speechSynthesis.speak(u)}catch(x){dbg("tts error "+x)}
+}
 async function poll(){
   try{
     const r=await fetch("/overlay/api/"+encodeURIComponent(CH)+"/poll?k="+encodeURIComponent(K)+"&after="+last,{cache:"no-store"});
@@ -5807,7 +6350,10 @@ async function poll(){
     if(typeof d.last==="number"){
       if(last>=0&&d.last<last){last=d.last;dbg("server restarted, reset to "+last)}
       if(last<0){last=d.last;dbg("connected, last="+last)}
-      else d.events.forEach(e=>{if(e.id>last)last=e.id;queue.push(e);dbg("event #"+e.id+" for "+e.login)});
+      else d.events.forEach(e=>{if(e.id>last)last=e.id;
+        if(e.kind==="sound"){sound(e);return}
+        if(e.kind==="tts"){speak(e);return}
+        queue.push(e);dbg("event #"+e.id+" for "+e.login)});
     }
     next();
   }catch(e){dbg("poll error: "+e)}
@@ -7120,6 +7666,8 @@ def make_web_app(bot):
         asyncio.create_task(bot.on_chat_event(mid, body.get("event") or {}))
       elif styp in ("channel.chat.notification", "channel.follow"):
         asyncio.create_task(bot.on_alert_event(mid, styp, body.get("event") or {}))
+      elif styp == "channel.channel_points_custom_reward_redemption.add":
+        asyncio.create_task(bot.on_redemption(mid, body.get("event") or {}))
     elif kind == "revocation":
       asyncio.create_task(bot.on_revocation(body.get("subscription") or {}))
     return web.Response(status=204)
@@ -7209,7 +7757,8 @@ def make_web_app(bot):
         store.data["tokens"][login_name] = {
             "refresh": tok["refresh_token"], "user_id": user["id"],
             "clips": CLIPS_SCOPE in scopes, "polls": POLL_SCOPE in scopes,
-            "chatters": CHATTERS_SCOPE in scopes}
+            "chatters": CHATTERS_SCOPE in scopes, "rewards": REWARDS_SCOPE in scopes,
+            "extra": "channel:edit:commercial" in scopes}
         twitch.user_access[login_name] = (tok["access_token"], time.time() + tok.get("expires_in", 3600))
         await store.save()
         try:
@@ -7320,6 +7869,9 @@ def make_web_app(bot):
         "alerts": bot.alerts_view(ch) if own else {},
         "streak": bot.streak_view(ch, own),
         "levels": bot.xp_view(ch, own),
+        "auto2": bot.actions_view(ch) if own else {},
+        "deck": [{"id": x["id"], "name": x["name"]} for x in bot.actions_of(ch) if x.get("deck") and x.get("on")],
+        "rewards_ok": bool(store.data["tokens"].get(ch, {}).get("rewards")),
         "discord": discord_view(ch) if own else {},
         "audit": store.data["audit"].get(ch, [])[:60] if own else [],
         "stats": bot.stats_view(ch),
@@ -7765,6 +8317,276 @@ def make_web_app(bot):
         "endpoint": (SITE_URL + "/discord/interactions") if SITE_URL else "",
     }
 
+  # ---------- [جديد] الأوامر التلقائية والريموت والتبرعات ----------
+  async def s_actions(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    lst = bot.actions_of(ch)
+    if "delete" in b:
+      aid = str(b["delete"])
+      lst[:] = [x for x in lst if x["id"] != aid]
+      for x in lst:
+        x["steps"] = [s_ for s_ in x["steps"] if not (s_["t"] == "run" and s_["v"] == aid)] or x["steps"]
+      store.save_quick()
+      bot.audit(ch, a[0], "حذف أمر تلقائي")
+      return web.json_response({"ok": True})
+    if "toggle" in b:
+      for x in lst:
+        if x["id"] == str(b["toggle"]):
+          x["on"] = not x.get("on")
+      store.save_quick()
+      return web.json_response({"ok": True})
+    if "test" in b:
+      x = next((x for x in lst if x["id"] == str(b["test"])), None)
+      if not x:
+        return jerr("الأمر مو موجود")
+      asyncio.create_task(bot.run_action(ch, x, {"user": a[0], "login": a[0], "viewers": 42, "bits": 100, "months": 6,
+                                                 "count": 5, "message": "تجربة"}))
+      return web.json_response({"ok": True})
+    try:
+      ids = {x["id"] for x in lst}
+      act = act_clean(b.get("action"), ids)
+    except ValueError as e:
+      return jerr(str(e))
+    old = next((i for i, x in enumerate(lst) if x["id"] == act["id"]), None)
+    if old is None:
+      if len(lst) >= MAX_ACTIONS:
+        return jerr(f"وصلت الحد الأقصى ({MAX_ACTIONS})")
+      lst.append(act)
+    else:
+      lst[old] = act
+    store.save_quick()
+    bot.audit(ch, a[0], f"حفظ أمر تلقائي «{act['name']}»")
+    return web.json_response({"ok": True, "id": act["id"]})
+
+  async def s_firstw(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    cfg = bot.firstw_cfg(ch)
+    for k in ("ever_on", "stream_on"):
+      if k in b:
+        cfg[k] = bool(b[k])
+    for k in ("ever_text", "stream_text"):
+      if k in b:
+        v = str(b[k] or "").strip()[:300]
+        if v.startswith(("/", ".")):
+          return jerr("الرسالة ما تبدأ بـ / أو .")
+        cfg[k] = v or FIRSTW_DEFAULTS[k]
+    store.save_quick()
+    return web.json_response({"ok": True})
+
+  async def s_golive(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    cfg = bot.golive_cfg(ch)
+    if "hook" in b:
+      hook = str(b["hook"] or "").strip()
+      if hook and not DISCORD_WEBHOOK_RE.fullmatch(hook):
+        return jerr("رابط الويب هوك غير صحيح (لازم يبدأ بـ https://discord.com/api/webhooks/)")
+      cfg["hook"] = hook
+    if "on" in b:
+      cfg["on"] = bool(b["on"])
+    if "text" in b:
+      cfg["text"] = str(b["text"] or "").strip()[:400] or GOLIVE_DEFAULTS["text"]
+    if "role" in b:
+      r = str(b["role"] or "").strip()
+      if r and not re.fullmatch(r"\d{5,25}", r):
+        return jerr("رقم الرتبة لازم يكون أرقام بس")
+      cfg["role"] = r
+    if b.get("test"):
+      if not cfg["hook"]:
+        return jerr("حط رابط الويب هوك أول")
+      si = None
+      try:
+        si = await twitch.stream_info(ch)
+      except Exception:
+        pass
+      cfg["last"] = 0
+      fake = si or {"title": "تجربة إعلان البث • Test", "game_name": "Just Chatting", "thumbnail_url": ""}
+      await bot.golive_post(ch, fake) if cfg["on"] else None
+      if not cfg["on"]:
+        ok = await discord_webhook_embed(cfg["hook"], "✅ تجربة: إعلان البث بيوصل هنا", None, "")
+        if not ok:
+          return jerr("ما قدرت أرسل للديسكورد، تأكد من الرابط")
+      cfg["last"] = 0
+    store.save_quick()
+    return web.json_response({"ok": True})
+
+
+  async def s_deck(request):
+    a, err = access(request)
+    if err:
+      return err
+    _, ch, role = a
+    b = await jbody(request)
+    k = b.get("k")
+    if k == "clip":
+      ok, res = await twitch.create_clip(ch, 30)
+      if not ok:
+        return jerr("ما قدرت أسوي كليب (لازم تكون لايف وربط تويتش فيه صلاحية الكليب)")
+      await bot.send_chat(ch, f"🎬 {res}")
+      return web.json_response({"ok": True, "url": res})
+    if k == "clear":
+      if not await twitch.clear_chat(ch):
+        return jerr("ما قدرت أمسح الشات (البوت لازم يكون مود)")
+      bot.audit(ch, a[0], "مسح الشات من الريموت")
+      return web.json_response({"ok": True})
+    if k == "game":
+      ok, res = await twitch.set_game(ch, str(b.get("v") or "")[:80])
+      if not ok:
+        return jerr("ما قدرت أغيّر اللعبة")
+      return web.json_response({"ok": True, "game": res})
+    if k == "ad":
+      ok, msg = await twitch.run_ad(ch, 60)
+      if not ok:
+        return jerr("ما قدرت أشغّل إعلان (لازم تكون لايف وأفلييت، ويمكن تحتاج إعادة الربط)")
+      return web.json_response({"ok": True})
+    if k == "chatmode":
+      mode = str(b.get("v") or "")
+      if mode not in CHAT_MODES:
+        return jerr("صار خطأ")
+      body = dict(CHAT_MODES[mode])
+      if body.get("slow_mode"):
+        body["slow_mode_wait_time"] = 30
+      if not await twitch.chat_mode(ch, body):
+        return jerr("ما قدرت أغيّر وضع الشات (يمكن تحتاج إعادة الربط)")
+      return web.json_response({"ok": True})
+    if k == "reward":
+      st, _ = await twitch.bc_call(ch, "PATCH", "channel_points/custom_rewards", {"id": str(b.get("v") or "")},
+                                   {"is_paused": bool(b.get("pause"))})
+      if st != 200:
+        return jerr(REWARD_ERR.get(st, "صار خطأ"))
+      return web.json_response({"ok": True})
+    if k == "say":
+      text = str(b.get("v") or "").strip()[:450]
+      if not text or text.startswith(("/", ".")):
+        return jerr("اكتب الرسالة")
+      await bot.send_chat(ch, text)
+      return web.json_response({"ok": True})
+    if k == "action":
+      x = next((x for x in bot.actions_of(ch) if x["id"] == str(b.get("v")) and x.get("deck")), None)
+      if not x:
+        return jerr("الأمر مو موجود")
+      asyncio.create_task(bot.run_action(ch, x, {"user": a[0], "login": a[0]}))
+      return web.json_response({"ok": True})
+    return jerr("صار خطأ")
+
+  def reward_body(b):
+    """يحوّل نموذج الموقع لطلب تويتش."""
+    out = {}
+    if "title" in b:
+      t_ = str(b["title"] or "").strip()[:45]
+      if not t_:
+        raise ValueError("اكتب اسم المكافأة")
+      out["title"] = t_
+    if "cost" in b:
+      try:
+        out["cost"] = max(1, min(10000000, int(b["cost"])))
+      except (TypeError, ValueError):
+        raise ValueError("السعر لازم يكون رقم")
+    if "prompt" in b:
+      out["prompt"] = str(b["prompt"] or "").strip()[:200]
+    if "color" in b and re.fullmatch(r"#[0-9a-fA-F]{6}", str(b["color"] or "")):
+      out["background_color"] = b["color"].upper()
+    for k_, tk in (("input", "is_user_input_required"), ("skip", "should_redemptions_skip_request_queue"),
+                   ("enabled", "is_enabled"), ("paused", "is_paused")):
+      if k_ in b:
+        out[tk] = bool(b[k_])
+    for k_, en_, val_ in (("cd", "is_global_cooldown_enabled", "global_cooldown_seconds"),
+                          ("max", "is_max_per_stream_enabled", "max_per_stream"),
+                          ("maxu", "is_max_per_user_per_stream_enabled", "max_per_user_per_stream")):
+      if k_ in b:
+        try:
+          v_ = max(0, min(604800, int(b[k_] or 0)))
+        except (TypeError, ValueError):
+          raise ValueError("الرقم ما ينفع")
+        out[en_] = v_ > 0
+        if v_ > 0:
+          out[val_] = max(1, v_)
+    return out
+
+  REWARD_ERR = {0: "لازم تربط تويتش من الإعدادات", 401: "انتهى الربط، اضغط إعادة الربط في الإعدادات",
+                403: "تويتش رفض: نقاط القناة للأفلييت والبارتنر بس، أو تحتاج إعادة الربط عشان صلاحية المكافآت",
+                400: "تويتش رفض البيانات (يمكن الاسم مكرر أو السعر غلط)", 404: "المكافأة مو موجودة"}
+
+  async def s_rewards_get(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    info = store.data["tokens"].get(ch) or {}
+    if not info.get("rewards"):
+      return web.json_response({"ok": False, "need": "relink", "rewards": []})
+    lst, st, msg = await twitch.rewards_list(ch)
+    if lst is None:
+      return web.json_response({"ok": False, "need": "relink" if st in (0, 401) else "",
+                                "error": REWARD_ERR.get(st, msg or "صار خطأ"), "rewards": []})
+    cfg = bot.rewards_cfg(ch)
+    for r_ in lst:
+      r_["auto"] = cfg.get(r_["id"], {}).get("auto", "none")
+    return web.json_response({"ok": True, "rewards": lst})
+
+  async def s_rewards(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    rid = str(b.get("id") or "")
+    if rid and not re.fullmatch(r"[\w-]{5,60}", rid):
+      return jerr("صار خطأ")
+    if "auto" in b:
+      if b["auto"] not in ("none", "fulfill", "refund"):
+        return jerr("صار خطأ")
+      bot.rewards_cfg(ch).setdefault(rid, {})["auto"] = b["auto"]
+      store.save_quick()
+      return web.json_response({"ok": True})
+    if b.get("delete"):
+      st, d = await twitch.bc_call(ch, "DELETE", "channel_points/custom_rewards", {"id": rid})
+      if st != 204:
+        return jerr(REWARD_ERR.get(st, str(d.get("message") or "صار خطأ")))
+      bot.rewards_cfg(ch).pop(rid, None)
+      bot.audit(ch, a[0], "حذف مكافأة نقاط")
+      return web.json_response({"ok": True})
+    try:
+      body = reward_body(b.get("reward") or {})
+    except ValueError as e:
+      return jerr(str(e))
+    if rid:
+      st, d = await twitch.bc_call(ch, "PATCH", "channel_points/custom_rewards", {"id": rid}, body)
+    else:
+      if "title" not in body or "cost" not in body:
+        return jerr("اكتب الاسم والسعر")
+      st, d = await twitch.bc_call(ch, "POST", "channel_points/custom_rewards", None, body)
+    if st != 200:
+      return jerr(REWARD_ERR.get(st, str(d.get("message") or "صار خطأ")))
+    new = (d.get("data") or [{}])[0]
+    bot.audit(ch, a[0], f"{'عدّل' if rid else 'سوّى'} مكافأة «{new.get('title', '')}»")
+    return web.json_response({"ok": True, "id": new.get("id")})
+
+  async def s_overlay_fx(request):
+    a, err = access(request, owner_only=True)
+    if err:
+      return err
+    _, ch, _ = a
+    b = await jbody(request)
+    if b.get("kind") == "tts":
+      bot.push_overlay_event(ch, "tts", text=str(b.get("text") or "هلا والله، هذي تجربة القراءة بصوت")[:200],
+                             lang=bot.lang_of(ch))
+    else:
+      bot.push_overlay_event(ch, "sound", url=str(b.get("url") or "") if SOUND_URL_RE.fullmatch(str(b.get("url") or ""))
+                             else "", vol=80, beep=True)
+    return web.json_response({"ok": True})
+
   async def s_levels(request):
     a, err = access(request, owner_only=True)
     if err:
@@ -8050,6 +8872,13 @@ def make_web_app(bot):
   r.add_post("/s/api/channel/{channel}/alerts/test", s_alert_test)
   r.add_post("/s/api/channel/{channel}/streak", s_streak)
   r.add_post("/s/api/channel/{channel}/levels", s_levels)
+  r.add_post("/s/api/channel/{channel}/actions", s_actions)
+  r.add_post("/s/api/channel/{channel}/firstw", s_firstw)
+  r.add_post("/s/api/channel/{channel}/golive", s_golive)
+  r.add_post("/s/api/channel/{channel}/deck", s_deck)
+  r.add_post("/s/api/channel/{channel}/overlayfx", s_overlay_fx)
+  r.add_get("/s/api/channel/{channel}/rewards", s_rewards_get)
+  r.add_post("/s/api/channel/{channel}/rewards", s_rewards)
   r.add_post("/discord/interactions", discord_interactions)
   # مشغّل الأغاني
   r.add_get("/overlay/{channel}", overlay_page)
@@ -8178,6 +9007,213 @@ def expand_args(text, query, lang="ar"):
 DISCORD_APP_ID = os.environ.get("DISCORD_APP_ID", "").strip()
 DISCORD_PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY", "").strip()
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
+# ============================================================
+# [جديد] الأوامر التلقائية (مثل Streamer.bot لكن على السحاب)
+# ============================================================
+ACT_TRIGGERS = {  # النوع -> (عربي، إنقليزي، نوع القيمة)
+    "follow": ("متابعة جديدة", "New follower", ""),
+    "sub": ("اشتراك جديد", "New sub", ""),
+    "resub": ("تجديد اشتراك", "Resub", "months"),
+    "gift": ("إهداء اشتراكات", "Gifted subs", "count"),
+    "raid": ("ريد", "Raid", "viewers"),
+    "cheer": ("بتس", "Bits", "bits"),
+    "first_ever": ("أول مرة يكتب بالقناة", "First message ever", ""),
+    "first_stream": ("أول رسالة له بالبث", "First message this stream", ""),
+    "command": ("كوماند", "Command", "name"),
+    "keyword": ("كلمة بالشات", "Word in chat", "text"),
+    "live_start": ("البث بدأ", "Stream started", ""),
+    "live_end": ("البث خلص", "Stream ended", ""),
+    "live_after": ("بعد كذا دقيقة بث", "Minutes into the stream", "minutes"),
+    "schedule": ("موعد ثابت", "Scheduled time", "schedule"),
+    "reward": ("مكافأة نقاط القناة", "Channel point reward", "reward"),
+    "manual": ("زر في الريموت بس", "Remote button only", ""),
+}
+ACT_STEPS = {
+    "say": ("رسالة بالشات", "Chat message"),
+    "wait": ("انتظر", "Wait"),
+    "sound": ("شغّل صوت على البث", "Play a sound on stream"),
+    "tts": ("اقرأ نص بصوت على البث", "Read text aloud on stream"),
+    "shoutout": ("شاوت آوت", "Shoutout"),
+    "clip": ("سوّ كليب", "Create a clip"),
+    "title": ("غيّر عنوان البث", "Change stream title"),
+    "game": ("غيّر اللعبة", "Change game"),
+    "discord": ("رسالة بالديسكورد", "Discord message"),
+    "run": ("شغّل أمر تلقائي ثاني", "Run another action"),
+    "reward": ("وقّف أو شغّل مكافأة نقاط", "Pause or resume a reward"),
+    "chatmode": ("وضع الشات (سلو، إيموت، متابعين، مشتركين)", "Chat mode (slow, emote, followers, subs)"),
+    "ad": ("شغّل إعلان", "Run an ad"),
+    "raid": ("سوّ ريد على قناة", "Raid a channel"),
+    "duel": ("تحدي 1v1 (الخسران ياخذ تايم)", "1v1 duel (loser gets timed out)"),
+}
+DUEL_TEXT = "⚔️ $(user) ضد $(target)... 🎲 الفائز $(winner) 🏆 و $(loser) ياخذ تايم $(seconds) ثانية 😵"
+CHAT_MODES = {"slow_on": {"slow_mode": True}, "slow_off": {"slow_mode": False},
+              "emote_on": {"emote_mode": True}, "emote_off": {"emote_mode": False},
+              "followers_on": {"follower_mode": True}, "followers_off": {"follower_mode": False},
+              "subs_on": {"subscriber_mode": True}, "subs_off": {"subscriber_mode": False}}
+MAX_ACTIONS = 60
+MAX_STEPS = 15
+ACT_MAX_WAIT = 600
+DOW_AR = ["الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"]
+SOUND_URL_RE = re.compile(r"https://[^\s\"'<>]{5,490}", re.I)
+FIRSTW_DEFAULTS = {"ever_on": False, "ever_text": "أهلاً $(user) 🤍 أول مرة تنورنا! حياك الله بالقناة",
+                   "stream_on": False, "stream_text": "هلا والله $(user) 👋 نورت البث"}
+GOLIVE_DEFAULTS = {"on": False, "hook": "", "text": "🔴 $(channel) فاتح بث الحين! تعالوا 👉 $(url)", "role": "", "last": 0}
+
+
+def act_clean(raw, existing_ids):
+  """يتحقق من أمر تلقائي جاي من الموقع ويرجّعه نظيف (أو يرمي ValueError برسالة عربية)."""
+  if not isinstance(raw, dict):
+    raise ValueError("صار خطأ")
+  name = str(raw.get("name") or "").strip()[:60]
+  if not name:
+    raise ValueError("اكتب اسم للأمر")
+  tr = raw.get("trig") or {}
+  tt = str(tr.get("t") or "")
+  if tt not in ACT_TRIGGERS:
+    raise ValueError("اختر متى يشتغل الأمر")
+  trig = {"t": tt}
+  kind = ACT_TRIGGERS[tt][2]
+  if kind in ("months", "count", "viewers", "bits", "amount", "minutes"):
+    try:
+      trig["v"] = max(0, min(100000, int(float(tr.get("v") or 0))))
+    except (TypeError, ValueError):
+      raise ValueError("الرقم ما ينفع")
+    if kind == "minutes" and trig["v"] < 1:
+      raise ValueError("اكتب كم دقيقة")
+  elif kind == "name":
+    v = str(tr.get("v") or "").strip().lstrip("!").lower()
+    if not re.fullmatch(r"[\w؀-ۿ]{1,25}", v):
+      raise ValueError("اسم الكوماند ما ينفع")
+    trig["v"] = v
+  elif kind == "text":
+    v = str(tr.get("v") or "").strip().lower()[:60]
+    if len(v) < 2:
+      raise ValueError("اكتب الكلمة")
+    trig["v"] = v
+  elif kind == "reward":
+    v = str(tr.get("v") or "").strip()
+    if not re.fullmatch(r"[\w-]{5,60}", v):
+      raise ValueError("اختر المكافأة")
+    trig["v"] = v
+  elif kind == "schedule":
+    hm = str(tr.get("hm") or "")
+    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", hm):
+      raise ValueError("اختر الساعة")
+    dow = sorted({int(x) for x in (tr.get("dow") or []) if str(x).isdigit() and 0 <= int(x) <= 6})
+    if not dow:
+      raise ValueError("اختر يوم واحد على الأقل")
+    trig.update(hm=hm, dow=dow)
+  steps = []
+  for st in (raw.get("steps") or [])[:MAX_STEPS]:
+    t = str((st or {}).get("t") or "")
+    if t not in ACT_STEPS:
+      continue
+    v = str(st.get("v") or "").strip()[:450]
+    n = st.get("n")
+    step = {"t": t}
+    if t in ("say", "tts", "title"):
+      if not v:
+        raise ValueError(f"خطوة «{ACT_STEPS[t][0]}» فاضية")
+      if t == "say" and v.startswith(("/", ".")):
+        raise ValueError("الرسالة ما تبدأ بـ / أو .")
+      step["v"] = v[:300] if t == "tts" else v
+    elif t == "wait":
+      try:
+        step["n"] = max(1, min(ACT_MAX_WAIT, int(n)))
+      except (TypeError, ValueError):
+        raise ValueError("كم ثانية ننتظر؟")
+    elif t == "sound":
+      if not SOUND_URL_RE.fullmatch(v):
+        raise ValueError("رابط الصوت لازم يبدأ بـ https://")
+      step["v"] = v
+      try:
+        step["n"] = max(5, min(100, int(n or 80)))
+      except (TypeError, ValueError):
+        step["n"] = 80
+    elif t == "shoutout":
+      step["v"] = v[:40] or "$(user)"
+    elif t == "clip":
+      try:
+        step["n"] = max(5, min(60, int(n or 30)))
+      except (TypeError, ValueError):
+        step["n"] = 30
+    elif t == "game":
+      if not v:
+        raise ValueError("اكتب اسم اللعبة")
+      step["v"] = v[:80]
+    elif t == "discord":
+      url = str(st.get("u") or "").strip()
+      if url and not DISCORD_WEBHOOK_RE.fullmatch(url):
+        raise ValueError("رابط الويب هوك غير صحيح (لازم يبدأ بـ https://discord.com/api/webhooks/)")
+      if not v:
+        raise ValueError("اكتب رسالة الديسكورد")
+      step.update(v=v, u=url)
+    elif t == "run":
+      if v not in existing_ids:
+        raise ValueError("اختر الأمر اللي تبي تشغله")
+      step["v"] = v
+    elif t == "reward":
+      if not re.fullmatch(r"[\w-]{5,60}", v):
+        raise ValueError("اختر المكافأة")
+      step["v"] = v
+      step["n"] = 1 if n in (1, "1", True) else 0  # 1 = شغّل، 0 = وقّف
+    elif t == "chatmode":
+      if v not in CHAT_MODES:
+        raise ValueError("اختر وضع الشات")
+      step["v"] = v
+      try:
+        step["n"] = max(3, min(120, int(n or 30)))
+      except (TypeError, ValueError):
+        step["n"] = 30
+    elif t == "ad":
+      try:
+        step["n"] = min((30, 60, 90, 120, 150, 180), key=lambda x: abs(x - int(n or 60)))
+      except (TypeError, ValueError):
+        step["n"] = 60
+    elif t == "raid":
+      if not v:
+        raise ValueError("اكتب القناة")
+      step["v"] = v[:40]
+    elif t == "duel":
+      try:
+        step["n"] = max(1, min(1209600, int(n or 60)))
+      except (TypeError, ValueError):
+        raise ValueError("كم ثانية التايم؟")
+      if v.startswith(("/", ".")):
+        raise ValueError("الرسالة ما تبدأ بـ / أو .")
+      step["v"] = v[:300] or DUEL_TEXT
+    steps.append(step)
+  if not steps:
+    raise ValueError("أضف خطوة وحدة على الأقل")
+  perm = raw.get("perm") if raw.get("perm") in PERMS else "everyone"
+  try:
+    cd = max(0, min(3600, int(raw.get("cd") or 0)))
+  except (TypeError, ValueError):
+    cd = 0
+  aid = str(raw.get("id") or "")
+  if not re.fullmatch(r"[a-f0-9]{8}", aid):
+    aid = secrets.token_hex(4)
+  return {"id": aid, "name": name, "on": bool(raw.get("on", True)), "trig": trig, "steps": steps,
+          "deck": bool(raw.get("deck")) or tt == "manual", "cd": cd, "perm": perm, "q": bool(raw.get("q"))}
+
+
+def act_fill(text, ctx):
+  """يعبّي المتغيرات في نص الأمر: $(user) $(viewers) ... و $(pick أ|ب) و $(random 1-10)."""
+  def one(m):
+    key, arg = m.group(1).lower(), (m.group(2) or "").strip()
+    if key == "pick" and arg:
+      return random.choice([x.strip() for x in arg.split("|") if x.strip()] or [""])
+    if key == "random":
+      mm = re.fullmatch(r"(\d{1,6})\s*-\s*(\d{1,6})", arg)
+      if mm:
+        a, b = sorted((int(mm.group(1)), int(mm.group(2))))
+        return str(random.randint(a, b))
+      return str(random.randint(1, 100))
+    v = None if key.startswith("_") else ctx.get(key)
+    return str(v).replace("$(", "$ (") if v is not None else ""
+  return re.sub(r"\$\((\w+)(?:\s+([^)]*))?\)", one, text)
+
+
 XP_DEFAULTS = {"on": True, "announce": True, "msg": 10, "watch": 5}  # [جديد] المستويات
 XP_TICK = 300  # كل 5 دقايق نحسب المتابعة
 MAX_XP_USERS = 20000
@@ -8349,6 +9385,24 @@ async def discord_register_commands():
           print("الديسكورد: تم تسجيل الكوماندات ✅")
   except Exception as e:
     print(f"خطأ تسجيل كوماندات الديسكورد: {e}")
+
+
+async def discord_webhook_embed(url, content, embed=None, role=""):
+  """[جديد] رسالة ديسكورد فيها بطاقة (إعلان البث)."""
+  if not url or not DISCORD_WEBHOOK_RE.fullmatch(url):
+    return False
+  role = role if re.fullmatch(r"\d{5,25}", role or "") else ""
+  body = {"content": ((f"<@&{role}> " if role else "") + content)[:1900],
+          "allowed_mentions": {"roles": [role]} if role else {"parse": []}}
+  if embed:
+    body["embeds"] = [embed]
+  try:
+    async with SharedHTTP() as s:
+      async with s.post(url, json=body, timeout=aiohttp.ClientTimeout(total=10)) as r:
+        return r.status < 300
+  except Exception as e:
+    print(f"خطأ ويب هوك الديسكورد: {e}")
+    return False
 
 
 async def discord_webhook_post(url, content):
@@ -8548,6 +9602,9 @@ class Bot:
     self.follow_last = {}  # [جديد] قناة -> آخر تنبيه فولو
     self.stream_ids = {}  # [جديد] قناة -> (وقت، رقم البث الحالي) للستريك
     self.recent_chat = {}  # [جديد] قناة -> {يوزر: آخر رسالة} لساعات المتابعة بدون صلاحية
+    self.live_state = {}  # [جديد] قناة -> (لايف؟، رقم البث) لبداية/نهاية البث
+    self.act_locks = {}  # [جديد] قناة -> قفل الأوامر اللي «تنتظر دورها»
+    self.first_seen = {}  # [جديد] (قناة، البث) -> اللي كتبوا في هذا البث
     self.link_codes = {}  # [جديد] رمز ربط الديسكورد -> (آيدي الديسكورد، وقت الانتهاء)
 
   def run(self):
@@ -8586,6 +9643,7 @@ class Bot:
     asyncio.create_task(self.resub_loop())
     asyncio.create_task(self.keepalive_loop())
     asyncio.create_task(self.xp_loop())
+    asyncio.create_task(self.live_loop())
     asyncio.create_task(discord_register_commands())
     if self.irc:
       asyncio.create_task(self.irc.run())
@@ -9444,6 +10502,15 @@ class Bot:
     lst.append(ev)
     del lst[:-10]
 
+  def push_overlay_event(self, channel_name, kind, **data):
+    """[جديد] حدث صوت أو قراءة نص للـ Overlay."""
+    self.overlay_seq += 1
+    ev = {"id": self.overlay_seq, "kind": kind, "ts": time.time(), "login": "", "clip": "", "dur": 0}
+    ev.update(data)
+    lst = self.overlay_events.setdefault(channel_name, [])
+    lst.append(ev)
+    del lst[:-10]
+
   async def so_overlay_watch(self, message):
     """يلقط !so / !shoutout من الشات ويشغّل كليب في الـ Overlay، بغض النظر عن اللي يرد على الكوماند."""
     if message.echo or not message.author.name:
@@ -9855,6 +10922,7 @@ class Bot:
         self.follow_last[ch] = now
         user = ev.get("user_name") or ev.get("user_login") or ""
         await self.send_alert(ch, "follow", {"user": user})
+        await self.fire(ch, "follow", {"user": user})
         return
       kind = ev.get("notice_type") or ""
       user = anon if ev.get("chatter_is_anonymous") else (ev.get("chatter_user_name") or ev.get("chatter_user_login") or "")
@@ -9862,27 +10930,32 @@ class Bot:
       if kind == "sub":
         d = ev.get("sub") or {}
         await self.send_alert(ch, "sub", {"user": user, "tier": tier_name(d.get("sub_tier"), d.get("is_prime"), lang)})
+        await self.fire(ch, "sub", {"user": user, "tier": tier_name(d.get("sub_tier"), d.get("is_prime"), lang)})
       elif kind == "resub":
         d = ev.get("resub") or {}
-        await self.send_alert(ch, "resub", {
-            "user": user, "months": d.get("cumulative_months") or d.get("duration_months") or 1,
-            "tier": tier_name(d.get("sub_tier"), d.get("is_prime"), lang)})
+        rs = {"user": user, "months": d.get("cumulative_months") or d.get("duration_months") or 1,
+              "tier": tier_name(d.get("sub_tier"), d.get("is_prime"), lang), "message": (ev.get("message") or {}).get("text", "")}
+        await self.send_alert(ch, "resub", rs)
+        await self.fire(ch, "resub", rs)
       elif kind == "sub_gift":
         d = ev.get("sub_gift") or {}
         if d.get("community_gift_id"):
           return  # جزء من إهداء جماعي: التنبيه الجماعي يكفي
-        await self.send_alert(ch, "gift", {
-            "user": user, "recipient": d.get("recipient_user_name") or d.get("recipient_user_login") or "",
-            "tier": tier_name(d.get("sub_tier"), False, lang)})
+        gs = {"user": user, "recipient": d.get("recipient_user_name") or d.get("recipient_user_login") or "",
+              "tier": tier_name(d.get("sub_tier"), False, lang), "count": 1}
+        await self.send_alert(ch, "gift", gs)
+        await self.fire(ch, "gift", gs)
       elif kind == "community_sub_gift":
         d = ev.get("community_sub_gift") or {}
-        await self.send_alert(ch, "community", {
-            "user": user, "count": d.get("total") or 1, "tier": tier_name(d.get("sub_tier"), False, lang)})
+        cs = {"user": user, "count": d.get("total") or 1, "tier": tier_name(d.get("sub_tier"), False, lang)}
+        await self.send_alert(ch, "community", cs)
+        await self.fire(ch, "gift", cs)
       elif kind == "raid":
         d = ev.get("raid") or {}
         raider = d.get("user_name") or d.get("user_login") or user
         rlogin = (d.get("user_login") or login).lower()
         await self.send_alert(ch, "raid", {"user": raider, "viewers": d.get("viewer_count") or 0})
+        await self.fire(ch, "raid", {"user": raider, "login": rlogin, "target": rlogin, "viewers": d.get("viewer_count") or 0})
         if self.alerts_cfg(ch).get("raid_so") and rlogin:
           clip = await self.twitch.random_clip(rlogin)
           if clip:
@@ -9897,6 +10970,9 @@ class Bot:
     bits = int(((ev.get("cheer") or {}).get("bits")) or 0)
     if bits and bits >= int(self.alerts_cfg(ch).get("bits_min") or 1):
       await self.send_alert(ch, "cheer", {"user": user, "bits": bits})
+    if bits:
+      await self.fire(ch, "cheer", {"user": user, "bits": bits, "message": str((ev.get("message") or {}).get("text", ""))[:300]
+                                    if isinstance(ev.get("message"), dict) else ""})
 
   # ==========================================================
   # [جديد] كوماندات جاهزة: نقاط، سحوبات، اقتباسات، تصويت
@@ -10240,6 +11316,370 @@ class Bot:
                   "broken": self.streak_broken(ch)})
     return out
 
+  # ---------- [جديد] الأوامر التلقائية ----------
+  def actions_of(self, ch):
+    return self.store.data["actions"].setdefault(ch, [])
+
+  def firstw_cfg(self, ch):
+    d = self.store.data["firstw"].setdefault(ch, {})
+    for k, v in FIRSTW_DEFAULTS.items():
+      d.setdefault(k, v)
+    return d
+
+  def golive_cfg(self, ch):
+    d = self.store.data["golive"].setdefault(ch, {})
+    for k, v in GOLIVE_DEFAULTS.items():
+      d.setdefault(k, v)
+    return d
+
+
+  async def fire(self, ch, trig, ctx, level=0):
+    """يشغّل كل الأوامر التلقائية المربوطة بحدث معيّن."""
+    started = 0
+    try:
+      acts = [a for a in self.actions_of(ch) if a.get("on") and a["trig"]["t"] == trig]
+      if not acts:
+        return 0
+      now = time.time()
+      for a in acts:
+        tv = a["trig"].get("v")
+        if trig == "raid" and int(ctx.get("viewers") or 0) < (tv or 0):
+          continue
+        if trig == "cheer" and int(ctx.get("bits") or 0) < (tv or 0):
+          continue
+        if trig == "resub" and int(ctx.get("months") or 0) < (tv or 0):
+          continue
+        if trig == "gift" and int(ctx.get("count") or 1) < (tv or 0):
+          continue
+        if trig == "command" and ctx.get("cmd") != tv:
+          continue
+        if trig == "reward" and ctx.get("reward_id") != tv:
+          continue
+        if trig == "keyword" and tv not in str(ctx.get("message") or "").lower():
+          continue
+        if trig in ("command", "keyword") and level < PERMS.get(a.get("perm", "everyone"), 0):
+          continue
+        k = (ch, "act", a["id"])
+        if a.get("cd") and now - self.cmd_cooldown.get(k, 0) < a["cd"]:
+          continue
+        self.cmd_cooldown[k] = now
+        started += 1
+        asyncio.create_task(self.run_action(ch, a, dict(ctx)))
+    except Exception as e:
+      print(f"خطأ الأوامر التلقائية ({trig}): {e}")
+    return started
+
+  async def run_action(self, ch, a, ctx, depth=0):
+    """ينفّذ خطوات أمر تلقائي وحدة ورا الثانية. «ينتظر دوره» = ما يشتغل مع أمر ثاني بنفس الوقت."""
+    if depth > 2:
+      return
+    if a.get("q") and depth == 0:
+      lock = self.act_locks.setdefault(ch, asyncio.Lock())
+      async with lock:
+        return await self.run_action(ch, a, ctx, depth=-1)
+    depth = max(depth, 0)
+    en = self.lang_of(ch) == "en"
+    ctx.setdefault("channel", ch)
+    ctx.setdefault("url", f"https://twitch.tv/{ch}")
+    if any(st["t"] in ("say", "tts", "discord", "title") and re.search(r"\$\((game|title)\)", st.get("v", ""))
+           for st in a["steps"]):
+      try:
+        g, ti = await self.twitch.channel_info(ch)
+        ctx.setdefault("game", g or "")
+        ctx.setdefault("title", ti or "")
+      except Exception:
+        pass
+    waited = 0
+    for st in a["steps"]:
+      t = st["t"]
+      try:
+        if t == "say":
+          await self.send_chat(ch, act_fill(st["v"], ctx)[:490])
+        elif t == "wait":
+          n = min(st.get("n", 1), ACT_MAX_WAIT - waited)
+          if n <= 0:
+            break
+          waited += n
+          await asyncio.sleep(n)
+        elif t == "sound":
+          self.push_overlay_event(ch, "sound", url=st["v"], vol=st.get("n", 80))
+        elif t == "tts":
+          self.push_overlay_event(ch, "tts", text=act_fill(st["v"], ctx)[:300], lang=self.lang_of(ch))
+        elif t == "shoutout":
+          target = act_fill(st.get("v") or "$(user)", ctx).strip().lstrip("@").lower()
+          if re.fullmatch(r"\w{2,25}", target) and target != ch:
+            await self.do_shoutout(ch, target)
+        elif t == "clip":
+          ok, res = await self.twitch.create_clip(ch, st.get("n", 30))
+          if ok:
+            ctx["clip"] = res
+            await self.send_chat(ch, f"🎬 {res}")
+        elif t == "title":
+          await self.twitch.set_title(ch, act_fill(st["v"], ctx))
+        elif t == "game":
+          await self.twitch.set_game(ch, act_fill(st["v"], ctx))
+        elif t == "discord":
+          url = st.get("u") or self.golive_cfg(ch).get("hook") or self.streak_cfg(ch).get("webhook")
+          if url:
+            await discord_webhook_post(url, act_fill(st["v"], ctx))
+        elif t == "run":
+          sub = next((x for x in self.actions_of(ch) if x["id"] == st["v"] and x.get("on")), None)
+          if sub and sub is not a:
+            await self.run_action(ch, sub, dict(ctx), depth + 1)
+        elif t == "reward":
+          await self.twitch.bc_call(ch, "PATCH", "channel_points/custom_rewards", {"id": st["v"]},
+                                    {"is_paused": not st.get("n")})
+        elif t == "chatmode":
+          body = dict(CHAT_MODES[st["v"]])
+          if body.get("slow_mode"):
+            body["slow_mode_wait_time"] = st.get("n", 30)
+          await self.twitch.chat_mode(ch, body)
+        elif t == "ad":
+          await self.twitch.run_ad(ch, st.get("n", 60))
+        elif t == "raid":
+          target = act_fill(st["v"], ctx).strip().lstrip("@").lower()
+          if re.fullmatch(r"\w{2,25}", target):
+            await self.twitch.start_raid(ch, target)
+        elif t == "duel":
+          ok = await self.do_duel(ch, st, ctx)
+          if not ok:
+            break
+      except Exception as e:
+        print(f"خطأ خطوة {t} في الأمر «{a.get('name')}»: {e}")
+
+  def rewards_cfg(self, ch):
+    return self.store.data["rewards_cfg"].setdefault(ch, {})
+
+  async def on_redemption(self, mid, ev):
+    """[جديد] أحد استبدل مكافأة نقاط القناة."""
+    try:
+      if mid in self.seen:
+        return
+      self.seen[mid] = time.time()
+      ch = (ev.get("broadcaster_user_login") or "").lower()
+      if ch not in self.store.data["channels"] or ch in self.store.data["banned"]:
+        return
+      rw = ev.get("reward") or {}
+      rid = rw.get("id") or ""
+      ctx = {"user": ev.get("user_name") or ev.get("user_login") or "", "login": (ev.get("user_login") or "").lower(),
+             "message": str(ev.get("user_input") or "")[:300], "reward": rw.get("title", ""), "cost": rw.get("cost", 0),
+             "reward_id": rid, "target": str(ev.get("user_input") or "").strip().split(" ")[0].lstrip("@")}
+      duel = any(a.get("on") and a["trig"]["t"] == "reward" and a["trig"].get("v") == rid
+                 and any(st_["t"] == "duel" for st_ in a["steps"]) for a in self.actions_of(ch))
+      if duel and ev.get("status") == "unfulfilled":
+        ctx["_red"] = (rid, ev.get("id", ""))
+      started = await self.fire(ch, "reward", ctx)
+      mode = self.rewards_cfg(ch).get(rid, {}).get("auto", "none")
+      if duel:
+        return  # التحدي يقبل الطلب أو يرجّع النقاط بنفسه
+      if ev.get("status") == "unfulfilled" and mode != "none":
+        status = "FULFILLED" if (mode == "fulfill" or started) else "CANCELED"
+        await self.twitch.redemption_status(ch, rid, ev.get("id", ""), status)
+    except Exception as e:
+      print(f"خطأ مكافآت النقاط: {e}")
+
+  async def do_duel(self, ch, st, ctx):
+    """[جديد] تحدي 1v1: قرعة بين اللي استبدل واللي منشنه، والخسران ياخذ تايم."""
+    en = self.lang_of(ch) == "en"
+    me = str(ctx.get("login") or ctx.get("user") or "").lower()
+    raw = str(ctx.get("message") or ctx.get("args") or "")
+    m = re.search(r"@?([A-Za-z0-9_]{3,25})", raw)
+    target = m.group(1).lower() if m else ""
+    red = ctx.get("_red")
+
+    async def fail(ar, eng):
+      await self.send_chat(ch, f"@{ctx.get('user') or me} " + (eng if en else ar))
+      if red:
+        await self.twitch.redemption_status(ch, red[0], red[1], "CANCELED")
+      return False
+    if not target:
+      return await fail("منشن الشخص اللي تبي تتحداه، مثل: @اسم", "Mention who you want to duel, like @name")
+    if target == me:
+      return await fail("ما تقدر تتحدى نفسك 😅 ورجعت لك نقاطك", "You can't duel yourself 😅 points refunded")
+    if target == ch or self.xp_skip(ch, target):
+      return await fail("ما تقدر تتحدى الستريمر أو البوت، ورجعت لك نقاطك", "You can't duel the streamer or a bot, points refunded")
+    here = time.time() - self.recent_chat.get(ch, {}).get(target, 0) < 1800
+    if not here:
+      try:
+        ppl = await self.twitch.chatters(ch)
+      except Exception:
+        ppl = None
+      here = bool(ppl and target in ppl)
+    if not here:
+      return await fail(f"@{target} مو موجود بالشات الحين، ورجعت لك نقاطك",
+                        f"@{target} isn't in chat right now, points refunded")
+    tinfo = await self.twitch.user_info(target)
+    if not tinfo:
+      return await fail(f"ما لقيت حساب باسم {target}، ورجعت لك نقاطك", f"No account named {target}, points refunded")
+    tname = tinfo.get("display_name") or target
+    uname = ctx.get("user") or me
+    if random.random() < 0.5:
+      winner, loser, lid = uname, tname, tinfo.get("id")
+    else:
+      winner, loser, lid = tname, uname, await self.twitch.user_id(me)
+    secs = st.get("n", 60)
+    c2 = dict(ctx, target=tname, winner=winner, loser=loser, seconds=secs)
+    await self.send_chat(ch, act_fill(st.get("v") or DUEL_TEXT, c2)[:490])
+    if not await self.twitch.timeout_user(ch, lid, secs, f"1v1 duel ({winner})"):
+      await self.send_chat(ch, f"{loser} نجا من التايم لأنه مود 😏" if not en else f"{loser} dodged the timeout (mod) 😏")
+    if red:
+      await self.twitch.redemption_status(ch, red[0], red[1], "FULFILLED")
+    return True
+
+  async def do_shoutout(self, ch, target):
+    """شاوت آوت (رسالة + كليب على الأوفرلاي) يستخدمه الأوامر التلقائية."""
+    info = await self.twitch.user_info(target)
+    if not info:
+      return False
+    en = self.lang_of(ch) == "en"
+    name = info.get("display_name") or target
+    game = ""
+    try:
+      game, _ = await self.twitch.channel_info(target)
+    except Exception:
+      pass
+    g = (f" | Last playing: {game}" if en else f" | آخر لعبة: {game}") if game else ""
+    await self.send_chat(ch, (f"📣 Go follow {name} 👉 twitch.tv/{target}{g}" if en
+                              else f"📣 تابعوا {name} قناة تستاهل 👉 twitch.tv/{target}{g}")[:490])
+    clip = await self.twitch.random_clip(target)
+    if clip:
+      self.push_overlay(ch, target, clip)
+    return True
+
+  async def chat_triggers(self, ch, user, display, content, level, live):
+    """[جديد] أول كلمة + أوامر تلقائية من الشات (كوماند / كلمة)."""
+    try:
+      if self.xp_skip(ch, user):
+        return
+      self.recent_chat.setdefault(ch, {})[user] = time.time()  # [جديد] للتحدي: مين موجود بالشات
+      fw = self.firstw_cfg(ch)
+      acts = self.actions_of(ch)
+      want_first = fw["ever_on"] or fw["stream_on"] or any(
+          a.get("on") and a["trig"]["t"] in ("first_ever", "first_stream") for a in acts)
+      ctx = {"user": display, "login": user, "message": content[:300]}
+      if want_first:
+        seen = self.store.data["seen_users"].setdefault(ch, {})
+        known = (user in seen or user in self.store.data["streaks"].get(ch, {})
+                 or user in self.store.data["xp"].get(ch, {}))
+        if not known:
+          seen[user] = 1
+          if len(seen) > 30000:
+            for k in list(seen)[:len(seen) - 30000]:
+              del seen[k]
+          self.store.save_soon(120)
+          if live or await self.channel_active(ch):
+            if fw["ever_on"]:
+              await self.send_chat(ch, act_fill(fw["ever_text"], ctx)[:490])
+            await self.fire(ch, "first_ever", ctx, level)
+        elif live:
+          key = (ch, live)
+          s = self.first_seen.setdefault(key, set())
+          if user not in s:
+            s.add(user)
+            if fw["stream_on"]:
+              await self.send_chat(ch, act_fill(fw["stream_text"], ctx)[:490])
+            await self.fire(ch, "first_stream", ctx, level)
+        if live:
+          self.first_seen.setdefault((ch, live), set()).add(user)
+      if not acts or not await self.channel_active(ch):
+        return
+      m = re.match(r"^!([\w\u0600-\u06FF]{1,25})(?:\s+(.*))?$", content.strip())
+      if m:
+        ctx.update(cmd=m.group(1).lower(), args=(m.group(2) or "").strip()[:200])
+        ctx["target"] = (ctx["args"].split() or [""])[0].lstrip("@")
+        await self.fire(ch, "command", ctx, level)
+      else:
+        await self.fire(ch, "keyword", ctx, level)
+    except Exception as e:
+      print(f"خطأ أول كلمة/الأوامر: {e}")
+
+  async def golive_post(self, ch, si):
+    cfg = self.golive_cfg(ch)
+    if not cfg["on"] or not cfg["hook"] or time.time() - cfg.get("last", 0) < 3600:
+      return
+    cfg["last"] = int(time.time())
+    self.store.save_soon(30)
+    title = (si or {}).get("title") or ""
+    game = (si or {}).get("game_name") or ""
+    thumb = str((si or {}).get("thumbnail_url") or "").replace("{width}", "1280").replace("{height}", "720")
+    url = f"https://twitch.tv/{ch}"
+    emb = {"title": title[:250] or ch, "url": url, "color": 0x9146FF,
+           "description": f"🎮 {game}" if game else "", "footer": {"text": f"twitch.tv/{ch} • majek bot"}}
+    if thumb:
+      emb["image"] = {"url": f"{thumb}?t={int(time.time())}"}
+    await discord_webhook_embed(cfg["hook"], act_fill(cfg["text"], {"channel": ch, "url": url, "game": game, "title": title}),
+                                emb, cfg.get("role", ""))
+
+  async def live_loop(self):
+    """[جديد] كل دقيقة: يلقط بداية ونهاية البث، والمواعيد، و «بعد كذا دقيقة بث»."""
+    await asyncio.sleep(45)
+    first = True
+    while True:
+      try:
+        now = time.time()
+        loc = time.gmtime(now + STREAK_TZ_OFFSET)
+        hm = time.strftime("%H:%M", loc)
+        dow = loc.tm_wday
+        mkey = time.strftime("%Y%m%d%H%M", loc)
+        for ch in list(self.store.data["channels"]):
+          if ch in self.store.data["banned"]:
+            continue
+          acts = [a for a in self.actions_of(ch) if a.get("on")]
+          for a in acts:
+            tr = a["trig"]
+            if tr["t"] == "schedule" and tr.get("hm") == hm and dow in tr.get("dow", []):
+              k = (ch, "sched", a["id"])
+              if self.cmd_cooldown.get(k) != mkey:
+                self.cmd_cooldown[k] = mkey
+                asyncio.create_task(self.run_action(ch, a, {"user": ch}))
+          need_live = self.golive_cfg(ch)["on"] or any(
+              a["trig"]["t"] in ("live_start", "live_end", "live_after") for a in acts)
+          if not need_live:
+            continue
+          si = None
+          try:
+            si = await self.twitch.stream_info(ch)
+          except Exception:
+            si = "err"
+          if si == "err":
+            continue
+          live = bool(si)
+          was = self.live_state.get(ch)
+          self.live_state[ch] = (live, (si or {}).get("id") if live else None)
+          if was is None and first:
+            pass  # أول فحص بعد التشغيل: ما نعتبره بداية بث
+          elif live and not (was and was[0]):
+            await self.golive_post(ch, si)
+            await self.fire(ch, "live_start", {"user": ch, "game": si.get("game_name") or "", "title": si.get("title") or ""})
+          elif not live and was and was[0]:
+            await self.fire(ch, "live_end", {"user": ch})
+          if live:
+            try:
+              mins = (now - datetime.fromisoformat(str(si.get("started_at")).replace("Z", "+00:00")).timestamp()) / 60
+            except Exception:
+              mins = 0
+            for a in acts:
+              if a["trig"]["t"] == "live_after" and mins >= a["trig"].get("v", 0):
+                k = (ch, "after", a["id"], si.get("id"))
+                if k not in self.cmd_cooldown and mins < a["trig"].get("v", 0) + 30:
+                  self.cmd_cooldown[k] = now
+                  asyncio.create_task(self.run_action(ch, a, {"user": ch}))
+          await asyncio.sleep(0.3)
+        first = False
+        for k in [k for k in self.first_seen if not self.live_state.get(k[0], (False,))[0]
+                  and len(self.first_seen) > 20]:
+          self.first_seen.pop(k, None)
+      except Exception as e:
+        print(f"خطأ حلقة البث: {e}")
+      await asyncio.sleep(60 - time.time() % 60 + 1)
+
+  def actions_view(self, ch):
+    return {"list": self.actions_of(ch), "firstw": dict(self.firstw_cfg(ch)),
+            "golive": {k: v for k, v in self.golive_cfg(ch).items() if k not in ("hook", "last")}
+            | {"hook_set": bool(self.golive_cfg(ch)["hook"])},
+            "triggers": {k: [v[0], v[1], v[2]] for k, v in ACT_TRIGGERS.items()},
+            "steps": {k: list(v) for k, v in ACT_STEPS.items()}}
+
   # ---------- [جديد] المستويات والـ XP وساعات المتابعة ----------
   def xp_cfg(self, ch):
     d = self.store.data["xp_cfg"].setdefault(ch, {})
@@ -10409,6 +11849,7 @@ class Bot:
       asyncio.create_task(self.track_streak(channel_name, username))
     if lsid:
       asyncio.create_task(self.xp_chat(channel_name, username))  # [جديد] XP
+    asyncio.create_task(self.chat_triggers(channel_name, username, message.author.name, content, level, lsid))
     if message.cheer:
       asyncio.create_task(self.maybe_cheer_alert(channel_name, {"cheer": message.cheer}, message.author.name))
 
