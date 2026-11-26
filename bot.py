@@ -2909,7 +2909,6 @@ class Store:
         "counts": {},  # قناة -> عدادات $(count)
         "ai": {},  # قناة -> إعدادات الذكاء الاصطناعي
         "alerts": {},  # قناة -> تنبيهات الشات (فولو، اشتراك، ريد، بتس)
-        "quotes": {},  # قناة -> قائمة الاقتباسات
         "audit": {},  # قناة -> سجل التغييرات (مين غيّر وش)
         "streaks": {},  # قناة -> {يوزر: {c: الستريك، b: الأعلى، last: آخر بث، n: عدد البثوث}}
         "streak_meta": {},  # قناة -> {sid: البث الحالي/الأخير، prev: اللي قبله}
@@ -3006,7 +3005,7 @@ class Store:
       self.data["timers"] = loaded.get("timers", {})
       self.data["autos"] = loaded.get("autos", {})
       for k in ("botacct", "bot_auth", "report_bans", "sr", "filters", "counts", "ai",
-                "alerts", "quotes", "audit", "streaks", "streak_meta", "streak_cfg",
+                "alerts", "audit", "streaks", "streak_meta", "streak_cfg",
                 "discord_links", "discord_guilds", "xp", "xp_cfg"):
         self.data[k] = loaded.get(k, {})
       self.data["reports"] = loaded.get("reports", [])
@@ -3050,6 +3049,22 @@ class Store:
       except Exception as e:
         print(f"تعذر حفظ البيانات: {e}")
         self.save_soon(60)
+
+  def save_quick(self, delay=1.5):
+    """[جديد] حفظ سريع لتعديلات لوحة التحكم: نرد على المستخدم فوراً ونكتب الـ Gist بعد ثانية ونص."""
+    q = getattr(self, "_quick_task", None)
+    if q and not q.done() and getattr(self, "_quick_sleeping", False):
+      return  # فيه حفظ قريب جاي، بيشمل هذا التعديل
+
+    async def _go():
+      self._quick_sleeping = True
+      try:
+        await asyncio.sleep(delay)
+      finally:
+        self._quick_sleeping = False
+      await self.save()
+
+    self._quick_task = asyncio.create_task(_go())
 
   def save_soon(self, delay=15):
     """حفظ مؤجّل للتعديلات الصغيرة المتكررة (مثل عدّاد الكوماند) بدل كتابة الـ Gist كل مرة."""
@@ -3774,7 +3789,7 @@ const EN={
 "محاولات كثيرة، حاول بعد شوي":"Too many attempts, try again later",
 "الرد ما يبدأ بـ / أو .":"The reply can't start with / or ."
 };
-Object.assign(EN,{"!f يحوّل الكاتيقوري، و !settitle يغيّر العنوان": "!f switches the category and !settitle changes the title", "!permit يسمح لشخص بالروابط دقيقة وحدة": "!permit lets someone post links for one minute", "!poll سؤال | خيار | خيار من الشات مباشرة": "!poll question | option | option straight from chat", "!skip و !volume للمودات، و !wrongsong للمشاهد": "!skip and !volume for mods, !wrongsong for viewers", "!streak و !topstreak في الشات": "!streak and !topstreak in chat", "$(pick نعم|لا)": "$(pick yes|no)", "/streak و /top في الديسكورد بعد ربط الحساب بـ /link": "/streak and /top in Discord after linking with /link", "Chat magic, one command at a time • سحر الشات، كوماند بعد كوماند": "Chat magic, one command at a time", "أسماء بديلة (اختياري)": "Aliases (optional)", "مثال: dc, ديسكورد": "e.g. dc, server", "majek bot • سحر الشات، كوماند بعد كوماند": "majek bot • Chat magic, one command at a time", "أذكار وأدعية جاهزة تتغير كل مرة": "Ready-made adhkar and duas that change every time", "أذكار وأدعية وتذكيرات تنكتب بالشات بالفاصل اللي تبيه، وما تتكلم إذا الشات ساكت.": "Adhkar, duas and reminders posted at the interval you choose, and they stay quiet when chat is dead.", "أقدر أخلي المودات يعدلون؟": "Can my mods make changes?", "إعلان تلقائي في روم الديسكورد لما أحد يوصل رقم جديد": "Automatic Discord announcements when someone hits a milestone", "إيه، أضفهم من صفحة المودات ويدخلون بحساباتهم ويعدلون الكوماندات والاقتباسات.": "Yes. Add them on the Mods page and they log in with their own accounts to edit commands and quotes.", "إيه، كل المميزات مجانية.": "Yes, every feature is free.", "احفظ أحلى لحظات البث واطلبها بـ !quote": "Save the best stream moments and pull them up with !quote", "اضغط «فعّل البوت في قناتك» وادخل بحسابك.": "Press \"Add the bot to your channel\" and log in.", "اقتباسات": "Quotes", "البوت يتجاهل البوتات المعروفة ويرد بس على كوماندات قناتك، فتقدر تستخدمه معهم.": "The bot ignores known bots and only answers your channel's commands, so you can run it alongside them.", "البوت يحسب كم بث ورا بعض حضر كل مشاهد، ويحتفل بالأرقام الكبيرة. والمتابع يشوف ستريكه من سيرفر الديسكورد حقك.": "The bot counts how many streams in a row each viewer attends and celebrates big milestones. Viewers can check their streak in your Discord server.", "البوت يكتب باسم حسابك أو أي حساب تختاره": "The bot posts as your account or any account you choose", "الطابور يطلع في صفحة قناتك": "The queue shows on your channel page", "المشاهدين يطلبون من يوتيوب بالرابط أو بالاسم، والأغاني تشتغل داخل الموقع أو في OBS.": "Viewers request YouTube songs by link or name, and they play on the site or in OBS.", "تحدد مين يقدر يسأل وكم مرة": "Choose who can ask and how often", "تصويت تويتش": "Twitch polls", "تضيف البوت لسيرفرك من صفحة «الستريك والديسكورد» وتكتب /setup، والمتابع يكتب /link مرة وحدة ويربط حسابه، وبعدها /streak يطلع ستريكه.": "Add the bot to your server from the \"Streaks & Discord\" page and type /setup. Each viewer types /link once to connect their account, then /streak shows their streak.", "تطبيق على جوالك": "An app on your phone", "تعليمات خاصة بأسلوب قناتك": "Custom instructions in your channel's style", "تغيير اللعبة والعنوان": "Game and title changes", "ثبّت لوحة التحكم كتطبيق على الآيفون والأندرويد": "Install the dashboard as an app on iPhone and Android", "حد لكل مشاهد وحد لمدة الأغنية": "Per-viewer limits and a max song length", "حساب بوت خاص فيك": "Your own bot account", "ردود تلقائية على السلام ومساء الخير وباك وبرب": "Auto replies to salam, good evening, back and brb", "روابط، حروف كبيرة، رموز، تكرار، رسائل طويلة": "Links, caps, symbols, repetition, long messages", "زر تجربة يرسل التنبيه للشات قبل ما تعتمده": "A test button posts the alert to chat before you rely on it", "شاوت آوت تلقائي للريد مع كليب في OBS": "Automatic raid shoutout with a clip in OBS", "شرط عدد رسائل الشات قبل كل تذكير": "A minimum number of chat messages before each reminder", "عدّل الكوماندات والتنبيهات من لوحة الستريمر بأي وقت.": "Edit commands and alerts from the streamer dashboard anytime.", "عشان البوت يقرأ الشات ويغيّر اللعبة والعنوان ويسوي كليبات.": "So the bot can read chat, change the game and title, and make clips.", "عندي بوت ثاني، يتعارضون؟": "I already use another bot. Will they clash?", "فريق المودات": "Mod team", "كليب من الشات": "Clips from chat", "كوماند يسوي كليب لآخر ثواني ويرسل الرابط": "A command that clips the last few seconds and posts the link", "كوماندات مخصصة": "Custom commands", "كيف أشيل البوت؟": "How do I remove the bot?", "كيف يشوف المتابع ستريكه في الديسكورد؟": "How do viewers see their streak in Discord?", "لا، البوت يشتغل على السحاب. حتى لو جهازك مطفي يرد ويحمي الشات.": "No, the bot runs in the cloud. Even with your PC off it replies and protects chat.", "لازم جهازي يكون شغال؟": "Does my PC need to be on?", "ما يكتب روابط ولا يدخل بالجدل": "No links and no arguing", "متغيرات مثل $(user) $(random) $(time) وأسماء بديلة وكول داون": "Variables like $(user) $(random) $(time), plus aliases and cooldowns", "من الإعدادات في لوحة الستريمر اضغط «إزالة البوت من قناتي» ويطلع فوراً.": "In the streamer dashboard settings press \"Remove the bot from my channel\" and it leaves right away.", "منشن البوت بأي سؤال ويرد بجملة أو جملتين، ويعرف اللعبة وعنوان البث.": "Mention the bot with any question and it answers in a sentence or two, knowing your game and stream title.", "مودات يعدلون الكوماندات، وسجل يوضح مين غيّر وش": "Mods edit commands, and a log shows who changed what", "نزّل نسخة من بيانات البوت (قنوات، كوماندات، ربط تويتش). لا تشاركها مع أحد.": "Download a copy of the bot's data (channels, commands, Twitch links). Don't share it with anyone.", "نسخة احتياطية وحالة البوت • Backup & status": "Backup & status", "نص كل تنبيه تكتبه أنت مع متغيرات مثل $(months)": "You write each alert's text, with variables like $(months)", "هل البوت مجاني؟": "Is the bot free?", "يحذف السبام ويكتم المخالف قبل ما يلاحظه أحد، ويلقط التحايل على الكلمات الممنوعة.": "Deletes spam and times out offenders before anyone notices, and catches tricks around banned words.", "يشكر المتابعين والمشتركين والإهداءات والبتس، ويرحّب بالريد مع شاوت آوت وكليب يطلع على بثك.": "Thanks followers, subs, gifters and cheerers, and welcomes raids with a shoutout and a clip on your stream.", "يلقط التشكيل والتطويل والحروف المفرّقة (ك ل م ة)": "Catches diacritics, stretched letters and spaced-out letters", "⬇️ تحميل نسخة احتياطية": "⬇️ Download backup", "🩺 حالة البوت": "🩺 Bot status"});
+Object.assign(EN,{"!f يحوّل الكاتيقوري، و !settitle يغيّر العنوان": "!f switches the category and !settitle changes the title", "!permit يسمح لشخص بالروابط دقيقة وحدة": "!permit lets someone post links for one minute", "!poll سؤال | خيار | خيار من الشات مباشرة": "!poll question | option | option straight from chat", "!skip و !volume للمودات، و !wrongsong للمشاهد": "!skip and !volume for mods, !wrongsong for viewers", "!streak و !topstreak في الشات": "!streak and !topstreak in chat", "$(pick نعم|لا)": "$(pick yes|no)", "/streak و /top في الديسكورد بعد ربط الحساب بـ /link": "/streak and /top in Discord after linking with /link", "Chat magic, one command at a time • سحر الشات، كوماند بعد كوماند": "Chat magic, one command at a time", "أسماء بديلة (اختياري)": "Aliases (optional)", "مثال: dc, ديسكورد": "e.g. dc, server", "majek bot • سحر الشات، كوماند بعد كوماند": "majek bot • Chat magic, one command at a time", "أذكار وأدعية جاهزة تتغير كل مرة": "Ready-made adhkar and duas that change every time", "أذكار وأدعية وتذكيرات تنكتب بالشات بالفاصل اللي تبيه، وما تتكلم إذا الشات ساكت.": "Adhkar, duas and reminders posted at the interval you choose, and they stay quiet when chat is dead.", "أقدر أخلي المودات يعدلون؟": "Can my mods make changes?", "إعلان تلقائي في روم الديسكورد لما أحد يوصل رقم جديد": "Automatic Discord announcements when someone hits a milestone", "إيه، أضفهم من صفحة المودات ويدخلون بحساباتهم ويعدلون الكوماندات.": "Yes. Add them on the Mods page and they log in with their own accounts to edit commands and quotes.", "إيه، كل المميزات مجانية.": "Yes, every feature is free.", "اضغط «فعّل البوت في قناتك» وادخل بحسابك.": "Press \"Add the bot to your channel\" and log in.", "مستويات وساعات متابعة": "Levels & watch time", "إكس بي، مستويات، وصفحة متصدرين بـ !leaderboard": "XP, levels and a leaderboard page with !leaderboard", "البوت يتجاهل البوتات المعروفة ويرد بس على كوماندات قناتك، فتقدر تستخدمه معهم.": "The bot ignores known bots and only answers your channel's commands, so you can run it alongside them.", "البوت يحسب كم بث ورا بعض حضر كل مشاهد، ويحتفل بالأرقام الكبيرة. والمتابع يشوف ستريكه من سيرفر الديسكورد حقك.": "The bot counts how many streams in a row each viewer attends and celebrates big milestones. Viewers can check their streak in your Discord server.", "البوت يكتب باسم حسابك أو أي حساب تختاره": "The bot posts as your account or any account you choose", "الطابور يطلع في صفحة قناتك": "The queue shows on your channel page", "المشاهدين يطلبون من يوتيوب بالرابط أو بالاسم، والأغاني تشتغل داخل الموقع أو في OBS.": "Viewers request YouTube songs by link or name, and they play on the site or in OBS.", "تحدد مين يقدر يسأل وكم مرة": "Choose who can ask and how often", "تصويت تويتش": "Twitch polls", "تضيف البوت لسيرفرك من صفحة «الستريك والديسكورد» وتكتب /setup، والمتابع يكتب /link مرة وحدة ويربط حسابه، وبعدها /streak يطلع ستريكه.": "Add the bot to your server from the \"Streaks & Discord\" page and type /setup. Each viewer types /link once to connect their account, then /streak shows their streak.", "تطبيق على جوالك": "An app on your phone", "تعليمات خاصة بأسلوب قناتك": "Custom instructions in your channel's style", "تغيير اللعبة والعنوان": "Game and title changes", "ثبّت لوحة التحكم كتطبيق على الآيفون والأندرويد": "Install the dashboard as an app on iPhone and Android", "حد لكل مشاهد وحد لمدة الأغنية": "Per-viewer limits and a max song length", "حساب بوت خاص فيك": "Your own bot account", "ردود تلقائية على السلام ومساء الخير وباك وبرب": "Auto replies to salam, good evening, back and brb", "روابط، حروف كبيرة، رموز، تكرار، رسائل طويلة": "Links, caps, symbols, repetition, long messages", "زر تجربة يرسل التنبيه للشات قبل ما تعتمده": "A test button posts the alert to chat before you rely on it", "شاوت آوت تلقائي للريد مع كليب في OBS": "Automatic raid shoutout with a clip in OBS", "شرط عدد رسائل الشات قبل كل تذكير": "A minimum number of chat messages before each reminder", "عدّل الكوماندات والتنبيهات من لوحة الستريمر بأي وقت.": "Edit commands and alerts from the streamer dashboard anytime.", "عشان البوت يقرأ الشات ويغيّر اللعبة والعنوان ويسوي كليبات.": "So the bot can read chat, change the game and title, and make clips.", "عندي بوت ثاني، يتعارضون؟": "I already use another bot. Will they clash?", "فريق المودات": "Mod team", "كليب من الشات": "Clips from chat", "كوماند يسوي كليب لآخر ثواني ويرسل الرابط": "A command that clips the last few seconds and posts the link", "كوماندات مخصصة": "Custom commands", "كيف أشيل البوت؟": "How do I remove the bot?", "كيف يشوف المتابع ستريكه في الديسكورد؟": "How do viewers see their streak in Discord?", "لا، البوت يشتغل على السحاب. حتى لو جهازك مطفي يرد ويحمي الشات.": "No, the bot runs in the cloud. Even with your PC off it replies and protects chat.", "لازم جهازي يكون شغال؟": "Does my PC need to be on?", "ما يكتب روابط ولا يدخل بالجدل": "No links and no arguing", "متغيرات مثل $(user) $(random) $(time) وأسماء بديلة وكول داون": "Variables like $(user) $(random) $(time), plus aliases and cooldowns", "من الإعدادات في لوحة الستريمر اضغط «إزالة البوت من قناتي» ويطلع فوراً.": "In the streamer dashboard settings press \"Remove the bot from my channel\" and it leaves right away.", "منشن البوت بأي سؤال ويرد بجملة أو جملتين، ويعرف اللعبة وعنوان البث.": "Mention the bot with any question and it answers in a sentence or two, knowing your game and stream title.", "مودات يعدلون الكوماندات، وسجل يوضح مين غيّر وش": "Mods edit commands, and a log shows who changed what", "نزّل نسخة من بيانات البوت (قنوات، كوماندات، ربط تويتش). لا تشاركها مع أحد.": "Download a copy of the bot's data (channels, commands, Twitch links). Don't share it with anyone.", "نسخة احتياطية وحالة البوت • Backup & status": "Backup & status", "نص كل تنبيه تكتبه أنت مع متغيرات مثل $(months)": "You write each alert's text, with variables like $(months)", "هل البوت مجاني؟": "Is the bot free?", "يحذف السبام ويكتم المخالف قبل ما يلاحظه أحد، ويلقط التحايل على الكلمات الممنوعة.": "Deletes spam and times out offenders before anyone notices, and catches tricks around banned words.", "يشكر المتابعين والمشتركين والإهداءات والبتس، ويرحّب بالريد مع شاوت آوت وكليب يطلع على بثك.": "Thanks followers, subs, gifters and cheerers, and welcomes raids with a shoutout and a clip on your stream.", "يلقط التشكيل والتطويل والحروف المفرّقة (ك ل م ة)": "Catches diacritics, stretched letters and spaced-out letters", "⬇️ تحميل نسخة احتياطية": "⬇️ Download backup", "🩺 حالة البوت": "🩺 Bot status"});
 const AR={};for(const k in EN)AR[EN[k]]=k;
 let LANG="ar";
 try{if(localStorage.getItem("lang")==="en")LANG="en"}catch(e){}
@@ -4141,7 +4156,7 @@ let S={channels:[],commands:{},bot:"",banned:[],reports:[],report_bans:[]};
 onAuth=()=>show(false);
 onLang=()=>{if(typeof OT!=="undefined")$("#optitle").textContent=t(OT[OP]);if(!$("#app").hidden)render()};
 function show(on){$("#login").hidden=on;$("#app").hidden=!on}
-async function act(fn,msg){try{await fn();if(msg)toast(msg);await load()}catch(e){if(e.message!=="auth")toast(e.message,1)}}
+async function act(fn,msg){try{await fn();if(msg)toast(msg);load()}catch(e){if(e.message!=="auth"){toast(e.message,1);load()}}}
 async function load(){
   try{S=await api("GET","/api/state");show(true);render()}catch(e){if(e.message!=="auth")toast(e.message,1)}
 }
@@ -4499,7 +4514,6 @@ main{flex:1;min-width:0}
       <a data-p="alerts" class="own"><i>🔔</i><span>تنبيهات الشات</span></a>
       <a data-p="streak" class="own"><i>🔥</i><span>الستريك والديسكورد</span></a>
       <a data-p="so" class="own"><i>📣</i><span>الشاوت آوت</span></a>
-      <a data-p="quotes"><i>💭</i><span>الاقتباسات</span></a>
       <a data-p="sim"><i>🧪</i><span>محاكي الكوماند</span></a>
       <a data-p="guide"><i>📖</i><span>دليل الكوماندات</span></a>
       <div class="sec own">الفريق والبوت</div>
@@ -4861,42 +4875,29 @@ main{flex:1;min-width:0}
           </div>
                   <div class="panel" style="margin-top:14px">
             <h3>المستويات وساعات المتابعة</h3>
-            <p class="mut">المشاهد يجمع XP لما يكتب بالشات ولما يتابع البث، ومع الوقت يطلع مستواه. والبوت يحسب كم ساعة تابع كل واحد قناتك.</p>
+            <p class="mut">المشاهد يجمع إكس بي لما يكتب بالشات ولما يتابع البث، ومع الوقت يطلع مستواه. والبوت يحسب كم ساعة تابع كل واحد قناتك.</p>
             <div class="tool" style="margin:12px 0 6px">
               <button class="skchip lvchip" data-lv="on">مفعّل</button>
               <button class="skchip lvchip" data-lv="off">متوقف</button>
             </div>
             <label class="chk"><input type="checkbox" id="lv-ann"><span>البوت يكتب بالشات لما أحد يطلع مستوى جديد</span></label>
             <div class="grid3">
-              <div><label>XP لكل رسالة (مرة كل دقيقة)</label><input id="lv-msg" type="number" min="0" max="1000" dir="ltr"></div>
-              <div><label>XP لكل 5 دقايق متابعة</label><input id="lv-watch" type="number" min="0" max="1000" dir="ltr"></div>
+              <div><label>إكس بي لكل رسالة (مرة كل دقيقة)</label><input id="lv-msg" type="number" min="0" max="1000" dir="ltr"></div>
+              <div><label>إكس بي لكل 5 دقايق متابعة</label><input id="lv-watch" type="number" min="0" max="1000" dir="ltr"></div>
             </div>
             <button class="btn sm" id="lv-save">حفظ</button>
             <p class="hint" id="lv-scope" style="margin:12px 0 0"></p>
             <p class="hint" style="margin:8px 0 0">كوماندات الشات: !rank مستواك • !watchtime ساعات متابعتك • !top الأعلى مستوى. وفي الديسكورد: /rank و /toplevel</p>
           </div>
           <div class="panel">
-            <h3>المتصدرين</h3>
+            <div class="chead" style="margin-bottom:10px"><h3 style="margin:0">المتصدرين</h3><a class="btn sm line" id="lv-open" target="_blank" rel="noopener">فتح صفحة المتصدرين</a></div>
             <div class="tool" style="margin:0 0 12px">
               <button class="skchip lvtab on" data-t="x">المستوى</button>
               <button class="skchip lvtab" data-t="w">ساعات المتابعة</button>
-              <button class="skchip lvtab" data-t="s">الستريك</button>
             </div>
             <div id="lvlist"></div>
           </div>
         
-        </section>
-
-        <section class="pg" id="p-quotes" hidden>
-          <div class="panel">
-            <h3>الاقتباسات</h3>
-            <p class="mut">احفظ أحلى لحظات البث. المشاهدين يطلبونها بـ !quote أو !quote رقم، والمودات يضيفون من الشات بـ !addquote</p>
-            <div class="tool" style="margin:12px 0 0">
-              <input id="qt-text" maxlength="300" placeholder="نص الاقتباس">
-              <button class="btn" id="qt-add">إضافة</button>
-            </div>
-          </div>
-          <div id="qtlist"></div>
         </section>
 
         <section class="pg own" id="p-log" hidden>
@@ -4910,7 +4911,15 @@ main{flex:1;min-width:0}
         <section class="pg own" id="p-so" hidden>
           <div class="panel">
             <h3>الشاوت آوت</h3>
-            <p class="mut">المود يكتب في الشات <b dir="ltr">!so اسم_الستريمر</b>، والبوت يرسل رابط قناته وآخر لعبة لعبها، ويطلع كليب من قناته على بثك.</p>
+            <p class="mut">يكتب في الشات <b dir="ltr">!so اسم_الستريمر</b>، والبوت يرسل رابط قناته وآخر لعبة لعبها، ويطلع كليب من قناته على بثك.</p>
+            <label style="margin-top:12px">مين يقدر يستخدم الأمر؟</label>
+            <select id="so-perm" style="max-width:320px">
+              <option value="everyone">الكل</option>
+              <option value="sub">المشتركين وفوق</option>
+              <option value="vip">VIP وفوق</option>
+              <option value="mod">المودات فقط</option>
+              <option value="broadcaster">الستريمر فقط</option>
+            </select>
             <div class="bubble" style="margin-top:12px" data-nt>📣 تابعوا Bigs قناة تستاهل 👉 twitch.tv/bigs | آخر لعبة: Fortnite</div>
             <label class="chk" style="margin-top:14px"><input type="checkbox" id="so-raid"><span>شاوت آوت تلقائي لأي أحد يسوي ريد على قناتك</span></label>
             <p class="hint" style="margin:4px 0 0">نفس الشاوت آوت ينرسل لحاله وقت الريد، ومعه الكليب.</p>
@@ -5009,7 +5018,7 @@ Object.assign(EN,{"⚠️ أغاني سبوتيفاي حالياً ما تشتغ
 for(const k in EN)AR[EN[k]]=k;
 Object.assign(EN,{"القائمة الرئيسية":"Main","الأدوات":"Tools","الفريق والبوت":"Team & bot","النظام":"System","إدارة البث":"Stream manager","المؤقتات":"Timers","حماية الشات":"Chat moderation","دليل الكوماندات":"Commands guide","صفحة القناة العامة":"Public channel page","البلاغات والدعم":"Reports & support","اختصارات سريعة":"Quick actions","انتقل بسرعة لأهم الأدوات":"Jump to the most important tools","تغيير اللعبة بسرعة":"Change the game fast","سوّي اختصار لعبة (مثل !f للفورتنايت) وغيّر كاتيقوري البث من الشات بدون ما تفتح تويتش.":"Create a game shortcut (like !f for Fortnite) and change the stream category from chat without opening Twitch.","فتح صفحة الكوماندات":"Open the commands page","تحميل التطبيق":"Install app","⬇️ تحميل التطبيق":"⬇️ Install the app","لتثبيت التطبيق: في كروم أو إيدج على الكمبيوتر اضغط ⋮ ثم «تثبيت التطبيق». في الآيفون: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية».":"To install the app: in Chrome or Edge on a computer click ⋮ then \"Install app\". On iPhone: tap Share then \"Add to Home Screen\"."});
 for(const k in EN)AR[EN[k]]=k;
-const TITLES={alerts:"تنبيهات الشات",streak:"الستريك والديسكورد",so:"الشاوت آوت",quotes:"الاقتباسات",log:"السجل",ov:"الرئيسية",stream:"إدارة البث",cmd:"الكوماندات",auto:"المؤقتات",songs:"طلبات الأغاني",spam:"حماية الشات",ai:"الذكاء الاصطناعي",sim:"محاكي الكوماند",guide:"دليل الكوماندات",mods:"المودات",bot:"حساب البوت",set:"الإعدادات"};
+const TITLES={alerts:"تنبيهات الشات",streak:"الستريك والديسكورد",so:"الشاوت آوت",log:"السجل",ov:"الرئيسية",stream:"إدارة البث",cmd:"الكوماندات",auto:"المؤقتات",songs:"طلبات الأغاني",spam:"حماية الشات",ai:"الذكاء الاصطناعي",sim:"محاكي الكوماند",guide:"دليل الكوماندات",mods:"المودات",bot:"حساب البوت",set:"الإعدادات"};
 const COLORS={ov:"#7c3aed",stream:"#0ea5e9",cmd:"#3b82f6",auto:"#f59e0b",songs:"#ec4899",spam:"#f43f5e",bot:"#0d9488",ai:"#c026d3",sim:"#8b5cf6",guide:"#14b8a6",mods:"#10b981",set:"#94a3b8"};
 const OWNPG=["auto","songs","spam","bot","ai","mods","set","alerts","streak","log","so"];
 const BUILTIN_CMDS=[
@@ -5025,12 +5034,14 @@ const BUILTIN_CMDS=[
  ["!volume 30","يغيّر صوت الأغاني: رقم من 0 إلى 100 أو +10 / -10 (مود)","Set the song volume: 0-100 or +10 / -10 (mod)"],
  ["!skip","تخطي الأغنية (مود)","Skip the song (mod)"],
  ["!permit اسم","يسمح لشخص بروابط دقيقة (مود)","Lets a viewer post links for a minute (mod)"],
- ["!so اسم","شاوت آوت لستريمر مع رابطه ولعبته (مود)","Shout out a streamer with their link and game (mod)"],
+ ["!so اسم","شاوت آوت لستريمر مع رابطه ولعبته","Shout out a streamer with their link and game"],
  ["!streak","ستريكك: كم بث ورا بعض حضرت","Your watch streak"],
  ["!topstreak","أعلى ستريك بالقناة","Top streaks in the channel"],
  ["!link رمز","ربط حسابك بالديسكورد (الرمز من /link)","Link your Discord (code from /link)"],
- ["!quote","اقتباس عشوائي (أو !quote رقم)","Random quote (or !quote number)"],
- ["!addquote نص","إضافة اقتباس (مود)","Add a quote (mod)"],
+ ["!rank","مستواك وساعات متابعتك وترتيبك","Your level, watch time and rank"],
+ ["!watchtime","كم ساعة تابعت القناة","How long you've watched the channel"],
+ ["!top","الأعلى مستوى بالقناة","Top levels in the channel"],
+ ["!leaderboard","رابط صفحة المتصدرين","Link to the leaderboard page"],
  ["!poll سؤال | أ | ب","تصويت تويتش (مود) • !endpoll","Twitch poll (mod) • !endpoll"]
 ];
 const dn=(n,c)=>((c&&c.bang===false)?"":"!")+n;
@@ -5060,9 +5071,16 @@ function go(p){
 const openModal=()=>{$("#modal").hidden=false};
 const closeModal=()=>{$("#modal").hidden=true};
 async function act(fn,msg,reinit){
-  try{await fn();if(msg)toast(msg);reinit?await init():await loadCh()}
-  catch(e){if(e.message!=="auth")toast(e.message,1)}
+  try{await fn();if(msg)toast(msg);reinit?await init():loadCh()}
+  catch(e){if(e.message!=="auth"){toast(e.message,1);loadCh()}}
 }
+// [جديد] استجابة فورية: الزر يتلوّن أول ما تضغطه بدون انتظار السيرفر
+document.addEventListener("click",e=>{
+  const b=e.target.closest(".skchip,.aichip,.achip,.lchip,.rchip,.srchip");
+  if(!b||b.classList.contains("lvtab")||b.disabled)return;
+  const c="."+[...b.classList].find(k=>/chip$/.test(k)),g=b.parentElement;
+  if(g)g.querySelectorAll(c).forEach(x=>x.classList.toggle("on",x===b));
+},true);
 async function init(){
   try{ME=await api("GET","/s/api/me")}catch(e){if(e.message!=="auth")toast(e.message,1);return}
   $("#login").hidden=true;$("#app").hidden=false;
@@ -5106,7 +5124,7 @@ function render(){
   const sl=$("#s-link");sl.textContent=t(c.linked?"مربوط":"غير مربوط");sl.className=c.linked?"ok":"bad";
   document.querySelectorAll(".own").forEach(x=>x.hidden=!own||(x.classList.contains("pg")&&x.id!=="p-"+PG));
   if(!own&&OWNPG.includes(PG))go("ov");
-  renderTop();renderSim();renderCmds();renderBuiltin();renderStats();renderQuotes();
+  renderTop();renderSim();renderCmds();renderBuiltin();renderStats();
   if(own){renderOwn();renderAuto();renderSongs();renderSpam();renderBot();renderAI();renderAlerts();renderStreak();renderLog();renderSO();renderLV()}
 }
 function renderTop(){
@@ -5351,8 +5369,8 @@ function renderLV(){
   $("#lv-ann").checked=!!v.announce;$("#lv-msg").value=v.msg??10;$("#lv-watch").value=v.watch??5;
   $("#lv-scope").textContent=t(v.chatters?"✅ ساعات المتابعة تنحسب لكل اللي في البث، حتى اللي ما يكتبون.":"ساعات المتابعة الحين تنحسب بس للي يكتبون بالشات. عشان تنحسب لكل اللي في البث، اضغط «إعادة الربط» في الإعدادات مرة وحدة.");
   document.querySelectorAll(".lvtab").forEach(x=>x.classList.toggle("on",x.dataset.t===LVTAB));
+  $("#lv-open").href="/lb/"+encodeURIComponent(CH.name||"");
   let L=(LVTAB==="w"?v.topw:v.top)||[];
-  if(LVTAB==="s")L=[...(v.top||[])].filter(x=>x.s>0).sort((a,b)=>b.s-a.s);
   const box=$("#lvlist");box.innerHTML="";
   if(!L.length){box.innerHTML='<p class="empty">'+t("ما أحد عنده مستوى للحين")+'</p>';return}
   L.slice(0,50).forEach((x,i)=>{
@@ -5366,19 +5384,20 @@ function renderLV(){
 document.querySelectorAll(".lvchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/levels",{on:b.dataset.lv==="on"}),"تم الحفظ"));
 document.querySelectorAll(".lvtab").forEach(b=>b.onclick=()=>{LVTAB=b.dataset.t;renderLV()});
 $("#lv-save").onclick=()=>act(()=>api("POST",base()+"/levels",{announce:$("#lv-ann").checked,msg:parseInt($("#lv-msg").value,10)||0,watch:parseInt($("#lv-watch").value,10)||0}),"تم الحفظ");
-Object.assign(EN,{"المستويات":"Levels","المستويات وساعات المتابعة":"Levels & watch time","المشاهد يجمع XP لما يكتب بالشات ولما يتابع البث، ومع الوقت يطلع مستواه. والبوت يحسب كم ساعة تابع كل واحد قناتك.":"Viewers earn XP by chatting and watching, and level up over time. The bot also tracks how many hours each viewer has watched your channel.","البوت يكتب بالشات لما أحد يطلع مستوى جديد":"Post in chat when someone levels up","XP لكل رسالة (مرة كل دقيقة)":"XP per message (once a minute)","XP لكل 5 دقايق متابعة":"XP per 5 minutes watched","كوماندات الشات: !rank مستواك • !watchtime ساعات متابعتك • !top الأعلى مستوى. وفي الديسكورد: /rank و /toplevel":"Chat commands: !rank your level • !watchtime your watch time • !top top levels. In Discord: /rank and /toplevel","المتصدرين":"Leaderboard","المستوى":"Level","ساعات المتابعة":"Watch time","ما أحد عنده مستوى للحين":"Nobody has a level yet","✅ ساعات المتابعة تنحسب لكل اللي في البث، حتى اللي ما يكتبون.":"✅ Watch time counts for everyone in the stream, even lurkers.","ساعات المتابعة الحين تنحسب بس للي يكتبون بالشات. عشان تنحسب لكل اللي في البث، اضغط «إعادة الربط» في الإعدادات مرة وحدة.":"Watch time currently only counts viewers who chat. To count everyone in the stream, press Relink in Settings once.",});
+Object.assign(EN,{"المستويات":"Levels","المستويات وساعات المتابعة":"Levels & watch time","المشاهد يجمع إكس بي لما يكتب بالشات ولما يتابع البث، ومع الوقت يطلع مستواه. والبوت يحسب كم ساعة تابع كل واحد قناتك.":"Viewers earn XP by chatting and watching, and level up over time. The bot also tracks how many hours each viewer has watched your channel.","البوت يكتب بالشات لما أحد يطلع مستوى جديد":"Post in chat when someone levels up","إكس بي لكل رسالة (مرة كل دقيقة)":"XP per message (once a minute)","إكس بي لكل 5 دقايق متابعة":"XP per 5 minutes watched","كوماندات الشات: !rank مستواك • !watchtime ساعات متابعتك • !top الأعلى مستوى. وفي الديسكورد: /rank و /toplevel":"Chat commands: !rank your level • !watchtime your watch time • !top top levels. In Discord: /rank and /toplevel","المتصدرين":"Leaderboard","فتح صفحة المتصدرين":"Open leaderboard page","المستوى":"Level","ساعات المتابعة":"Watch time","ما أحد عنده مستوى للحين":"Nobody has a level yet","✅ ساعات المتابعة تنحسب لكل اللي في البث، حتى اللي ما يكتبون.":"✅ Watch time counts for everyone in the stream, even lurkers.","ساعات المتابعة الحين تنحسب بس للي يكتبون بالشات. عشان تنحسب لكل اللي في البث، اضغط «إعادة الربط» في الإعدادات مرة وحدة.":"Watch time currently only counts viewers who chat. To count everyone in the stream, press Relink in Settings once.",});
 for(const k in EN)AR[EN[k]]=k;
 /* ---------- [جديد] الشاوت آوت ---------- */
-function renderSO(){$("#so-raid").checked=!!((CH.alerts||{}).raid_so)}
+function renderSO(){const a=CH.alerts||{};$("#so-raid").checked=!!a.raid_so;$("#so-perm").value=a.so_perm||"mod"}
+$("#so-perm").onchange=()=>act(()=>api("POST",base()+"/alerts",{so_perm:$("#so-perm").value}),"تم الحفظ");
 $("#so-raid").onchange=()=>act(()=>api("POST",base()+"/alerts",{raid_so:$("#so-raid").checked}),"تم الحفظ");
-Object.assign(EN,{"الشاوت آوت":"Shoutouts","المود يكتب في الشات":"A mod types in chat","، والبوت يرسل رابط قناته وآخر لعبة لعبها، ويطلع كليب من قناته على بثك.":", and the bot posts their channel link and last game, and plays one of their clips on your stream.",
+Object.assign(EN,{"الشاوت آوت":"Shoutouts","يكتب في الشات":"Type in chat","مين يقدر يستخدم الأمر؟":"Who can use the command?","، والبوت يرسل رابط قناته وآخر لعبة لعبها، ويطلع كليب من قناته على بثك.":", and the bot posts their channel link and last game, and plays one of their clips on your stream.",
 "شاوت آوت تلقائي لأي أحد يسوي ريد على قناتك":"Automatically shout out anyone who raids your channel","نفس الشاوت آوت ينرسل لحاله وقت الريد، ومعه الكليب.":"The same shoutout is sent automatically on raids, clip included.",
 "🎬 الكليب على البث (OBS)":"🎬 Clip on stream (OBS)","اللي طار ستريكهم":"Broken streaks","آخر 30 يوم. اضغط «إرجاع» ويرجع ستريكه كأنه ما فوّت شي.":"Last 30 days. Press Restore to give the streak back as if they never missed a day.","ما أحد طار ستريكه":"No broken streaks","إرجاع":"Restore","تم إرجاع الستريك":"Streak restored","ما فيه ستريك يرجع لهذا المشاهد":"There's no streak to restore for this viewer","أقل عدد بتس للتنبيه":"Minimum bits for the alert","الشاوت آوت التلقائي وقت الريد صار في قسم «الشاوت آوت».":"The automatic raid shoutout is now in the Shoutouts section.","!so اسم_الستريمر":"!so streamer_name","زر «تجربة» يشغّل كليب عشوائي من قناتك. الكليب يظهر بس إذا الـ Overlay مفتوح في OBS.":"The Test button plays a random clip from your channel. It only shows if the overlay is open in OBS.","عشان يطلع الكليب على بثك، أضف هذا الرابط في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.":"To show the clip on stream, add this link in OBS: Sources, then Browser Source, size 1920×1080. Don't share it with anyone."});
 for(const k in EN)AR[EN[k]]=k;
 /* ---------- [جديد] الستريك والديسكورد ---------- */
 function renderStreak(){
   const k=CH.streak||{top:[]},dc=CH.discord||{};
-  document.querySelectorAll(".skchip").forEach(x=>x.classList.toggle("on",x.dataset.sk===(k.on?"on":"off")));
+  document.querySelectorAll(".skchip[data-sk]").forEach(x=>x.classList.toggle("on",x.dataset.sk===(k.on?"on":"off")));
   $("#sk-ann").checked=!!k.announce;
   $("#sk-hook").placeholder=k.webhook_set?t("محفوظ ✅ (اكتب رابط جديد عشان تغيّره)"):"https://discord.com/api/webhooks/...";
   const box=$("#sklist");box.innerHTML="";
@@ -5397,7 +5416,7 @@ function renderStreak(){
   $("#dc-setup").textContent="/setup channel:"+CH.name;
   $("#dc-endpoint").value=dc.endpoint||"";
 }
-document.querySelectorAll(".skchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/streak",{on:b.dataset.sk==="on"}),"تم الحفظ"));
+document.querySelectorAll(".skchip[data-sk]").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/streak",{on:b.dataset.sk==="on"}),"تم الحفظ"));
 $("#sk-brk").onclick=()=>{const b=$("#skbrk");b.hidden=!b.hidden;renderBroken()};
 function renderBroken(){
   const box=$("#skbrklist");if(!box)return;box.innerHTML="";
@@ -5425,20 +5444,6 @@ Object.assign(EN,{"الستريك والديسكورد":"Streaks & Discord","ا�
 "إعلانات الستريك في روم بالديسكورد (اختياري)":"Streak announcements in a Discord channel (optional)","حفظ الرابط":"Save link","من إعدادات الروم في الديسكورد: Integrations ثم Webhooks ثم New Webhook وانسخ الرابط.":"In the Discord channel settings: Integrations, Webhooks, New Webhook, then copy the URL.",
 "محفوظ ✅ (اكتب رابط جديد عشان تغيّره)":"Saved ✅ (enter a new URL to change it)","مربوط بعدد سيرفرات:":"Linked servers:","جاهز، باقي تضيفه لسيرفرك":"Ready, just add it to your server","ربط الديسكورد مو مفعّل من صاحب البوت للحين":"Discord isn't enabled by the bot owner yet"});
 for(const k in EN)AR[EN[k]]=k;
-/* ---------- [جديد] الاقتباسات ---------- */
-function renderQuotes(){
-  const box=$("#qtlist"),qs=(CH.quotes||[]).slice().reverse();box.innerHTML="";
-  if(!qs.length){box.innerHTML='<p class="empty">'+t("ما فيه اقتباسات للحين")+'</p>';return}
-  qs.forEach(q=>{
-    const d=document.createElement("div");d.className="cmd";
-    d.innerHTML='<div class="cbody"><div class="chead"><b data-nt></b><span class="bd" data-nt></span></div><p data-nt></p></div><div><button class="ic del">🗑</button></div>';
-    d.querySelector("b").textContent="#"+q.n;
-    const bd=d.querySelector(".bd");bd.textContent=(q.by||"")+(q.game?" • "+q.game:"");bd.hidden=!q.by&&!q.game;
-    d.querySelector("p").textContent=q.text;
-    d.querySelector(".del").onclick=()=>{if(ask("تحذف الاقتباس #{n}؟",q.n))act(()=>api("DELETE",base()+"/quotes/"+q.n),"تم الحذف")};
-    box.appendChild(d);
-  });
-}
 /* ---------- [جديد] سجل التغييرات ---------- */
 function renderLog(){
   const box=$("#loglist"),lg=CH.audit||[];box.innerHTML="";
@@ -5451,7 +5456,6 @@ function renderLog(){
     box.appendChild(d);
   });
 }
-$("#qt-add").onclick=()=>act(async()=>{await api("POST",base2()+"/quotes",{text:$("#qt-text").value});$("#qt-text").value=""},"تمت الإضافة");
 Object.assign(EN,{"تنبيهات الشات":"Chat alerts","النقاط":"Points","السحوبات":"Giveaways","الاقتباسات":"Quotes","السجل":"Log",
 "البوت يشكر المتابعين والمشتركين واللي يسوون ريد تلقائياً في الشات. عدّل النص أو أوقف أي تنبيه.":"The bot thanks followers, subscribers and raiders in chat automatically. Edit the text or turn any alert off.",
 "شاوت آوت تلقائي للي يسوي ريد (ومعه كليب في الـ Overlay)":"Auto shoutout raiders (with a clip on the overlay)","أقل عدد بتس عشان يطلع التنبيه":"Minimum bits for the alert",
@@ -5625,9 +5629,6 @@ html{scroll-behavior:smooth}
 .lb.p3 .rk{background:#C98B5A;color:#1B0F05}
 .lb b{flex:1;font-weight:600;text-align:start;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .lb em{font-style:normal;color:var(--sf2);font-variant-numeric:tabular-nums;white-space:nowrap}
-.qt{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:8px}
-.qt p{margin:0;font-size:15px}
-.qt small{color:var(--dim);font-size:12px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
 .two .card{margin:0}
 @media(max-width:760px){.two{grid-template-columns:1fr}}
@@ -5639,7 +5640,6 @@ html{scroll-behavior:smooth}
   <a href="#srbox" id="nv-sr" hidden>🎵 طلبات الأغاني</a>
   <a href="#cmdsec">⌨️ الكوماندات</a>
   <a href="#lbbox" id="nv-lb" hidden>🔥 الستريك</a>
-  <a href="#qtbox" id="nv-qt" hidden>💭 الاقتباسات</a>
   <a href="#basicsec">📖 دليل الكوماندات</a>
   <button class="pl" id="nv-rep">🚩 بلاغ</button>
   <span class="sp"></span>
@@ -5662,7 +5662,7 @@ html{scroll-behavior:smooth}
     </div>
     <div class="two" id="extras" hidden>
       <div class="card" id="lbbox" hidden><h2 id="lbtitle">🔥 أعلى ستريك</h2><div id="lblist"></div></div>
-      <div class="card" id="qtbox" hidden><h2>💭 الاقتباسات</h2><div id="qtlist" style="max-height:420px;overflow:auto"></div></div>
+
     </div>
     <div id="cmdsec"></div>
     <div class="tool" style="margin-top:16px">
@@ -5705,20 +5705,15 @@ function render(){
     D.songs.queue.forEach(m=>add(m,false));
     if(!D.songs.current&&!D.songs.queue.length)sl.innerHTML='<p class="empty">'+t("ما فيه أغاني بالطابور")+'</p>';
   }
-  const P=D.streaks,QS=D.quotes||[];
+  const P=D.streaks;
   $("#lbbox").hidden=!(P&&P.length);$("#nv-lb").hidden=$("#lbbox").hidden;
-  $("#qtbox").hidden=!QS.length;$("#nv-qt").hidden=$("#qtbox").hidden;
-  $("#extras").hidden=$("#lbbox").hidden&&$("#qtbox").hidden;
+  $("#extras").hidden=$("#lbbox").hidden;
   if(P&&P.length){
     const lb=$("#lblist");lb.innerHTML="";
     P.forEach((x,i)=>{const d=document.createElement("div");d.className="lb"+(i<3?" p"+(i+1):"");
       d.innerHTML='<span class="rk" data-nt></span><b dir="ltr" data-nt></b><em data-nt></em>';
       d.querySelector(".rk").textContent=i+1;d.querySelector("b").textContent=x.user;d.querySelector("em").textContent="🔥 "+x.streak;lb.appendChild(d)});
   }
-  const ql=$("#qtlist");ql.innerHTML="";
-  QS.slice().reverse().forEach(q=>{const d=document.createElement("div");d.className="qt";
-    d.innerHTML='<p data-nt></p><small data-nt></small>';d.querySelector("p").textContent="“"+q.text+"”";
-    d.querySelector("small").textContent="#"+q.n+(q.game?" • "+q.game:"");ql.appendChild(d)});
   const box=$("#list");box.innerHTML="";
   const names=all.filter(n=>{
     const c=D.commands[n];
@@ -6186,7 +6181,7 @@ html{scroll-behavior:smooth}
       <div><b>تغيير اللعبة والعنوان</b><span>!f يحوّل الكاتيقوري، و !settitle يغيّر العنوان</span></div>
       <div><b>كليب من الشات</b><span>كوماند يسوي كليب لآخر ثواني ويرسل الرابط</span></div>
       <div><b>تصويت تويتش</b><span>!poll سؤال | خيار | خيار من الشات مباشرة</span></div>
-      <div><b>اقتباسات</b><span>احفظ أحلى لحظات البث واطلبها بـ !quote</span></div>
+      <div><b>مستويات وساعات متابعة</b><span>إكس بي، مستويات، وصفحة متصدرين بـ !leaderboard</span></div>
       <div><b>فريق المودات</b><span>مودات يعدلون الكوماندات، وسجل يوضح مين غيّر وش</span></div>
       <div><b>حساب بوت خاص فيك</b><span>البوت يكتب باسم حسابك أو أي حساب تختاره</span></div>
       <div><b>تطبيق على جوالك</b><span>ثبّت لوحة التحكم كتطبيق على الآيفون والأندرويد</span></div>
@@ -6207,7 +6202,7 @@ html{scroll-behavior:smooth}
     <h2>أسئلة متكررة</h2>
     <details><summary>هل البوت مجاني؟</summary><p>إيه، كل المميزات مجانية.</p></details>
     <details><summary>لازم جهازي يكون شغال؟</summary><p>لا، البوت يشتغل على السحاب. حتى لو جهازك مطفي يرد ويحمي الشات.</p></details>
-    <details><summary>أقدر أخلي المودات يعدلون؟</summary><p>إيه، أضفهم من صفحة المودات ويدخلون بحساباتهم ويعدلون الكوماندات والاقتباسات.</p></details>
+    <details><summary>أقدر أخلي المودات يعدلون؟</summary><p>إيه، أضفهم من صفحة المودات ويدخلون بحساباتهم ويعدلون الكوماندات.</p></details>
     <details><summary>كيف يشوف المتابع ستريكه في الديسكورد؟</summary><p>تضيف البوت لسيرفرك من صفحة «الستريك والديسكورد» وتكتب /setup، والمتابع يكتب /link مرة وحدة ويربط حسابه، وبعدها /streak يطلع ستريكه.</p></details>
     <details><summary>عندي بوت ثاني، يتعارضون؟</summary><p>البوت يتجاهل البوتات المعروفة ويرد بس على كوماندات قناتك، فتقدر تستخدمه معهم.</p></details>
     <details><summary>كيف أشيل البوت؟</summary><p>من الإعدادات في لوحة الستريمر اضغط «إزالة البوت من قناتي» ويطلع فوراً.</p></details>
@@ -6272,6 +6267,104 @@ OWNER_HTML, STREAMER_HTML, PUBLIC_HTML = iconize(OWNER_HTML), iconize(STREAMER_H
 OWNER_HTML = OWNER_HTML.replace("<!--CANON-->", '<meta name="robots" content="noindex">')
 STREAMER_HTML = STREAMER_HTML.replace("<!--CANON-->", "")
 PUBLIC_HTML = PUBLIC_HTML.replace("<!--CANON-->", "")
+
+# [جديد] صفحة المتصدرين العامة (!leaderboard)
+LB_HTML = r"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0B171D">
+<title>المتصدرين • majek bot</title>
+<meta property="og:title" content="majek bot">
+<meta property="og:image" content="/banner.jpg">
+<link rel="icon" href="/icon.svg">
+<style>
+:root{--deep:#0B171D;--ink:#0F1D24;--surface:#14262E;--raise:#1A3039;--line:#25414A;--line2:#335762;--tx:#EAF1EC;--mut:#93ABA8;--dim:#6E8986;--sf:#F2A93B;--sf2:#FFCB78;--sfink:#241604;--gold:#F2C14E;--silver:#C9D6DF;--bronze:#D9895A}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--deep);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;min-height:100vh}
+.sadu{height:6px;background:repeating-linear-gradient(-45deg,var(--sf) 0 8px,#C9472E 8px 16px,var(--ink) 16px 24px)}
+.wrap{max-width:920px;margin:0 auto;padding:40px 16px 60px}
+h1{text-align:center;font-size:44px;font-weight:300;letter-spacing:.06em;margin-bottom:6px}
+.ch{text-align:center;color:var(--mut);margin-bottom:30px;font-size:16px}
+.ch a{color:var(--sf2);text-decoration:none;font-weight:600}
+.tabs{display:flex;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px;margin-bottom:10px}
+.tabs button{flex:1;background:none;border:0;color:var(--tx);font:inherit;font-size:16px;font-weight:600;padding:10px;border-radius:7px;cursor:pointer;letter-spacing:.02em}
+.tabs button:hover{background:var(--raise)}
+.tabs button.on{background:var(--line2)}
+.tabs .lang{flex:none;width:44px;color:var(--mut);font-size:13px}
+.list{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.row{display:grid;grid-template-columns:40px 30px 1fr repeat(var(--cols),minmax(90px,auto));align-items:center;gap:12px;background:var(--raise);border:1px solid transparent;border-radius:8px;padding:10px 14px}
+.row.r1{border-color:var(--gold)}.row.r2{border-color:var(--silver)}.row.r3{border-color:var(--bronze)}
+.rk{width:34px;height:34px;border-radius:50%;background:var(--ink);display:grid;place-items:center;font-weight:700}
+.ic{font-size:22px;text-align:center}
+html[dir=ltr] .nm{text-align:left}
+.nm{font-size:20px;direction:ltr;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st small{display:block;color:var(--mut);font-size:11px;margin-bottom:1px}
+.st b{font-size:20px;font-weight:500;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate;display:inline-block}
+.st.z b{color:var(--dim)}
+.lv{width:28px;height:28px;border-radius:50%;border:2px solid var(--c);display:grid;place-items:center;font-size:11px;font-weight:700}
+.empty,.err{text-align:center;color:var(--mut);padding:40px 10px}
+.foot{text-align:center;color:var(--dim);font-size:13px;margin-top:24px}.foot a{color:var(--mut)}
+@media(max-width:620px){h1{font-size:32px}.row{grid-template-columns:32px 24px 1fr repeat(var(--cols),auto);gap:8px;padding:9px 10px}.nm{font-size:16px}.st b{font-size:16px}.st small{font-size:10px}.tabs button{font-size:14px;padding:9px 4px}}
+</style>
+</head>
+<body>
+<div class="sadu"></div>
+<div class="wrap">
+  <h1 id="ttl">المتصدرين</h1>
+  <p class="ch" id="chn"></p>
+  <div class="tabs" id="tabs"></div>
+  <div class="list" id="list"><p class="empty" id="ld">...</p></div>
+  <p class="foot"><a href="/">majek bot</a></p>
+</div>
+<script>
+const CH=location.pathname.split("/").filter(Boolean).pop().toLowerCase();
+let LANG="ar",D=null,TAB=null;
+try{const q=new URLSearchParams(location.search).get("lang");if(q)LANG=q==="en"?"en":"ar";else if(localStorage.getItem("lang"))LANG=localStorage.getItem("lang")==="en"?"en":"ar"}catch(e){}
+const T={ar:{t:"المتصدرين",x:"الإكس بي",w:"ساعات المتابعة",s:"الستريك",exp:"الإكس بي",lvl:"المستوى",mon:"هالشهر",hrs:"ساعات المتابعة",yr:"هالسنة",cur:"الستريك",hi:"الأعلى",ch:"قناة",empty:"ما فيه أحد هنا للحين",nf:"القناة غير موجودة"},
+         en:{t:"LEADERBOARD",x:"XP",w:"WATCHTIME",s:"STREAK",exp:"XP",lvl:"LEVEL",mon:"THIS MONTH",hrs:"HOURS WATCHED",yr:"THIS YEAR",cur:"STREAK",hi:"HIGHEST",ch:"Channel",empty:"Nobody here yet",nf:"Channel not found"}};
+const L=k=>T[LANG][k];
+const n=v=>Number(v||0).toLocaleString("en-US");
+const tier=lv=>lv>=60?"#4C9EFF":lv>=40?"#B07CFF":lv>=20?"#4CCF9E":"#E0955C";
+function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
+function stat(label,val,zero){const s=el("div","st"+(zero?" z":""));s.append(el("small",null,label),el("b",null,val));return s}
+function render(){
+  document.documentElement.lang=LANG;document.documentElement.dir=LANG==="en"?"ltr":"rtl";
+  document.title=L("t")+" • "+CH+" • majek bot";$("ttl").textContent=L("t");
+  const c=$("chn");c.textContent=L("ch")+" ";const a=el("a",null,CH);a.href="https://twitch.tv/"+CH;a.target="_blank";a.rel="noopener";c.append(a);
+  const tabs=$("tabs");tabs.innerHTML="";
+  const avail=["x","w","s"].filter(k=>D[k]);
+  if(!TAB||!avail.includes(TAB))TAB=avail[0];
+  avail.forEach(k=>{const b=el("button",k===TAB?"on":"",L(k));b.onclick=()=>{TAB=k;render()};tabs.append(b)});
+  const lb=el("button","lang",LANG==="en"?"ع":"EN");lb.title="Language";lb.onclick=()=>{LANG=LANG==="en"?"ar":"en";try{localStorage.setItem("lang",LANG)}catch(e){}render()};tabs.append(lb);
+  const list=$("list");list.innerHTML="";
+  const rows=(TAB&&D[TAB])||[];
+  if(!rows.length){list.append(el("p","empty",L("empty")));return}
+  rows.forEach((r,i)=>{
+    const row=el("div","row"+(i<3?" r"+(i+1):""));
+    row.append(el("div","rk",i+1),el("div","ic",r.f?"🔥":(r.h?"⏳":"")),el("div","nm",r.u));
+    if(TAB==="x"){
+      const lv=el("div","st");lv.append(el("small",null,L("lvl")));const ring=el("div","lv",r.lv);ring.style.setProperty("--c",tier(r.lv));lv.append(ring);
+      row.append(stat(L("exp"),n(r.x)),lv,stat(L("mon"),(r.mx?"+":"")+n(r.mx),!r.mx));row.style.setProperty("--cols",3);
+    }else if(TAB==="w"){
+      row.append(stat(L("hrs"),n(Math.floor(r.w/60))),stat(L("yr"),n(Math.floor((r.yw||0)/60)),!r.yw));row.style.setProperty("--cols",2);
+    }else{
+      row.append(stat(L("cur"),n(r.s)),stat(L("hi"),n(r.b)));row.style.setProperty("--cols",2);
+    }
+    list.append(row);
+  });
+}
+function $(id){return document.getElementById(id)}
+fetch("/lb/api/"+encodeURIComponent(CH)).then(r=>r.ok?r.json():Promise.reject(r.status)).then(d=>{
+  D=d;if(!new URLSearchParams(location.search).get("lang")&&!(()=>{try{return localStorage.getItem("lang")}catch(e){return null}})())LANG=d.lang==="en"?"en":"ar";
+  TAB=new URLSearchParams(location.search).get("tab");render();
+}).catch(()=>{$("list").innerHTML="";$("list").append(el("p","err",L("nf")))});
+</script>
+</body>
+</html>
+"""
+
 HOME_PAGE = HOME_HTML.replace("<!--CANON-->", (
     f'<link rel="canonical" href="{SITE_URL}/">'
     '<script type="application/ld+json">' + json.dumps({
@@ -6349,7 +6442,7 @@ YT_ID_RE = re.compile(
 URL_RE = re.compile(
     r"(?:https?://|www\.)\S+|\b[a-z0-9-]+\.(?:com|net|org|io|gg|tv|me|co|ly|xyz|info|sa|ae|app|dev|gl|be)\b(?:/\S*)?",
     re.I)
-EXTRA_CMDS = {"rank", "level", "watchtime", "top", "streak", "topstreak", "link", "quote", "addquote", "delquote", "poll", "endpoll", "so", "shoutout"}
+EXTRA_CMDS = {"leaderboard", "lb", "rank", "level", "watchtime", "top", "streak", "topstreak", "link", "poll", "endpoll", "so", "shoutout"}
 
 
 def find_cmd(cmds, name):
@@ -6639,7 +6732,7 @@ def make_web_app(bot):
     if name in store.data["channels"]:
       return jerr("القناة مضافة من قبل")
     store.data["channels"].append(name)
-    await store.save()
+    store.save_quick()
     await bot.join_channels([name])
     return web.json_response({"ok": True})
 
@@ -6659,7 +6752,7 @@ def make_web_app(bot):
     acct = store.data["botacct"].pop(name, None)  # [fix] نشيل توكن حساب البوت المخصص بعد الحظر
     if acct:
       twitch.user_access.pop("bot:" + acct.get("login", ""), None)
-    await store.save()
+    store.save_quick()
     try:
       await bot.part_channels([name])
     except Exception as e:
@@ -6670,7 +6763,7 @@ def make_web_app(bot):
     name = request.match_info["name"].lower()
     if name in store.data["banned"]:
       store.data["banned"].remove(name)
-      await store.save()
+      store.save_quick()
     return web.json_response({"ok": True})
 
   async def del_channel(request):
@@ -6678,7 +6771,7 @@ def make_web_app(bot):
     if name not in store.data["channels"]:
       return jerr("القناة مو موجودة", 404)
     store.data["channels"].remove(name)
-    await store.save()
+    store.save_quick()
     await bot.part_channels([name])
     return web.json_response({"ok": True})
 
@@ -6695,7 +6788,7 @@ def make_web_app(bot):
     if name not in cmds and len(cmds) >= MAX_COMMANDS:
       return jerr(f"وصلت الحد الأقصى للكوماندات ({MAX_COMMANDS})")
     cmds[name] = entry
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def del_command(request):
@@ -6705,7 +6798,7 @@ def make_web_app(bot):
     if name not in cmds:
       return jerr("الكوماند مو موجود", 404)
     del cmds[name]
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def send_msg(request):
@@ -6798,13 +6891,13 @@ def make_web_app(bot):
     if not rep:
       return jerr("الكوماند مو موجود", 404)
     rep["done"] = not rep.get("done")
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def report_del(request):
     rid = request.match_info["id"]
     store.data["reports"] = [r for r in store.data["reports"] if r["id"] != rid]
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def report_ban(request):
@@ -6820,12 +6913,12 @@ def make_web_app(bot):
       if not valid_channel(name):
         return jerr("اليوزر غير صحيح")
       store.data["report_bans"]["u:" + name] = name
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def report_unban(request):
     store.data["report_bans"].pop(request.match_info["ident"], None)
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   # ---------------- موقع الستريمر ----------------
@@ -7070,6 +7163,20 @@ def make_web_app(bot):
                           f'property="og:title" content="كوماندات {ch} • majek bot"')
     return web.Response(text=page, content_type="text/html")
 
+  async def lb_page(request):
+    ch = request.match_info["channel"].lower()
+    page = LB_HTML
+    if valid_channel(ch):
+      page = page.replace('<meta property="og:title" content="majek bot">',
+                          f'<meta property="og:title" content="المتصدرين • {ch} • majek bot">')
+    return web.Response(text=page, content_type="text/html")
+
+  async def lb_api(request):
+    ch = request.match_info["channel"].lower()
+    if ch not in store.data["channels"] or ch in store.data["banned"]:
+      return jerr("القناة غير موجودة", 404)
+    return web.json_response(bot.lb_data(ch))
+
   async def pub(request):
     ch = request.match_info["channel"].lower()
     if ch not in store.data["channels"]:
@@ -7082,8 +7189,6 @@ def make_web_app(bot):
         "commands": store.data["commands"].get(ch, {}),
         "songs": {"on": bool(sr["on"]), "current": view["current"], "queue": view["queue"]},
         "streaks": bot.streak_top(ch, 20) if bot.streak_cfg(ch)["on"] else None,
-        "quotes": [{"n": q["n"], "text": q["text"], "game": q.get("game", "")}
-                   for q in store.data["quotes"].get(ch, [])[-100:]],
     })
 
   async def s_logout(request):
@@ -7147,7 +7252,6 @@ def make_web_app(bot):
         "streak": bot.streak_view(ch, own),
         "levels": bot.xp_view(ch, own),
         "discord": discord_view(ch) if own else {},
-        "quotes": store.data["quotes"].get(ch, [])[-200:],
         "audit": store.data["audit"].get(ch, [])[:60] if own else [],
         "stats": bot.stats_view(ch),
         "polls_ready": bool(store.data["tokens"].get(ch, {}).get("polls")),
@@ -7167,7 +7271,7 @@ def make_web_app(bot):
       return jerr(f"وصلت الحد الأقصى للكوماندات ({MAX_COMMANDS})")
     existed = name in cmds
     cmds[name] = entry
-    await store.save()
+    store.save_quick()
     bot.audit(ch, a[0], ("عدّل " if existed else "أضاف ") + disp_cmd(name, entry))
     return web.json_response({"ok": True})
 
@@ -7181,7 +7285,7 @@ def make_web_app(bot):
     if name not in cmds:
       return jerr("الكوماند مو موجود", 404)
     del cmds[name]
-    await store.save()
+    store.save_quick()
     bot.audit(ch, a[0], "حذف !" + name)
     return web.json_response({"ok": True})
 
@@ -7201,7 +7305,7 @@ def make_web_app(bot):
     if len(eds) >= 50:
       return jerr("وصلت الحد الأقصى للمودات (50)")
     eds.append(name)
-    await store.save()
+    store.save_quick()
     bot.audit(ch, a[0], "أضاف المود " + name)
     return web.json_response({"ok": True})
 
@@ -7214,7 +7318,7 @@ def make_web_app(bot):
     eds = store.data["editors"].get(ch, [])
     if name in eds:
       eds.remove(name)
-      await store.save()
+      store.save_quick()
     return web.json_response({"ok": True})
 
   async def s_unlink(request):
@@ -7224,7 +7328,7 @@ def make_web_app(bot):
     _, ch, _ = a
     store.data["tokens"].pop(ch, None)
     twitch.user_access.pop(ch, None)
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def s_leave(request):
@@ -7237,7 +7341,7 @@ def make_web_app(bot):
     store.data["tokens"].pop(ch, None)
     store.data["botacct"].pop(ch, None)
     twitch.user_access.pop(ch, None)
-    await store.save()
+    store.save_quick()
     try:
       await bot.part_channels([ch])
     except Exception as e:
@@ -7253,7 +7357,7 @@ def make_web_app(bot):
     if lang not in ("ar", "en"):
       return jerr("صار خطأ")
     store.data["lang"][ch] = lang
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def s_active(request):
@@ -7262,7 +7366,7 @@ def make_web_app(bot):
       return err
     _, ch, _ = a
     store.data["always"][ch] = bool((await jbody(request)).get("always"))
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def s_reminders(request):
@@ -7271,7 +7375,7 @@ def make_web_app(bot):
       return err
     _, ch, _ = a
     store.data["reminders"][ch] = bool((await jbody(request)).get("on"))
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def s_title(request):
@@ -7327,7 +7431,7 @@ def make_web_app(bot):
                 "every": every, "on": bool(b.get("on", True)), "lines": lines})
     cur.pop("delay", None)
     bot.timer_next.pop((ch, cur["id"]), None)
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def s_timer_del(request):
@@ -7339,7 +7443,7 @@ def make_web_app(bot):
     timers = store.timers(ch)
     timers[:] = [x for x in timers if x["id"] != tid]
     bot.timer_next.pop((ch, tid), None)
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def s_timer_reset(request):
@@ -7350,7 +7454,7 @@ def make_web_app(bot):
     store.data["timers"][ch] = default_timers()
     for k in [k for k in bot.timer_next if k[0] == ch]:
       del bot.timer_next[k]
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def s_auto_save(request):
@@ -7373,7 +7477,7 @@ def make_web_app(bot):
       cfg.pop(key, None)
     else:
       cfg[key] = {"on": on, "text": text}
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   # ---------- طلبات الأغاني ----------
@@ -7394,7 +7498,7 @@ def make_web_app(bot):
           return jerr("صار خطأ")
     if b.get("perm") in ("everyone", "sub", "vip", "mod"):
       s["perm"] = b["perm"]
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def s_sr_skip(request):
@@ -7525,7 +7629,7 @@ def make_web_app(bot):
         f["timeout"] = max(0, min(600, int(b["timeout"])))
       except (TypeError, ValueError):
         return jerr("صار خطأ")
-    await store.save()
+    store.save_quick()
     bot.audit(ch, a[0], "عدّل إعدادات الحماية")
     return web.json_response({"ok": True})
 
@@ -7539,6 +7643,10 @@ def make_web_app(bot):
     cfg = bot.alerts_cfg(ch)
     if "raid_so" in b:
       cfg["raid_so"] = bool(b["raid_so"])
+    if "so_perm" in b:
+      if b["so_perm"] not in PERMS:
+        return jerr("صار خطأ")
+      cfg["so_perm"] = b["so_perm"]
     if "bits_min" in b:
       try:
         cfg["bits_min"] = max(1, min(100000, int(b["bits_min"])))
@@ -7555,7 +7663,7 @@ def make_web_app(bot):
       if text in (ar, en):
         text = ""
       cfg[key] = {"on": bool(b.get("on", True)), "text": text}
-    await store.save()
+    store.save_quick()
     bot.audit(ch, a[0], "عدّل تنبيهات الشات")
     return web.json_response({"ok": True})
 
@@ -7575,39 +7683,6 @@ def make_web_app(bot):
     text = c.get("text") or (en if bot.lang_of(ch) == "en" else ar)
     text = re.sub(r"\$\((\w+)\)", lambda m: str(sample.get(m.group(1), m.group(0))), text)
     await bot.send_chat(ch, "🧪 " + text)
-    return web.json_response({"ok": True})
-
-  # ---------- [جديد] الاقتباسات (المودات يقدرون) ----------
-  async def s_quote_add(request):
-    a, err = access(request)
-    if err:
-      return err
-    _, ch, _ = a
-    text = str((await jbody(request)).get("text", "")).strip()[:300]
-    if not text:
-      return jerr("اكتب الاقتباس")
-    qs = store.data["quotes"].setdefault(ch, [])
-    if len(qs) >= MAX_QUOTES:
-      return jerr(f"وصلت الحد الأقصى ({MAX_QUOTES})")
-    n = max((x["n"] for x in qs), default=0) + 1
-    qs.append({"n": n, "text": text, "by": a[0], "game": "", "ts": int(time.time())})
-    await store.save()
-    bot.audit(ch, a[0], f"أضاف اقتباس #{n}")
-    return web.json_response({"ok": True})
-
-  async def s_quote_del(request):
-    a, err = access(request)
-    if err:
-      return err
-    _, ch, _ = a
-    try:
-      n = int(request.match_info["n"])
-    except ValueError:
-      return jerr("صار خطأ")
-    qs = store.data["quotes"].setdefault(ch, [])
-    qs[:] = [x for x in qs if x["n"] != n]
-    await store.save()
-    bot.audit(ch, a[0], f"حذف اقتباس #{n}")
     return web.json_response({"ok": True})
 
   # ---------- [جديد] الستريك والديسكورد ----------
@@ -7637,7 +7712,7 @@ def make_web_app(bot):
           cfg[k] = max(0, min(hi, int(b[k])))
         except (TypeError, ValueError):
           return jerr("صار خطأ")
-    await store.save()
+    store.save_quick()
     bot.audit(ch, a[0], "عدّل إعدادات المستويات")
     return web.json_response({"ok": True})
 
@@ -7670,7 +7745,7 @@ def make_web_app(bot):
       if not ok:
         return jerr("ما قدرت أرسل للديسكورد، تأكد من الرابط")
       return web.json_response({"ok": True})
-    await store.save()
+    store.save_quick()
     bot.audit(ch, a[0], "عدّل إعدادات الستريك")
     return web.json_response({"ok": True})
 
@@ -7722,7 +7797,7 @@ def make_web_app(bot):
       if target not in store.data["channels"]:
         return dmsg(f"القناة {target} ما فيها ماجيك بوت. فعّله أول من {SITE_URL}/", eph=True)
       store.data["discord_guilds"][gid] = target
-      await store.save()
+      store.save_quick()
       bot.audit(target, "discord", f"ربط سيرفر ديسكورد ({gid})")
       return dmsg(f"✅ تم ربط السيرفر بقناة **{target}**. المتابعين يكتبون /link مرة وحدة وبعدها /streak")
 
@@ -7759,13 +7834,13 @@ def make_web_app(bot):
         return dmsg("اربط حسابك أول: اكتب /link، أو اكتب اسمك: /rank user:اسمك", eph=True)
       r = store.data["xp"].get(ch, {}).get(who)
       if not r:
-        return dmsg(f"**{who}** ما عنده مستوى في قناة {ch} للحين. يجمع XP لما يكتب ويتابع البث ⭐")
+        return dmsg(f"**{who}** ما عنده مستوى في قناة {ch} للحين. يجمع إكس بي لما يكتب ويتابع البث ⭐")
       lv, cur, need = xp_level(r.get("x", 0))
       fill = round(12 * cur / need) if need else 0
       bar = "🟧" * fill + "⬛" * (12 - fill)
       sc = bot.streak_eff(ch, store.data["streaks"].get(ch, {}).get(who), bot.cached_live_sid(ch))
       emb = {"title": f"⭐ {who} • مستوى {lv}", "color": color,
-             "description": f"{bar}\n`{cur} / {need} XP` باقي {need - cur} للمستوى {lv + 1}",
+             "description": f"{bar}\n`{cur} / {need}` إكس بي • باقي {need - cur} للمستوى {lv + 1}",
              "fields": [{"name": "الترتيب", "value": f"#{bot.xp_rank(ch, who)}", "inline": True},
                         {"name": "ساعات المتابعة", "value": fmt_watch(r.get("w", 0)), "inline": True},
                         {"name": "الستريك", "value": f"🔥 {sc}", "inline": True},
@@ -7819,7 +7894,7 @@ def make_web_app(bot):
         return jerr("صار خطأ")
     if "extra" in b:
       cfg["extra"] = str(b["extra"]).strip()[:300]
-    await store.save()
+    store.save_quick()
     return web.json_response({"ok": True})
 
   async def s_botacct_reset(request):
@@ -7870,6 +7945,8 @@ def make_web_app(bot):
   r.add_get("/auth/login", auth_login)
   r.add_get("/c/{channel}", c_page)
   r.add_get("/pub/{channel}", pub)
+  r.add_get("/lb/{channel}", lb_page)
+  r.add_get("/lb/api/{channel}", lb_api)
   r.add_get("/auth/streamer", auth_streamer)
   r.add_get("/auth/connect", auth_connect)
   r.add_get("/auth/bot", auth_bot)
@@ -7902,8 +7979,6 @@ def make_web_app(bot):
   r.add_post("/s/api/channel/{channel}/botacct/reset", s_botacct_reset)
   r.add_post("/s/api/channel/{channel}/alerts", s_alerts)
   r.add_post("/s/api/channel/{channel}/alerts/test", s_alert_test)
-  r.add_post("/s/api/channel/{channel}/quotes", s_quote_add)
-  r.add_delete("/s/api/channel/{channel}/quotes/{n}", s_quote_del)
   r.add_post("/s/api/channel/{channel}/streak", s_streak)
   r.add_post("/s/api/channel/{channel}/levels", s_levels)
   r.add_post("/discord/interactions", discord_interactions)
@@ -7949,7 +8024,6 @@ ALERT_DEFAULTS = {
              "$(user) is raiding with $(viewers) viewers, welcome! 🎉", "$(user) $(viewers)"),
     "cheer": ("بتس", "شكراً $(user) على $(bits) بتس 💎", "Thanks $(user) for the $(bits) bits 💎", "$(user) $(bits)"),
 }
-MAX_QUOTES = 500
 _ARGVAR_RE = re.compile(
     r"\$\((query|[1-9]|random(?:\s+-?\d+\s*-\s*-?\d+)?|pick\s+[^)]+|time(?:\s+[A-Za-z_/+\-0-9]+)?)\)")
 _TASHKEEL_RE = re.compile(r"[ً-ٰٟـ]")
@@ -8410,6 +8484,18 @@ class Bot:
   def run(self):
     loop = asyncio.get_event_loop()
     loop.create_task(self.start())
+
+    async def _final_save():  # [جديد] Render يطفي البوت مع كل تحديث: نحفظ قبل ما يطفي
+      try:
+        await asyncio.wait_for(self.store.save(), 20)
+      except Exception as e:
+        print(f"تعذر الحفظ قبل الإطفاء: {e}")
+      loop.stop()
+    try:
+      import signal
+      loop.add_signal_handler(signal.SIGTERM, lambda: loop.create_task(_final_save()))
+    except Exception:
+      pass
     loop.run_forever()
 
   async def start(self):
@@ -9643,6 +9729,7 @@ class Bot:
     d = self.store.data["alerts"].setdefault(ch, {})
     d.setdefault("raid_so", True)
     d.setdefault("bits_min", 1)
+    d.setdefault("so_perm", "mod")  # [جديد] مين يقدر يستخدم !so
     return d
 
   def alerts_view(self, ch):
@@ -9656,6 +9743,7 @@ class Bot:
                   "text": c.get("text") or default, "custom": bool(c.get("text")),
                   "on": c.get("on", k != "follow") is not False})
     return {"list": out, "raid_so": bool(cfg["raid_so"]), "bits_min": int(cfg["bits_min"]),
+            "so_perm": cfg.get("so_perm", "mod"),
             "follow_ready": ch in self.store.data["tokens"]}
 
   async def send_alert(self, ch, key, vals):
@@ -9756,7 +9844,9 @@ class Bot:
 
     # ---------- [جديد] !so اسم_الستريمر: شاوت آوت (للمودات) ----------
     if cmd in ("so", "shoutout"):
-      if not is_mod:
+      if level < PERMS.get(self.alerts_cfg(ch).get("so_perm", "mod"), PERMS["mod"]):
+        return True
+      if cooldown("so", 30):
         return True
       target = arg.split()[0].lstrip("@").lower() if arg else ""
       if not re.fullmatch(r"\w{2,25}", target):
@@ -9823,6 +9913,14 @@ class Bot:
           await reply(f"أعلى ستريك: {line}{link}", f"Top streaks: {line}{link}")
         return True
 
+    # ---------- [جديد] !leaderboard: رابط صفحة المتصدرين ----------
+    if cmd in ("leaderboard", "lb"):
+      if cooldown("leaderboard", 15):
+        return True
+      url = f"{SITE_URL}/lb/{ch}" if SITE_URL else f"/lb/{ch}"
+      await reply(f"🏆 المتصدرين (الإكس بي، ساعات المتابعة، الستريك): {url}", f"🏆 Leaderboard (XP, watch time, streaks): {url}")
+      return True
+
     # ---------- [جديد] المستويات وساعات المتابعة ----------
     if cmd in ("rank", "level", "watchtime", "top"):
       if not self.xp_cfg(ch)["on"]:
@@ -9836,13 +9934,13 @@ class Bot:
         else:
           lv_ar = " • ".join(f"{i + 1}) {x['user']} م{x['lv']}" for i, x in enumerate(top))
           lv_en = " • ".join(f"{i + 1}) {x['user']} Lv{x['lv']}" for i, x in enumerate(top))
-          link = f" | {SITE_URL}/c/{ch}" if SITE_URL else ""
+          link = f" | {SITE_URL}/lb/{ch}" if SITE_URL else ""
           await reply(f"🏆 الأعلى مستوى: {lv_ar}{link}", f"🏆 Top levels: {lv_en}{link}")
         return True
       who = arg.split()[0].lstrip("@").lower() if arg else user
       r = self.store.data["xp"].get(ch, {}).get(who)
       if not r:
-        await reply(f"{'ما عندك' if who == user else who + ' ما عنده'} مستوى للحين، اكتب بالشات وتابع البث وتجمع XP ⭐",
+        await reply(f"{'ما عندك' if who == user else who + ' ما عنده'} مستوى للحين، اكتب بالشات وتابع البث وتجمع إكس بي ⭐",
                     f"{'You have' if who == user else who + ' has'} no level yet, chat and watch streams to earn XP ⭐")
         return True
       if cmd == "watchtime":
@@ -9854,65 +9952,9 @@ class Bot:
       rk = self.xp_rank(ch, who)
       sc = self.streak_eff(ch, self.store.data["streaks"].get(ch, {}).get(who), self.cached_live_sid(ch))
       name = "" if who == user else f"{who}: "
-      await reply(f"{name}⭐ مستوى {lv} ({cur}/{need} XP) | ⏱ {fmt_watch(r.get('w', 0))} متابعة | 🔥 ستريك {sc} | الترتيب #{rk}",
+      await reply(f"{name}⭐ مستوى {lv} ({cur}/{need} إكس بي) | ⏱ {fmt_watch(r.get('w', 0))} متابعة | 🔥 ستريك {sc} | الترتيب #{rk}",
                   f"{name}⭐ Level {lv} ({cur}/{need} XP) | ⏱ {fmt_watch(r.get('w', 0), True)} watched | 🔥 streak {sc} | rank #{rk}")
       return True
-
-    # ---------- الاقتباسات ----------
-    if cmd in ("quote", "addquote", "delquote"):
-      qs = self.store.data["quotes"].setdefault(ch, [])
-      if cmd == "quote":
-        if cooldown("quote", 10):
-          return True
-        if not qs:
-          await reply("ما فيه اقتباسات للحين، المودات يضيفون بـ !addquote", "No quotes yet, mods add them with !addquote")
-          return True
-        if arg.isdigit():
-          q = next((x for x in qs if x["n"] == int(arg)), None)
-        elif arg:
-          hits = [x for x in qs if arg.lower() in x["text"].lower()]
-          q = random.choice(hits) if hits else None
-        else:
-          q = random.choice(qs)
-        if not q:
-          await reply("ما لقيت الاقتباس", "Quote not found")
-        else:
-          game = f" [{q['game']}]" if q.get("game") else ""
-          await message.channel.send(f"#{q['n']}: \"{q['text']}\"{game}"[:490])
-        return True
-      if not is_mod:
-        return True
-      if cmd == "addquote":
-        if not arg:
-          await reply("الصيغة: !addquote النص", "Usage: !addquote text")
-          return True
-        if len(qs) >= MAX_QUOTES:
-          await reply(f"وصلت الحد الأقصى ({MAX_QUOTES})", f"Quote limit reached ({MAX_QUOTES})")
-          return True
-        game = ""
-        try:
-          game, _ = await self.twitch.channel_info(ch)
-        except Exception:
-          pass
-        n = (max((x["n"] for x in qs), default=0)) + 1
-        qs.append({"n": n, "text": arg[:300], "by": user, "game": game or "", "ts": int(now)})
-        await self.store.save()
-        self.audit(ch, user, f"أضاف اقتباس #{n}")
-        await reply(f"تمت إضافة الاقتباس #{n} ✅", f"Quote #{n} added")
-        return True
-      if cmd == "delquote":
-        if not arg.isdigit():
-          await reply("الصيغة: !delquote رقم", "Usage: !delquote number")
-          return True
-        before = len(qs)
-        qs[:] = [x for x in qs if x["n"] != int(arg)]
-        if len(qs) != before:
-          await self.store.save()
-          self.audit(ch, user, f"حذف اقتباس #{arg}")
-          await reply(f"تم حذف الاقتباس #{arg} ✅", f"Quote #{arg} deleted")
-        else:
-          await reply("ما لقيت الاقتباس", "Quote not found")
-        return True
 
     # ---------- التصويت (Twitch Polls) ----------
     if cmd in ("poll", "endpoll"):
@@ -10145,6 +10187,10 @@ class Bot:
     r = self.xp_rec(ch, user)
     before = xp_level(r["x"])[0]
     r["x"] += int(amt)
+    mk = time.strftime("%Y-%m", time.gmtime(time.time() + STREAK_TZ_OFFSET))
+    if r.get("mk") != mk:
+      r["mk"], r["mx"] = mk, 0
+    r["mx"] += int(amt)
     after = xp_level(r["x"])[0]
     if announce and after > before and self.xp_cfg(ch)["announce"]:
       en = self.lang_of(ch) == "en"
@@ -10188,7 +10234,12 @@ class Bot:
           for u in viewers:
             if self.xp_skip(ch, u):
               continue
-            self.xp_rec(ch, u)["w"] += XP_TICK // 60
+            rr = self.xp_rec(ch, u)
+            rr["w"] += XP_TICK // 60
+            yk = time.strftime("%Y", time.gmtime(time.time() + STREAK_TZ_OFFSET))
+            if rr.get("yk") != yk:
+              rr["yk"], rr["yw"] = yk, 0
+            rr["yw"] += XP_TICK // 60
             up = await self.xp_add(ch, u, cfg["watch"], announce=shouts < 3)
             shouts += 1 if up else 0
           self.store.save_soon(120)
@@ -10216,6 +10267,32 @@ class Bot:
       lv, cur, need = xp_level(r.get("x", 0))
       out.append({"user": u, "lv": lv, "x": r.get("x", 0), "cur": cur, "need": need, "w": r.get("w", 0),
                   "m": r.get("m", 0), "s": self.streak_eff(ch, sk.get(u), live)})
+    return out
+
+  def lb_data(self, ch):
+    """[جديد] بيانات صفحة المتصدرين العامة."""
+    now = time.gmtime(time.time() + STREAK_TZ_OFFSET)
+    mk, yk = time.strftime("%Y-%m", now), time.strftime("%Y", now)
+    meta = self.streak_meta(ch)
+    live = self.cached_live_sid(ch)
+    sk = self.store.data["streaks"].get(ch, {})
+    s_on = self.streak_cfg(ch)["on"]
+
+    def flags(u):
+      rec = sk.get(u)
+      eff = self.streak_eff(ch, rec, live) if s_on else 0
+      return {"f": bool(eff and rec.get("last") == meta["sid"]), "h": bool(eff and rec.get("last") != meta["sid"])}
+    out = {"name": ch, "lang": self.lang_of(ch), "x": None, "w": None, "s": None}
+    if self.xp_cfg(ch)["on"]:
+      d = self.store.data["xp"].get(ch, {})
+      rx = sorted(d.items(), key=lambda kv: -kv[1].get("x", 0))[:100]
+      out["x"] = [dict(u=u, x=r.get("x", 0), lv=xp_level(r.get("x", 0))[0],
+                       mx=r.get("mx", 0) if r.get("mk") == mk else 0, **flags(u)) for u, r in rx if r.get("x", 0) > 0]
+      rw = sorted(d.items(), key=lambda kv: -kv[1].get("w", 0))[:100]
+      out["w"] = [dict(u=u, w=r.get("w", 0), yw=r.get("yw", 0) if r.get("yk") == yk else 0, **flags(u))
+                  for u, r in rw if r.get("w", 0) > 0]
+    if s_on:
+      out["s"] = [dict(u=x["user"], s=x["streak"], b=x["best"], **flags(x["user"])) for x in self.streak_top(ch, 100)]
     return out
 
   def xp_view(self, ch, own):
