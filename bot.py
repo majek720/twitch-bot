@@ -4786,7 +4786,7 @@ main{flex:1;min-width:0}
         <section class="pg own" id="p-streak" hidden>
           <div class="panel">
             <h3>الستريك</h3>
-            <p class="mut">البوت يحسب كم بث ورا بعض حضر كل مشاهد (كتب بالشات). إذا فات بث كامل ينكسر ستريكه ويبدأ من جديد.</p>
+            <p class="mut">البوت يحسب كم يوم بث ورا بعض حضر كل مشاهد (كتب بالشات). لو بثيت أكثر من مرة في نفس اليوم يكفي يحضر وحدة منها، وإذا فات يوم بث كامل ينكسر ستريكه.</p>
             <div class="tool" style="margin:12px 0 6px">
               <button class="skchip" data-sk="on">مفعّل</button>
               <button class="skchip" data-sk="off">متوقف</button>
@@ -5315,7 +5315,7 @@ $("#sk-save").onclick=()=>act(()=>api("POST",base()+"/streak",{announce:$("#sk-a
 $("#sk-hooksave").onclick=()=>act(async()=>{await api("POST",base()+"/streak",{webhook:$("#sk-hook").value});$("#sk-hook").value=""},"تم الحفظ");
 $("#sk-hooktest").onclick=()=>act(()=>api("POST",base()+"/streak",{test:true}),"تم الإرسال");
 $("#dc-copy").onclick=()=>copyText($("#dc-endpoint").value);
-Object.assign(EN,{"الستريك والديسكورد":"Streaks & Discord","الستريك":"Streaks","البوت يحسب كم بث ورا بعض حضر كل مشاهد (كتب بالشات). إذا فات بث كامل ينكسر ستريكه ويبدأ من جديد.":"The bot counts how many streams in a row each viewer attended (chatted in). Missing a full stream resets the streak.",
+Object.assign(EN,{"الستريك والديسكورد":"Streaks & Discord","الستريك":"Streaks","البوت يحسب كم يوم بث ورا بعض حضر كل مشاهد (كتب بالشات). لو بثيت أكثر من مرة في نفس اليوم يكفي يحضر وحدة منها، وإذا فات يوم بث كامل ينكسر ستريكه.":"The bot counts how many stream days in a row each viewer attends (chats). If you stream more than once a day, attending one is enough. Missing a whole stream day resets the streak.",
 "البوت يحتفل بالشات لما أحد يوصل رقم جديد (3، 5، 10، 25، 50، 100...)":"Celebrate in chat when someone hits a milestone (3, 5, 10, 25, 50, 100...)","كوماندات الشات: !streak ستريكك • !topstreak الأعلى":"Chat commands: !streak your streak • !topstreak top",
 "أعلى ستريك الحين":"Top streaks now","ما فيه ستريك للحين":"No streaks yet","الديسكورد":"Discord","أضف البوت لسيرفرك":"Add the bot to your server",
 "اضغط الزر واختر سيرفرك":"Press the button and pick your server","في السيرفر اكتب:":"In the server type:","كل متابع يكتب /link مرة وحدة ويحط الرمز في شات تويتش":"Each viewer types /link once and posts the code in Twitch chat","بعدها /streak يطلع ستريكه، و /top يطلع الأعلى":"Then /streak shows their streak and /top shows the leaders",
@@ -7869,6 +7869,8 @@ def expand_args(text, query, lang="ar"):
 DISCORD_APP_ID = os.environ.get("DISCORD_APP_ID", "").strip()
 DISCORD_PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY", "").strip()
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
+STREAK_TZ_OFFSET = 3 * 3600  # [جديد] يوم الستريك بتوقيت السعودية
+STREAK_MERGE_GAP = 3 * 3600  # [جديد] انقطاع أقل من 3 ساعات = نفس البث
 STREAK_MILESTONES = {3, 5, 7, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 300, 365, 500}
 STREAK_DEFAULT = {"on": True, "announce": True, "webhook": ""}
 MAX_STREAK_USERS = 30000
@@ -9732,18 +9734,42 @@ class Bot:
     return d
 
   async def current_stream_id(self, ch):
-    """رقم البث الحالي (أو None لو أوفلاين)، مخزّن دقيقة."""
+    """[جديد] رقم «يوم البث» الحالي (أو None لو أوفلاين)، مخزّن دقيقة.
+    الستريك يحسب باليوم: كل البثوت في نفس اليوم (بتوقيت السعودية) تنحسب بث واحد،
+    ولو البث طاح ورجع خلال 3 ساعات ما يعتبر بث جديد حتى لو عدّى منتصف الليل."""
     c = self.stream_ids.get(ch)
     if c and time.time() - c[0] < 60:
       return c[1]
-    sid = None
+    si = None
     try:
       si = await self.twitch.stream_info(ch)
-      sid = (si or {}).get("id") or None
     except Exception:
       pass
-    self.stream_ids[ch] = (time.time(), sid)
-    return sid
+    raw = (si or {}).get("id") or None
+    key = None
+    if raw:
+      now = time.time()
+      try:
+        st = datetime.fromisoformat(str(si.get("started_at", "")).replace("Z", "+00:00")).timestamp()
+      except Exception:
+        st = now
+      key = "d:" + time.strftime("%Y-%m-%d", time.gmtime(st + STREAK_TZ_OFFSET))
+      meta = self.streak_meta(ch)
+      if meta["sid"] != key:
+        if meta["sid"] == raw:
+          # ترحيل من النظام القديم (بالبث) والبث نفسه شغال: نفس البث، نغيّر اسمه بس
+          for r in self.store.data["streaks"].get(ch, {}).values():
+            if r.get("last") == raw:
+              r["last"] = key
+          meta["sid"] = key
+        elif meta["sid"] and now - meta.get("seen", 0) < STREAK_MERGE_GAP:
+          key = meta["sid"]  # البث رجع بعد انقطاع قصير: نفس اليوم
+        else:
+          meta["prev"], meta["sid"] = meta["sid"], key
+      meta["seen"] = now
+      self.store.save_soon(60)
+    self.stream_ids[ch] = (time.time(), key)
+    return key
 
   def streak_meta(self, ch):
     return self.store.data["streak_meta"].setdefault(ch, {"sid": "", "prev": ""})
