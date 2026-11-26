@@ -4799,6 +4799,11 @@ main{flex:1;min-width:0}
             <div class="panel">
               <h3>أعلى ستريك الحين</h3>
               <div id="sklist"></div>
+              <button class="btn sm line" id="sk-brk" style="margin-top:12px">اللي طار ستريكهم</button>
+              <div id="skbrk" hidden style="margin-top:12px">
+                <p class="hint" style="margin:0 0 8px">آخر 30 يوم. اضغط «إرجاع» ويرجع ستريكه كأنه ما فوّت شي.</p>
+                <div id="skbrklist"></div>
+              </div>
             </div>
             <div class="panel" id="dcpanel">
               <h3>الديسكورد</h3>
@@ -5287,7 +5292,7 @@ function renderSO(){$("#so-raid").checked=!!((CH.alerts||{}).raid_so)}
 $("#so-raid").onchange=()=>act(()=>api("POST",base()+"/alerts",{raid_so:$("#so-raid").checked}),"تم الحفظ");
 Object.assign(EN,{"الشاوت آوت":"Shoutouts","المود يكتب في الشات":"A mod types in chat","، والبوت يرسل رابط قناته وآخر لعبة لعبها، ويطلع كليب من قناته على بثك.":", and the bot posts their channel link and last game, and plays one of their clips on your stream.",
 "شاوت آوت تلقائي لأي أحد يسوي ريد على قناتك":"Automatically shout out anyone who raids your channel","نفس الشاوت آوت ينرسل لحاله وقت الريد، ومعه الكليب.":"The same shoutout is sent automatically on raids, clip included.",
-"🎬 الكليب على البث (OBS)":"🎬 Clip on stream (OBS)","أقل عدد بتس للتنبيه":"Minimum bits for the alert","الشاوت آوت التلقائي وقت الريد صار في قسم «الشاوت آوت».":"The automatic raid shoutout is now in the Shoutouts section.","!so اسم_الستريمر":"!so streamer_name","زر «تجربة» يشغّل كليب عشوائي من قناتك. الكليب يظهر بس إذا الـ Overlay مفتوح في OBS.":"The Test button plays a random clip from your channel. It only shows if the overlay is open in OBS.","عشان يطلع الكليب على بثك، أضف هذا الرابط في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.":"To show the clip on stream, add this link in OBS: Sources, then Browser Source, size 1920×1080. Don't share it with anyone."});
+"🎬 الكليب على البث (OBS)":"🎬 Clip on stream (OBS)","اللي طار ستريكهم":"Broken streaks","آخر 30 يوم. اضغط «إرجاع» ويرجع ستريكه كأنه ما فوّت شي.":"Last 30 days. Press Restore to give the streak back as if they never missed a day.","ما أحد طار ستريكه":"No broken streaks","إرجاع":"Restore","تم إرجاع الستريك":"Streak restored","ما فيه ستريك يرجع لهذا المشاهد":"There's no streak to restore for this viewer","أقل عدد بتس للتنبيه":"Minimum bits for the alert","الشاوت آوت التلقائي وقت الريد صار في قسم «الشاوت آوت».":"The automatic raid shoutout is now in the Shoutouts section.","!so اسم_الستريمر":"!so streamer_name","زر «تجربة» يشغّل كليب عشوائي من قناتك. الكليب يظهر بس إذا الـ Overlay مفتوح في OBS.":"The Test button plays a random clip from your channel. It only shows if the overlay is open in OBS.","عشان يطلع الكليب على بثك، أضف هذا الرابط في OBS: Sources ثم Browser Source، والمقاس 1920×1080. لا تشاركه مع أحد.":"To show the clip on stream, add this link in OBS: Sources, then Browser Source, size 1920×1080. Don't share it with anyone."});
 for(const k in EN)AR[EN[k]]=k;
 /* ---------- [جديد] الستريك والديسكورد ---------- */
 function renderStreak(){
@@ -5304,6 +5309,7 @@ function renderStreak(){
     d.querySelector("em").textContent="🔥 "+x.streak+(x.best>x.streak?(LANG==="en"?" (best "+x.best+")":" (أعلى "+x.best+")"):"");
     box.appendChild(d);
   });
+  renderBroken();
   $("#dc-ready").hidden=!dc.ready;$("#dc-off").hidden=!!dc.ready;
   $("#dc-state").textContent=dc.ready?(dc.servers?t("مربوط بعدد سيرفرات:")+" "+dc.servers:t("جاهز، باقي تضيفه لسيرفرك")):t("ربط الديسكورد مو مفعّل من صاحب البوت للحين");
   if(dc.invite)$("#dc-invite").href=dc.invite;
@@ -5311,6 +5317,21 @@ function renderStreak(){
   $("#dc-endpoint").value=dc.endpoint||"";
 }
 document.querySelectorAll(".skchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/streak",{on:b.dataset.sk==="on"}),"تم الحفظ"));
+$("#sk-brk").onclick=()=>{const b=$("#skbrk");b.hidden=!b.hidden;renderBroken()};
+function renderBroken(){
+  const box=$("#skbrklist");if(!box)return;box.innerHTML="";
+  const L=((CH.streak||{}).broken)||[];
+  if(!L.length){box.innerHTML='<p class="empty">'+t("ما أحد طار ستريكه")+'</p>';return}
+  L.forEach(x=>{
+    const d=document.createElement("div");d.className="lb";d.style.gridTemplateColumns="1fr auto auto";
+    d.innerHTML='<b dir="ltr" data-nt></b><em data-nt></em><button class="btn sm" data-nt></button>';
+    d.querySelector("b").textContent=x.user;
+    d.querySelector("em").textContent=(LANG==="en"?"was ":"كان ")+"🔥 "+x.lost+(x.now?(LANG==="en"?" (now "+x.now+")":" (الحين "+x.now+")"):"");
+    const btn=d.querySelector("button");btn.textContent=t("إرجاع");
+    btn.onclick=()=>act(()=>api("POST",base()+"/streak",{restore:x.user}),"تم إرجاع الستريك");
+    box.appendChild(d);
+  });
+}
 $("#sk-save").onclick=()=>act(()=>api("POST",base()+"/streak",{announce:$("#sk-ann").checked}),"تم الحفظ");
 $("#sk-hooksave").onclick=()=>act(async()=>{await api("POST",base()+"/streak",{webhook:$("#sk-hook").value});$("#sk-hook").value=""},"تم الحفظ");
 $("#sk-hooktest").onclick=()=>act(()=>api("POST",base()+"/streak",{test:true}),"تم الإرسال");
@@ -7531,6 +7552,13 @@ def make_web_app(bot):
       if hook and not DISCORD_WEBHOOK_RE.fullmatch(hook):
         return jerr("رابط الويب هوك غير صحيح (لازم يبدأ بـ https://discord.com/api/webhooks/)")
       cfg["webhook"] = hook
+    if "restore" in b:
+      who = str(b.get("restore") or "").strip().lstrip("@").lower()
+      c = bot.streak_restore(ch, who) if who else None
+      if not c:
+        return jerr("ما فيه ستريك يرجع لهذا المشاهد")
+      bot.audit(ch, a[0], f"رجّع ستريك {who} ({c})")
+      return web.json_response({"ok": True, "streak": c})
     if b.get("test"):
       if not cfg.get("webhook"):
         return jerr("حط رابط الويب هوك أول")
@@ -9807,8 +9835,14 @@ class Bot:
         return
       if rec is None:
         rec = d[user] = {"c": 0, "b": 0, "last": "", "n": 0}
-      rec["c"] = rec["c"] + 1 if (rec["last"] and rec["last"] == meta["prev"]) else 1
+      if rec["last"] and rec["last"] == meta["prev"]:
+        rec["c"] += 1
+      else:
+        if rec.get("c", 0) >= 2:  # [جديد] نحفظ الستريك اللي طار عشان الستريمر يقدر يرجعه
+          rec["lost"], rec["lost_at"] = rec["c"], int(time.time())
+        rec["c"] = 1
       rec["last"] = sid
+      rec["t"] = int(time.time())
       rec["n"] = rec.get("n", 0) + 1
       rec["b"] = max(rec.get("b", 0), rec["c"])
       if len(d) > MAX_STREAK_USERS:
@@ -9833,11 +9867,49 @@ class Bot:
     rows.sort(key=lambda x: (-x[1], -x[2]))
     return [{"user": u, "streak": c, "best": b} for u, c, b in rows[:n]]
 
+  def streak_broken(self, ch, n=50):
+    """[جديد] المشاهدين اللي طار ستريكهم (خلال 30 يوم) وممكن الستريمر يرجعه."""
+    d = self.store.data["streaks"].get(ch, {})
+    live = self.cached_live_sid(ch)
+    now = time.time()
+    out = []
+    for u, r in d.items():
+      eff = self.streak_eff(ch, r, live)
+      if eff == 0 and r.get("c", 0) >= 2 and now - r.get("t", now) < 30 * 86400:
+        out.append({"user": u, "lost": r["c"], "now": 0})
+      elif r.get("lost", 0) >= 2 and now - r.get("lost_at", 0) < 30 * 86400:
+        out.append({"user": u, "lost": r["lost"], "now": eff})
+    out.sort(key=lambda x: -x["lost"])
+    return out[:n]
+
+  def streak_restore(self, ch, user):
+    """[جديد] يرجع الستريك اللي طار. يرجع الستريك الجديد أو None."""
+    rec = self.store.data["streaks"].get(ch, {}).get(user)
+    if not rec:
+      return None
+    live = self.cached_live_sid(ch)
+    meta = self.streak_meta(ch)
+    eff = self.streak_eff(ch, rec, live)
+    if eff == 0 and rec.get("c", 0) >= 2:
+      # ما رجع للحين: نخليه كأنه حضر آخر يوم بث
+      rec["last"] = meta["prev"] if (live and live == meta["sid"]) else meta["sid"]
+    elif rec.get("lost", 0) >= 2:
+      # رجع وبدأ من جديد: نجمع اللي طار مع الجديد
+      rec["c"] = rec["lost"] + rec.get("c", 0)
+    else:
+      return None
+    rec.pop("lost", None)
+    rec.pop("lost_at", None)
+    rec["b"] = max(rec.get("b", 0), rec["c"])
+    self.store.save_soon(5)
+    return self.streak_eff(ch, rec, live) or rec["c"]
+
   def streak_view(self, ch, own):
     cfg = self.streak_cfg(ch)
     out = {"on": bool(cfg["on"]), "top": self.streak_top(ch, 50)}
     if own:
-      out.update({"announce": bool(cfg["announce"]), "webhook_set": bool(cfg.get("webhook"))})
+      out.update({"announce": bool(cfg["announce"]), "webhook_set": bool(cfg.get("webhook")),
+                  "broken": self.streak_broken(ch)})
     return out
 
   def new_link_code(self, discord_id):
