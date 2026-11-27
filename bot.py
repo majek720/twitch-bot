@@ -4211,7 +4211,7 @@ CMD_FORM = r"""
     <option value="game">🎮 اختصار لعبة (يغيّر لعبة البث)</option>
     <option value="clip">🎬 كليب (يسوي كليب للبث)</option>
   </select>
-  <input id="cname" dir="ltr" placeholder="الكوماند مثل: !discord أو سلام أو @avalx">
+  <input id="cname" dir="auto">
   <input id="calias" type="hidden">
   <input id="cgame" dir="ltr" placeholder="اسم اللعبة مثل: Fortnite" hidden>
   <p class="hint" id="gamehint" hidden>لازم الستريمر يربط تويتش من تبويب الإعدادات في موقع الستريمر عشان تغيير اللعبة يشتغل.</p>
