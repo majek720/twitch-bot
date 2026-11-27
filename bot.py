@@ -5624,7 +5624,7 @@ function renderCmds(){
     if(SEL){
       const cb=document.createElement("input");cb.type="checkbox";cb.className="selcb";cb.checked=SEL.has(n);
       cb.onchange=()=>{cb.checked?SEL.add(n):SEL.delete(n);d.classList.toggle("picked",cb.checked);selInfo()};
-      d.classList.toggle("picked",cb.checked);d.prepend(cb);
+      d.dataset.n=n;d.classList.toggle("picked",cb.checked);d.prepend(cb);
       d.onclick=e=>{if(e.target.closest("button,input"))return;cb.checked=!cb.checked;cb.onchange()};
     }
     box.appendChild(d);
@@ -6298,7 +6298,7 @@ function selInfo(){
 function selMode(on){SEL=on?new Set():null;$("#selbar").hidden=!on;$("#selbtn").classList.toggle("on",on);renderCmds();selInfo()}
 $("#selbtn").onclick=()=>selMode(!SEL);
 $("#selx").onclick=()=>selMode(false);
-$("#selall").onchange=e=>{selVisible().forEach(x=>{x.checked=e.target.checked;x.onchange()})};
+$("#selall").onchange=e=>{const on=e.target.checked;selVisible().forEach(x=>{x.checked=on;on?SEL.add(x.closest(".cmd").dataset.n):SEL.delete(x.closest(".cmd").dataset.n);x.closest(".cmd").classList.toggle("picked",on)});selInfo()};
 $("#seldel").onclick=()=>{
   const names=[...SEL];if(!names.length)return;
   if(!ask("تحذف {n} كوماند؟ ما تقدر ترجعها",names.length))return;
