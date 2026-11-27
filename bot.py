@@ -2868,12 +2868,13 @@ def nb_convert(cmd):
     msg = "$(touser) متابع القناة من $(followage)"
   if masked:
     # «%[eval]» غالباً نسبة عشوائية (مثل كوماندات «كم نسبة...»)
-    msg = re.sub(r"\[eval\]\s*%|%\s*\[eval\]", "$(random 0-100)%", msg, flags=re.I)
+    msg = re.sub(r"\[eval\]\s*%|%\s*\[eval\]", "$(random 1-100)%", msg, flags=re.I)
     # الباقي ما نقدر نعرف وش فيه (نايت بوت يخفيه): ينشال من الرد
     msg = re.sub(r"\[(?:eval|urlfetch|customapi|twitch)(?:[^\[\]]|\[[^\]]*\])*\]", "", msg, flags=re.I)
     msg = re.sub(r"\s{2,}", " ", msg).strip()
     if not msg or not re.search(r"[^\W_]", re.sub(r"\$\(\w+\)", "", msg)):
       return name, None, "نايت بوت يخفي محتوى هالكوماند، اكتبه بنفسك", ""
+  msg = nb_percent(msg)
   if alias in ("!game", "!setgame", "!category", "!cat"):  # كوماند نايت بوت يغيّر اللعبة (alias = !game)
     try:
       n, entry = build_command({"name": name, "type": "game", "game": msg[:100], "bang": True,
@@ -2959,6 +2960,11 @@ def nb_date(v):
   return dt
 
 
+def nb_percent(msg):
+  """[جديد] «%» لحالها (كانت كود نسبة في نايت بوت) تصير نسبة عشوائية من 1 إلى 100."""
+  return re.sub(r"(^|\s)%(?=\s|$)", lambda m: m.group(1) + "$(random 1-100)%", msg)
+
+
 def nb_mention_last(msg):
   """[جديد] «$(user) خذ راحتك» تصير «خذ راحتك @$(user)»: الرد أول وبعده المنشن."""
   m = re.match(r"^@?\$\((user|touser)\)[\s,،:]+(.+)$", msg.strip(), re.S)
@@ -2988,6 +2994,16 @@ def nb_migrate(store):
       for c in cmds.values():
         if c.get("type") == "text" and c.get("reply"):
           new = nb_mention_last(c["reply"])
+          if new != c["reply"]:
+            c["reply"] = new
+            fixed += 1
+    store.save_soon(5)
+  if not store.data.get("nb_mig3"):  # مرة وحدة: «%» لحالها تصير نسبة عشوائية
+    store.data["nb_mig3"] = 1
+    for cmds in store.data.get("commands", {}).values():
+      for c in cmds.values():
+        if c.get("type") == "text" and c.get("reply"):
+          new = nb_percent(c["reply"].replace("$(random 0-100)%", "$(random 1-100)%"))
           if new != c["reply"]:
             c["reply"] = new
             fixed += 1
@@ -3050,7 +3066,15 @@ def format_response(text, user, channel, target, game="", url=""):
   """المتغيرات المدعومة: $(user) $(touser) $(channel) $(game) $(url)
   [fix] تبديل بمرور واحد: لو المشاهد كتب "$(count)" أو "$(game)" كاسم ما يتحول لمتغير."""
   vals = {"user": user, "touser": target or user, "channel": channel, "game": game, "url": url}
-  return _VAR_RE.sub(lambda m: str(vals[m.group(1)]).replace("$(", "$ ("), text)
+  # [جديد] $(user) = منشن للي استخدم الكوماند (@الاسم)، إلا داخل الروابط
+  text = re.sub(r"@+(?=\$\((?:to)?user\))", "", text)
+
+  def one(m):
+    v = str(vals[m.group(1)])
+    if m.group(1) in ("user", "touser") and v and not (m.start() > 0 and text[m.start() - 1] in "/=?&"):
+      v = "@" + v.lstrip("@")
+    return v.replace("$(", "$ (")
+  return _VAR_RE.sub(one, text)
 
 
 _VAR_RE = re.compile(r"\$\((user|touser|channel|game|url)\)")
@@ -3242,6 +3266,7 @@ class Store:
       self.data["reports"] = loaded.get("reports", [])
       self.data["es_fp"] = loaded.get("es_fp", "")
       self.data["nb_mig2"] = loaded.get("nb_mig2", 0)
+      self.data["nb_mig3"] = loaded.get("nb_mig3", 0)
       if "reminders" in loaded:
         self.data["reminders"] = loaded["reminders"]
       else:
