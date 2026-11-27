@@ -4030,7 +4030,7 @@ const EN={
 "محاولات كثيرة، حاول بعد شوي":"Too many attempts, try again later",
 "الرد ما يبدأ بـ / أو .":"The reply can't start with / or ."
 };
-Object.assign(EN,{"سحب من Nightbot":"Import from Nightbot","سحب الكوماندات من Nightbot":"Import commands from Nightbot","اكتب اسم القناة اللي فيها نايت بوت، ونجيب كومانداتها العامة. تختار اللي تبيه وينسخ للبوت.":"Type the channel that uses Nightbot and we'll fetch its public commands. Pick the ones you want and they get copied over.","اسم القناة":"Channel name","اعرض الكوماندات":"Show commands","انسخ المحدد":"Copy selected","تحديد الكل":"Select all","ما فيه كوماندات عامة في هالقناة":"This channel has no public commands","موجود عندك، بينكتب فوقه":"Already exists, will be overwritten","الرد فاضي":"Empty reply","اختر كوماند واحد على الأقل":"Pick at least one command","انسحب {n} كوماند":"Imported {n} commands","نايت بوت مو مفعّل في هالقناة":"Nightbot isn't set up on this channel","نايت بوت ما رد، جرّب بعد شوي":"Nightbot didn't respond, try again shortly","ما قدرت أجيب الكوماندات من نايت بوت":"Couldn't fetch the commands from Nightbot","ما قدرت أوصل لنايت بوت، جرّب بعد شوي":"Couldn't reach Nightbot, try again shortly","اسم القناة غير صحيح":"Invalid channel name"});
+Object.assign(EN,{"سحب من Nightbot":"Import from Nightbot","تحديد":"Select","حذف المحدد":"Delete selected","حددت {n}":"{n} selected","تحذف {n} كوماند؟ ما تقدر ترجعها":"Delete {n} commands? This can't be undone","تم حذف الكوماندات":"Commands deleted","سحب الكوماندات من Nightbot":"Import commands from Nightbot","اكتب اسم القناة اللي فيها نايت بوت، ونجيب كومانداتها العامة. تختار اللي تبيه وينسخ للبوت.":"Type the channel that uses Nightbot and we'll fetch its public commands. Pick the ones you want and they get copied over.","اسم القناة":"Channel name","اعرض الكوماندات":"Show commands","انسخ المحدد":"Copy selected","تحديد الكل":"Select all","ما فيه كوماندات عامة في هالقناة":"This channel has no public commands","موجود عندك، بينكتب فوقه":"Already exists, will be overwritten","الرد فاضي":"Empty reply","اختر كوماند واحد على الأقل":"Pick at least one command","انسحب {n} كوماند":"Imported {n} commands","نايت بوت مو مفعّل في هالقناة":"Nightbot isn't set up on this channel","نايت بوت ما رد، جرّب بعد شوي":"Nightbot didn't respond, try again shortly","ما قدرت أجيب الكوماندات من نايت بوت":"Couldn't fetch the commands from Nightbot","ما قدرت أوصل لنايت بوت، جرّب بعد شوي":"Couldn't reach Nightbot, try again shortly","اسم القناة غير صحيح":"Invalid channel name"});
 Object.assign(EN,{"!f يحوّل الكاتيقوري، و !settitle يغيّر العنوان": "!f switches the category and !settitle changes the title", "!permit يسمح لشخص بالروابط دقيقة وحدة": "!permit lets someone post links for one minute", "!poll سؤال | خيار | خيار من الشات مباشرة": "!poll question | option | option straight from chat", "!skip و !volume للمودات، و !wrongsong للمشاهد": "!skip and !volume for mods, !wrongsong for viewers", "!streak و !topstreak في الشات": "!streak and !topstreak in chat", "$(pick نعم|لا)": "$(pick yes|no)", "/streak و /top في الديسكورد بعد ربط الحساب بـ /link": "/streak and /top in Discord after linking with /link", "Chat magic, one command at a time • سحر الشات، كوماند بعد كوماند": "Chat magic, one command at a time", "أسماء بديلة (اختياري)": "Aliases (optional)", "مثال: dc, ديسكورد": "e.g. dc, server", "majek bot • سحر الشات، كوماند بعد كوماند": "majek bot • Chat magic, one command at a time", "أذكار وأدعية جاهزة تتغير كل مرة": "Ready-made adhkar and duas that change every time", "أذكار وأدعية وتذكيرات تنكتب بالشات بالفاصل اللي تبيه، وما تتكلم إذا الشات ساكت.": "Adhkar, duas and reminders posted at the interval you choose, and they stay quiet when chat is dead.", "أقدر أخلي المودات يعدلون؟": "Can my mods make changes?", "إعلان تلقائي في روم الديسكورد لما أحد يوصل رقم جديد": "Automatic Discord announcements when someone hits a milestone", "إيه، أضفهم من صفحة المودات ويدخلون بحساباتهم ويعدلون الكوماندات.": "Yes. Add them on the Mods page and they log in with their own accounts to edit commands and quotes.", "إيه، كل المميزات مجانية.": "Yes, every feature is free.", "اضغط «فعّل البوت في قناتك» وادخل بحسابك.": "Press \"Add the bot to your channel\" and log in.", "مستويات وساعات متابعة": "Levels & watch time", "إكس بي، مستويات، وصفحة متصدرين بـ !leaderboard": "XP, levels and a leaderboard page with !leaderboard", "البوت يتجاهل البوتات المعروفة ويرد بس على كوماندات قناتك، فتقدر تستخدمه معهم.": "The bot ignores known bots and only answers your channel's commands, so you can run it alongside them.", "البوت يحسب كم بث ورا بعض حضر كل مشاهد، ويحتفل بالأرقام الكبيرة. والمتابع يشوف ستريكه من سيرفر الديسكورد حقك.": "The bot counts how many streams in a row each viewer attends and celebrates big milestones. Viewers can check their streak in your Discord server.", "البوت يكتب باسم حسابك أو أي حساب تختاره": "The bot posts as your account or any account you choose", "الطابور يطلع في صفحة قناتك": "The queue shows on your channel page", "المشاهدين يطلبون من يوتيوب بالرابط أو بالاسم، والأغاني تشتغل داخل الموقع أو في OBS.": "Viewers request YouTube songs by link or name, and they play on the site or in OBS.", "تحدد مين يقدر يسأل وكم مرة": "Choose who can ask and how often", "تصويت تويتش": "Twitch polls", "تضيف البوت لسيرفرك من صفحة «الستريك والديسكورد» وتكتب /setup، والمتابع يكتب /link مرة وحدة ويربط حسابه، وبعدها /streak يطلع ستريكه.": "Add the bot to your server from the \"Streaks & Discord\" page and type /setup. Each viewer types /link once to connect their account, then /streak shows their streak.", "تطبيق على جوالك": "An app on your phone", "تعليمات خاصة بأسلوب قناتك": "Custom instructions in your channel's style", "تغيير اللعبة والعنوان": "Game and title changes", "ثبّت لوحة التحكم كتطبيق على الآيفون والأندرويد": "Install the dashboard as an app on iPhone and Android", "حد لكل مشاهد وحد لمدة الأغنية": "Per-viewer limits and a max song length", "حساب بوت خاص فيك": "Your own bot account", "ردود تلقائية على السلام ومساء الخير وباك وبرب": "Auto replies to salam, good evening, back and brb", "روابط، حروف كبيرة، رموز، تكرار، رسائل طويلة": "Links, caps, symbols, repetition, long messages", "زر تجربة يرسل التنبيه للشات قبل ما تعتمده": "A test button posts the alert to chat before you rely on it", "شاوت آوت تلقائي للريد مع كليب في OBS": "Automatic raid shoutout with a clip in OBS", "شرط عدد رسائل الشات قبل كل تذكير": "A minimum number of chat messages before each reminder", "عدّل الكوماندات والتنبيهات من لوحة الستريمر بأي وقت.": "Edit commands and alerts from the streamer dashboard anytime.", "عشان البوت يقرأ الشات ويغيّر اللعبة والعنوان ويسوي كليبات.": "So the bot can read chat, change the game and title, and make clips.", "عندي بوت ثاني، يتعارضون؟": "I already use another bot. Will they clash?", "فريق المودات": "Mod team", "كليب من الشات": "Clips from chat", "كوماند يسوي كليب لآخر ثواني ويرسل الرابط": "A command that clips the last few seconds and posts the link", "كوماندات مخصصة": "Custom commands", "كيف أشيل البوت؟": "How do I remove the bot?", "كيف يشوف المتابع ستريكه في الديسكورد؟": "How do viewers see their streak in Discord?", "لا، البوت يشتغل على السحاب. حتى لو جهازك مطفي يرد ويحمي الشات.": "No, the bot runs in the cloud. Even with your PC off it replies and protects chat.", "لازم جهازي يكون شغال؟": "Does my PC need to be on?", "ما يكتب روابط ولا يدخل بالجدل": "No links and no arguing", "متغيرات مثل $(user) $(random) $(time) وأسماء بديلة وكول داون": "Variables like $(user) $(random) $(time), plus aliases and cooldowns", "من الإعدادات في لوحة الستريمر اضغط «إزالة البوت من قناتي» ويطلع فوراً.": "In the streamer dashboard settings press \"Remove the bot from my channel\" and it leaves right away.", "منشن البوت بأي سؤال ويرد بجملة أو جملتين، ويعرف اللعبة وعنوان البث.": "Mention the bot with any question and it answers in a sentence or two, knowing your game and stream title.", "مودات يعدلون الكوماندات، وسجل يوضح مين غيّر وش": "Mods edit commands, and a log shows who changed what", "نزّل نسخة من بيانات البوت (قنوات، كوماندات، ربط تويتش). لا تشاركها مع أحد.": "Download a copy of the bot's data (channels, commands, Twitch links). Don't share it with anyone.", "نسخة احتياطية وحالة البوت • Backup & status": "Backup & status", "نص كل تنبيه تكتبه أنت مع متغيرات مثل $(months)": "You write each alert's text, with variables like $(months)", "هل البوت مجاني؟": "Is the bot free?", "يحذف السبام ويكتم المخالف قبل ما يلاحظه أحد، ويلقط التحايل على الكلمات الممنوعة.": "Deletes spam and times out offenders before anyone notices, and catches tricks around banned words.", "يشكر المتابعين والمشتركين والإهداءات والبتس، ويرحّب بالريد مع شاوت آوت وكليب يطلع على بثك.": "Thanks followers, subs, gifters and cheerers, and welcomes raids with a shoutout and a clip on your stream.", "يلقط التشكيل والتطويل والحروف المفرّقة (ك ل م ة)": "Catches diacritics, stretched letters and spaced-out letters", "⬇️ تحميل نسخة احتياطية": "⬇️ Download backup", "🩺 حالة البوت": "🩺 Bot status"});
 const AR={};for(const k in EN)AR[EN[k]]=k;
 let LANG="ar";
@@ -4946,6 +4946,7 @@ main{flex:1;min-width:0}
             <button class="chip" data-f="text">ردود</button>
             <button class="chip" data-f="game">ألعاب</button>
             <button class="chip" data-f="clip">كليبات</button>
+            <button class="btn line sm" id="selbtn">تحديد</button>
             <button class="btn line sm" id="nbbtn">سحب من Nightbot</button>
             <button class="btn plus" id="newcmd">كوماند جديد</button>
           </div>
@@ -4955,6 +4956,13 @@ main{flex:1;min-width:0}
             <div class="tool" style="margin:12px 0 8px"><input id="nbch" dir="ltr" placeholder="اسم القناة"><button class="btn sm" id="nbload">اعرض الكوماندات</button></div>
             <div id="nblist"></div>
             <div class="acts" id="nbacts" hidden><button class="btn sm" id="nbgo">انسخ المحدد</button><button class="btn ghost sm" id="nbclose">إلغاء</button></div>
+          </div>
+          <div class="selbar" id="selbar" hidden>
+            <label class="chk"><input type="checkbox" id="selall"> <span>تحديد الكل</span></label>
+            <span class="mut" id="selcnt"></span>
+            <span style="flex:1"></span>
+            <button class="btn red sm" id="seldel" disabled>حذف المحدد</button>
+            <button class="btn ghost sm" id="selx">إلغاء</button>
           </div>
           <div id="cmdlist"></div>
         </section>
@@ -5614,6 +5622,12 @@ function renderCmds(){
     d.querySelector("p").textContent=c.reply||"";
     d.querySelector(".ed").onclick=()=>{cmdFormFill(n,c);openModal()};
     d.querySelector(".del").onclick=()=>{if(ask("تحذف !{n}؟",n))act(()=>api("DELETE",base()+"/commands/"+encodeURIComponent(n)),"تم حذف الكوماند")};
+    if(SEL){
+      const cb=document.createElement("input");cb.type="checkbox";cb.className="selcb";cb.checked=SEL.has(n);
+      cb.onchange=()=>{cb.checked?SEL.add(n):SEL.delete(n);d.classList.toggle("picked",cb.checked);selInfo()};
+      d.classList.toggle("picked",cb.checked);d.prepend(cb);
+      d.onclick=e=>{if(e.target.closest("button,input"))return;cb.checked=!cb.checked;cb.onchange()};
+    }
     box.appendChild(d);
   });
 }
@@ -6273,6 +6287,24 @@ function renderBot(){
   $("#botreset").hidden=!CH.bot.custom;
 }
 cmdFormInit();
+/* ---------- [جديد] تحديد أكثر من كوماند وحذفها ---------- */
+let SEL=null;
+function selVisible(){return [...document.querySelectorAll("#cmdlist .selcb")]}
+function selInfo(){
+  if(!SEL)return;
+  $("#selcnt").textContent=t("حددت {n}").replace("{n}",SEL.size);
+  $("#seldel").disabled=!SEL.size;
+  const v=selVisible();$("#selall").checked=v.length>0&&v.every(x=>x.checked);
+}
+function selMode(on){SEL=on?new Set():null;$("#selbar").hidden=!on;$("#selbtn").classList.toggle("on",on);renderCmds();selInfo()}
+$("#selbtn").onclick=()=>selMode(!SEL);
+$("#selx").onclick=()=>selMode(false);
+$("#selall").onchange=e=>{selVisible().forEach(x=>{x.checked=e.target.checked;x.onchange()})};
+$("#seldel").onclick=()=>{
+  const names=[...SEL];if(!names.length)return;
+  if(!ask("تحذف {n} كوماند؟ ما تقدر ترجعها",names.length))return;
+  act(async()=>{await api("POST",base()+"/commands/delete",{names});selMode(false)},"تم حذف الكوماندات");
+};
 /* ---------- [جديد] سحب من نايت بوت ---------- */
 $("#nbbtn").onclick=()=>{const b=$("#nbbox");b.hidden=!b.hidden;if(!b.hidden){$("#nbch").value=$("#nbch").value||CH.name;$("#nbch").focus()}};
 $("#nbclose").onclick=()=>{$("#nbbox").hidden=true;$("#nblist").textContent="";$("#nbacts").hidden=true};
@@ -6910,6 +6942,12 @@ main>.top h1{font-size:30px}
 .nbrow small{color:var(--sf2);font-size:12px}
 .nbrow p{margin:2px 0 0;color:var(--mut);font-size:13.5px;word-break:break-word}
 .nbrow.off{opacity:.5}
+.selbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:122px;z-index:9;background:var(--raise);border:1px solid var(--line2);border-radius:var(--r);padding:10px 14px;margin-bottom:10px}
+.selbar .chk{margin:0}
+.selcb{width:20px!important;height:20px;margin:3px 0 0!important;flex-shrink:0;accent-color:var(--sf);cursor:pointer}
+.cmd.picked{border-color:var(--sf)!important;background:rgba(255,107,87,.07)!important}
+#selbtn.on{background:var(--tx);color:var(--ink);border-color:var(--tx)}
+@media(max-width:860px){.selbar{top:112px}}
 """
 
 SHELL_JS = r"""
@@ -8374,6 +8412,22 @@ def make_web_app(bot):
       bot.audit(ch, a[0], f"سحب {added} كوماند من نايت بوت")
     return web.json_response({"ok": True, "added": added})
 
+  async def s_del_cmds(request):
+    """[جديد] حذف أكثر من كوماند مرة وحدة: {"names": [...]}."""
+    a, err = access(request)
+    if err:
+      return err
+    _, ch, _ = a
+    names = (await jbody(request)).get("names")
+    if not isinstance(names, list) or not names:
+      return jerr("اختر كوماند واحد على الأقل")
+    cmds = store.data["commands"].get(ch, {})
+    gone = [n for n in {str(x).lower() for x in names[:400]} if cmds.pop(n, None) is not None]
+    if gone:
+      store.save_quick()
+      bot.audit(ch, a[0], f"حذف {len(gone)} كوماند")
+    return web.json_response({"ok": True, "deleted": len(gone)})
+
   async def s_del_cmd(request):
     a, err = access(request)
     if err:
@@ -9355,6 +9409,7 @@ def make_web_app(bot):
   r.add_get("/s/api/channel/{channel}", s_channel)
   r.add_post("/s/api/channel/{channel}/commands", s_save_cmd)
   r.add_post("/s/api/channel/{channel}/nightbot", s_nightbot)
+  r.add_post("/s/api/channel/{channel}/commands/delete", s_del_cmds)
   r.add_delete("/s/api/channel/{channel}/commands/{name}", s_del_cmd)
   r.add_post("/s/api/channel/{channel}/editors", s_add_editor)
   r.add_delete("/s/api/channel/{channel}/editors/{name}", s_del_editor)
