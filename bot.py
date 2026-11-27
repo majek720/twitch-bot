@@ -4030,14 +4030,30 @@ const EN={
 "محاولات كثيرة، حاول بعد شوي":"Too many attempts, try again later",
 "الرد ما يبدأ بـ / أو .":"The reply can't start with / or ."
 };
-Object.assign(EN,{"سحب من Nightbot":"Import from Nightbot","تحديد":"Select","حذف المحدد":"Delete selected","حددت {n}":"{n} selected","تحذف {n} كوماند؟ ما تقدر ترجعها":"Delete {n} commands? This can't be undone","تم حذف الكوماندات":"Commands deleted","سحب الكوماندات من Nightbot":"Import commands from Nightbot","اكتب اسم القناة اللي فيها نايت بوت، ونجيب كومانداتها العامة. تختار اللي تبيه وينسخ للبوت.":"Type the channel that uses Nightbot and we'll fetch its public commands. Pick the ones you want and they get copied over.","اسم القناة":"Channel name","اعرض الكوماندات":"Show commands","انسخ المحدد":"Copy selected","تحديد الكل":"Select all","ما فيه كوماندات عامة في هالقناة":"This channel has no public commands","موجود عندك، بينكتب فوقه":"Already exists, will be overwritten","الرد فاضي":"Empty reply","اختر كوماند واحد على الأقل":"Pick at least one command","انسحب {n} كوماند":"Imported {n} commands","نايت بوت مو مفعّل في هالقناة":"Nightbot isn't set up on this channel","نايت بوت ما رد، جرّب بعد شوي":"Nightbot didn't respond, try again shortly","ما قدرت أجيب الكوماندات من نايت بوت":"Couldn't fetch the commands from Nightbot","ما قدرت أوصل لنايت بوت، جرّب بعد شوي":"Couldn't reach Nightbot, try again shortly","اسم القناة غير صحيح":"Invalid channel name"});
+Object.assign(EN,{"سحب من Nightbot":"Import from Nightbot","تأكيد":"Confirm","موافق":"OK","حسناً":"OK","تحديد":"Select","حذف المحدد":"Delete selected","حددت {n}":"{n} selected","تحذف {n} كوماند؟ ما تقدر ترجعها":"Delete {n} commands? This can't be undone","تم حذف الكوماندات":"Commands deleted","سحب الكوماندات من Nightbot":"Import commands from Nightbot","اكتب اسم القناة اللي فيها نايت بوت، ونجيب كومانداتها العامة. تختار اللي تبيه وينسخ للبوت.":"Type the channel that uses Nightbot and we'll fetch its public commands. Pick the ones you want and they get copied over.","اسم القناة":"Channel name","اعرض الكوماندات":"Show commands","انسخ المحدد":"Copy selected","تحديد الكل":"Select all","ما فيه كوماندات عامة في هالقناة":"This channel has no public commands","موجود عندك، بينكتب فوقه":"Already exists, will be overwritten","الرد فاضي":"Empty reply","اختر كوماند واحد على الأقل":"Pick at least one command","انسحب {n} كوماند":"Imported {n} commands","نايت بوت مو مفعّل في هالقناة":"Nightbot isn't set up on this channel","نايت بوت ما رد، جرّب بعد شوي":"Nightbot didn't respond, try again shortly","ما قدرت أجيب الكوماندات من نايت بوت":"Couldn't fetch the commands from Nightbot","ما قدرت أوصل لنايت بوت، جرّب بعد شوي":"Couldn't reach Nightbot, try again shortly","اسم القناة غير صحيح":"Invalid channel name"});
 Object.assign(EN,{"!f يحوّل الكاتيقوري، و !settitle يغيّر العنوان": "!f switches the category and !settitle changes the title", "!permit يسمح لشخص بالروابط دقيقة وحدة": "!permit lets someone post links for one minute", "!poll سؤال | خيار | خيار من الشات مباشرة": "!poll question | option | option straight from chat", "!skip و !volume للمودات، و !wrongsong للمشاهد": "!skip and !volume for mods, !wrongsong for viewers", "!streak و !topstreak في الشات": "!streak and !topstreak in chat", "$(pick نعم|لا)": "$(pick yes|no)", "/streak و /top في الديسكورد بعد ربط الحساب بـ /link": "/streak and /top in Discord after linking with /link", "Chat magic, one command at a time • سحر الشات، كوماند بعد كوماند": "Chat magic, one command at a time", "أسماء بديلة (اختياري)": "Aliases (optional)", "مثال: dc, ديسكورد": "e.g. dc, server", "majek bot • سحر الشات، كوماند بعد كوماند": "majek bot • Chat magic, one command at a time", "أذكار وأدعية جاهزة تتغير كل مرة": "Ready-made adhkar and duas that change every time", "أذكار وأدعية وتذكيرات تنكتب بالشات بالفاصل اللي تبيه، وما تتكلم إذا الشات ساكت.": "Adhkar, duas and reminders posted at the interval you choose, and they stay quiet when chat is dead.", "أقدر أخلي المودات يعدلون؟": "Can my mods make changes?", "إعلان تلقائي في روم الديسكورد لما أحد يوصل رقم جديد": "Automatic Discord announcements when someone hits a milestone", "إيه، أضفهم من صفحة المودات ويدخلون بحساباتهم ويعدلون الكوماندات.": "Yes. Add them on the Mods page and they log in with their own accounts to edit commands and quotes.", "إيه، كل المميزات مجانية.": "Yes, every feature is free.", "اضغط «فعّل البوت في قناتك» وادخل بحسابك.": "Press \"Add the bot to your channel\" and log in.", "مستويات وساعات متابعة": "Levels & watch time", "إكس بي، مستويات، وصفحة متصدرين بـ !leaderboard": "XP, levels and a leaderboard page with !leaderboard", "البوت يتجاهل البوتات المعروفة ويرد بس على كوماندات قناتك، فتقدر تستخدمه معهم.": "The bot ignores known bots and only answers your channel's commands, so you can run it alongside them.", "البوت يحسب كم بث ورا بعض حضر كل مشاهد، ويحتفل بالأرقام الكبيرة. والمتابع يشوف ستريكه من سيرفر الديسكورد حقك.": "The bot counts how many streams in a row each viewer attends and celebrates big milestones. Viewers can check their streak in your Discord server.", "البوت يكتب باسم حسابك أو أي حساب تختاره": "The bot posts as your account or any account you choose", "الطابور يطلع في صفحة قناتك": "The queue shows on your channel page", "المشاهدين يطلبون من يوتيوب بالرابط أو بالاسم، والأغاني تشتغل داخل الموقع أو في OBS.": "Viewers request YouTube songs by link or name, and they play on the site or in OBS.", "تحدد مين يقدر يسأل وكم مرة": "Choose who can ask and how often", "تصويت تويتش": "Twitch polls", "تضيف البوت لسيرفرك من صفحة «الستريك والديسكورد» وتكتب /setup، والمتابع يكتب /link مرة وحدة ويربط حسابه، وبعدها /streak يطلع ستريكه.": "Add the bot to your server from the \"Streaks & Discord\" page and type /setup. Each viewer types /link once to connect their account, then /streak shows their streak.", "تطبيق على جوالك": "An app on your phone", "تعليمات خاصة بأسلوب قناتك": "Custom instructions in your channel's style", "تغيير اللعبة والعنوان": "Game and title changes", "ثبّت لوحة التحكم كتطبيق على الآيفون والأندرويد": "Install the dashboard as an app on iPhone and Android", "حد لكل مشاهد وحد لمدة الأغنية": "Per-viewer limits and a max song length", "حساب بوت خاص فيك": "Your own bot account", "ردود تلقائية على السلام ومساء الخير وباك وبرب": "Auto replies to salam, good evening, back and brb", "روابط، حروف كبيرة، رموز، تكرار، رسائل طويلة": "Links, caps, symbols, repetition, long messages", "زر تجربة يرسل التنبيه للشات قبل ما تعتمده": "A test button posts the alert to chat before you rely on it", "شاوت آوت تلقائي للريد مع كليب في OBS": "Automatic raid shoutout with a clip in OBS", "شرط عدد رسائل الشات قبل كل تذكير": "A minimum number of chat messages before each reminder", "عدّل الكوماندات والتنبيهات من لوحة الستريمر بأي وقت.": "Edit commands and alerts from the streamer dashboard anytime.", "عشان البوت يقرأ الشات ويغيّر اللعبة والعنوان ويسوي كليبات.": "So the bot can read chat, change the game and title, and make clips.", "عندي بوت ثاني، يتعارضون؟": "I already use another bot. Will they clash?", "فريق المودات": "Mod team", "كليب من الشات": "Clips from chat", "كوماند يسوي كليب لآخر ثواني ويرسل الرابط": "A command that clips the last few seconds and posts the link", "كوماندات مخصصة": "Custom commands", "كيف أشيل البوت؟": "How do I remove the bot?", "كيف يشوف المتابع ستريكه في الديسكورد؟": "How do viewers see their streak in Discord?", "لا، البوت يشتغل على السحاب. حتى لو جهازك مطفي يرد ويحمي الشات.": "No, the bot runs in the cloud. Even with your PC off it replies and protects chat.", "لازم جهازي يكون شغال؟": "Does my PC need to be on?", "ما يكتب روابط ولا يدخل بالجدل": "No links and no arguing", "متغيرات مثل $(user) $(random) $(time) وأسماء بديلة وكول داون": "Variables like $(user) $(random) $(time), plus aliases and cooldowns", "من الإعدادات في لوحة الستريمر اضغط «إزالة البوت من قناتي» ويطلع فوراً.": "In the streamer dashboard settings press \"Remove the bot from my channel\" and it leaves right away.", "منشن البوت بأي سؤال ويرد بجملة أو جملتين، ويعرف اللعبة وعنوان البث.": "Mention the bot with any question and it answers in a sentence or two, knowing your game and stream title.", "مودات يعدلون الكوماندات، وسجل يوضح مين غيّر وش": "Mods edit commands, and a log shows who changed what", "نزّل نسخة من بيانات البوت (قنوات، كوماندات، ربط تويتش). لا تشاركها مع أحد.": "Download a copy of the bot's data (channels, commands, Twitch links). Don't share it with anyone.", "نسخة احتياطية وحالة البوت • Backup & status": "Backup & status", "نص كل تنبيه تكتبه أنت مع متغيرات مثل $(months)": "You write each alert's text, with variables like $(months)", "هل البوت مجاني؟": "Is the bot free?", "يحذف السبام ويكتم المخالف قبل ما يلاحظه أحد، ويلقط التحايل على الكلمات الممنوعة.": "Deletes spam and times out offenders before anyone notices, and catches tricks around banned words.", "يشكر المتابعين والمشتركين والإهداءات والبتس، ويرحّب بالريد مع شاوت آوت وكليب يطلع على بثك.": "Thanks followers, subs, gifters and cheerers, and welcomes raids with a shoutout and a clip on your stream.", "يلقط التشكيل والتطويل والحروف المفرّقة (ك ل م ة)": "Catches diacritics, stretched letters and spaced-out letters", "⬇️ تحميل نسخة احتياطية": "⬇️ Download backup", "🩺 حالة البوت": "🩺 Bot status"});
 const AR={};for(const k in EN)AR[EN[k]]=k;
 let LANG="ar";
 try{if(localStorage.getItem("lang")==="en")LANG="en"}catch(e){}
 const nz=s=>s.replace(/\s+/g," ").trim();
 const t=s=>{if(LANG!=="en")return s;if(EN[s])return EN[s];const m=/^المدة لازم تكون من (\d+) إلى (\d+) دقيقة$/.exec(s);return m?"The interval must be between "+m[1]+" and "+m[2]+" minutes":s};
-const ask=(s,v)=>confirm(t(s).replace("{n}",v));
+// [جديد] نافذة تأكيد داخل الموقع بدل نافذة المتصفح
+function ask(s,v,okText,info){return new Promise(res=>{
+  let d=document.getElementById("askdlg");
+  if(!d){d=document.createElement("div");d.id="askdlg";d.hidden=true;
+    d.innerHTML='<div class="askbox" role="alertdialog" aria-modal="true"><p data-nt></p><div class="askbtns"><button class="btn askok" data-nt></button><button class="btn ghost askno" data-nt></button></div></div>';
+    document.body.appendChild(d)}
+  d.querySelector("p").textContent=t(s).replace("{n}",v==null?"":v);
+  const ok=d.querySelector(".askok"),no=d.querySelector(".askno");
+  ok.textContent=t(okText||(/^(تحذف|تحظر|تشيل|متأكد|تمسح|تلغي|ترجع|تمنع)/.test(s)?"تأكيد":"موافق"));no.textContent=t("إلغاء");
+  no.hidden=!!info;
+  const done=v=>{d.hidden=true;document.removeEventListener("keydown",key);res(v)};
+  const key=e=>{if(e.key==="Escape")done(false);else if(e.key==="Enter")done(true)};
+  ok.onclick=()=>done(true);no.onclick=()=>done(false);d.onclick=e=>{if(e.target===d)done(false)};
+  document.addEventListener("keydown",key);
+  d.hidden=false;setTimeout(()=>ok.focus(),30);
+})}
+function notice(s){return ask(s,"","حسناً",true)}
 let onAuth=()=>{},onLang=()=>{};
 function walk(n){
   const map=LANG==="en"?EN:AR;
@@ -4112,7 +4128,7 @@ function renderCmdList(box,cmds,onDel){
     d.querySelector(".meta").textContent=(c.type==="game"?t("🎮 يغيّر اللعبة إلى:")+" "+c.game:c.type==="clip"?"🎬 "+t("كليب")+" "+(c.secs||30)+(LANG==="en"?"s":"ث"):t("💬 رد عادي"))+" • "+t(PERMS[c.perm]||"الكل")+cdTxt(c);
     d.querySelector("p").textContent=c.reply||"";
     d.querySelector(".ed").onclick=()=>cmdFormFill(n,c);
-    d.querySelector(".del").onclick=()=>{if(ask("تحذف !{n}؟",n))onDel(n)};
+    d.querySelector(".del").onclick=async()=>{if(await ask("تحذف !{n}؟",n))onDel(n)};
     box.appendChild(d);
   });
 }
@@ -4421,8 +4437,8 @@ function render(){
     d.querySelector(".st").textContent=t(c.live?"لايف":"أوفلاين");
     d.querySelector(".ban").textContent="🚫 "+t("حظر");
     d.querySelector(".del").textContent="🗑 "+t("حذف");
-    d.querySelector(".ban").onclick=()=>{if(ask("تحظر القناة {n} من استخدام البوت؟",c.name))act(()=>api("POST","/api/ban",{name:c.name}),"تم حظر القناة")};
-    d.querySelector(".del").onclick=()=>{if(ask("تحذف القناة {n}؟",c.name))act(()=>api("DELETE","/api/channels/"+encodeURIComponent(c.name)),"تم حذف القناة")};
+    d.querySelector(".ban").onclick=async()=>{if(await ask("تحظر القناة {n} من استخدام البوت؟",c.name))act(()=>api("POST","/api/ban",{name:c.name}),"تم حظر القناة")};
+    d.querySelector(".del").onclick=async()=>{if(await ask("تحذف القناة {n}؟",c.name))act(()=>api("DELETE","/api/channels/"+encodeURIComponent(c.name)),"تم حذف القناة")};
     list.appendChild(d);
   });
   $("#bancount").textContent=S.banned.length;
@@ -4458,7 +4474,7 @@ function renderReports(){
     d.querySelector(".meta").textContent=new Date(r.ts*1000).toLocaleString()+(r.page?" • "+r.page:"");
     d.querySelector("p").textContent=r.text;
     d.querySelector(".dn").onclick=()=>act(()=>api("POST","/api/reports/"+r.id+"/done"));
-    d.querySelector(".bn").onclick=()=>{if(confirm(t("تمنع هذا المُبلّغ من إرسال البلاغات؟")))act(()=>api("POST","/api/report-ban",{report_id:r.id}),"تم منع المُبلّغ")};
+    d.querySelector(".bn").onclick=async()=>{if(await ask("تمنع هذا المُبلّغ من إرسال البلاغات؟"))act(()=>api("POST","/api/report-ban",{report_id:r.id}),"تم منع المُبلّغ")};
     d.querySelector(".del").onclick=()=>act(()=>api("DELETE","/api/reports/"+r.id));
     box.appendChild(d);
   });
@@ -5620,7 +5636,7 @@ function renderCmds(){
     d.querySelectorAll(".bd")[1].textContent=t(PERMS[c.perm]||"الكل")+cdTxt(c);
     d.querySelector("p").textContent=c.reply||"";
     d.querySelector(".ed").onclick=()=>{cmdFormFill(n,c);openModal()};
-    d.querySelector(".del").onclick=()=>{if(ask("تحذف !{n}؟",n))act(()=>api("DELETE",base()+"/commands/"+encodeURIComponent(n)),"تم حذف الكوماند")};
+    d.querySelector(".del").onclick=async()=>{if(await ask("تحذف !{n}؟",n))act(()=>api("DELETE",base()+"/commands/"+encodeURIComponent(n)),"تم حذف الكوماند")};
     if(SEL){
       const cb=document.createElement("input");cb.type="checkbox";cb.className="selcb";cb.checked=SEL.has(n);
       cb.onchange=()=>{cb.checked?SEL.add(n):SEL.delete(n);d.classList.toggle("picked",cb.checked);selInfo()};
@@ -5689,7 +5705,7 @@ function renderAuto(){
     d.querySelector(".tg").title=t(m.on?"تعطيل":"تفعيل");
     d.querySelector(".tg").onclick=()=>act(()=>api("POST",base()+"/timers",{id:m.id,text:m.kind==="text"?m.text:"",every:m.every,lines:m.lines||0,on:!m.on}),"تم الحفظ");
     d.querySelector(".ed").onclick=()=>tmOpen(m);
-    d.querySelector(".del").onclick=()=>{if(ask("تحذف هذي الرسالة؟"))act(()=>api("DELETE",base()+"/timers/"+encodeURIComponent(m.id)),"تم الحفظ")};
+    d.querySelector(".del").onclick=async()=>{if(await ask("تحذف هذي الرسالة؟"))act(()=>api("DELETE",base()+"/timers/"+encodeURIComponent(m.id)),"تم الحفظ")};
     box.appendChild(d);
   });
   const ab=$("#aulist");ab.innerHTML="";
@@ -5841,7 +5857,7 @@ function renderDeck(){
     if(b.t==="reward"){const r=((RW&&RW.rewards)||[]).find(x=>x.id===b.v);if(r&&r.paused)el.classList.add("paused")}
     el.onclick=async()=>{
       if(DECKEDIT)return openDB(i);
-      if(b.t==="clear"&&!confirm(t("متأكد تبي تمسح الشات كامل؟")))return;
+      if(b.t==="clear"&&!await ask("متأكد تبي تمسح الشات كامل؟"))return;
       const body={k:"btn",id:b.id};
       if(b.t==="reward"){const r=((RW&&RW.rewards)||[]).find(x=>x.id===b.v);body.pause=!(r&&r.paused)}
       el.classList.add("busy");
@@ -5896,7 +5912,7 @@ function openDB(i){
 function saveDeck(msg){return act(async()=>{await api("POST",base()+"/deck",{k:"save",buttons:DB})},msg||"تم الحفظ")}
 $("#deckedit").onclick=()=>{DECKEDIT=true;DB=JSON.parse(JSON.stringify(CH.deckbtns||[]));renderDeck()};
 $("#deckdone").onclick=()=>{DECKEDIT=false;DBI=-1;$("#deckform").hidden=true;renderDeck()};
-$("#deckreset").onclick=()=>{if(confirm(t("ترجع الأزرار الافتراضية وتنحذف أزرارك؟"))){DECKEDIT=false;DBI=-1;$("#deckform").hidden=true;act(()=>api("POST",base()+"/deck",{k:"reset"}),"تم")}};
+$("#deckreset").onclick=async()=>{if(await ask("ترجع الأزرار الافتراضية وتنحذف أزرارك؟")){DECKEDIT=false;DBI=-1;$("#deckform").hidden=true;act(()=>api("POST",base()+"/deck",{k:"reset"}),"تم")}};
 $("#db-cancel").onclick=()=>{$("#deckform").hidden=true;DBI=-1;renderDeck()};
 $("#db-save").onclick=async()=>{const e=window.__DBE;e.label=$("#db-label").value.trim()||dtl(e.t);e.icon=$("#db-icon").value.trim();e.hot=$("#db-hot").checked;
   const old=JSON.stringify(DB);if(DBI>=0)DB[DBI]=e;else{if(DB.length>=40)return toast(t("الحد 40 زر"),1);DB.push(e)}
@@ -5943,7 +5959,7 @@ function renderActs(){
     d.querySelector(".tg").onclick=()=>act(()=>api("POST",base()+"/actions",{toggle:x.id}),"تم الحفظ");
     d.querySelector(".ts").onclick=()=>act(()=>api("POST",base()+"/actions",{test:x.id}),"تم التشغيل");
     d.querySelector(".ed").onclick=()=>openAct(JSON.parse(JSON.stringify(x)));
-    d.querySelector(".del").onclick=()=>{if(ask("تحذف الأمر «{n}»؟",x.name))act(()=>api("POST",base()+"/actions",{delete:x.id}),"تم الحذف")};
+    d.querySelector(".del").onclick=async()=>{if(await ask("تحذف الأمر «{n}»؟",x.name))act(()=>api("POST",base()+"/actions",{delete:x.id}),"تم الحذف")};
     box.appendChild(d);
   });
 }
@@ -6077,7 +6093,7 @@ async function renderCP(fetch){
     en.onclick=()=>upd({reward:{enabled:!r.enabled}},"تم الحفظ");
     au.onchange=()=>upd({auto:au.value},"تم الحفظ");
     d.querySelector(".ed").onclick=()=>openCP(r);
-    d.querySelector(".del").onclick=()=>{if(ask("تحذف المكافأة «{n}»؟",r.title))upd({delete:true},"تم الحذف")};
+    d.querySelector(".del").onclick=async()=>{if(await ask("تحذف المكافأة «{n}»؟",r.title))upd({delete:true},"تم الحذف")};
     d.querySelector(".ac").onclick=()=>{go("act");openAct({name:r.title,on:true,trig:{t:"reward",v:r.id},steps:[{t:"say",v:"$(user) استبدل «$(reward)» 🎉"}],cd:0,perm:"everyone",deck:false})};
     box.appendChild(d);
   });
@@ -6299,9 +6315,9 @@ function selMode(on){SEL=on?new Set():null;$("#selbar").hidden=!on;$("#selbtn").
 $("#selbtn").onclick=()=>selMode(!SEL);
 $("#selx").onclick=()=>selMode(false);
 $("#selall").onchange=e=>{const on=e.target.checked;selVisible().forEach(x=>{x.checked=on;on?SEL.add(x.closest(".cmd").dataset.n):SEL.delete(x.closest(".cmd").dataset.n);x.closest(".cmd").classList.toggle("picked",on)});selInfo()};
-$("#seldel").onclick=()=>{
+$("#seldel").onclick=async()=>{
   const names=[...SEL];if(!names.length)return;
-  if(!ask("تحذف {n} كوماند؟ ما تقدر ترجعها",names.length))return;
+  if(!await ask("تحذف {n} كوماند؟ ما تقدر ترجعها",names.length))return;
   act(async()=>{await api("POST",base()+"/commands/delete",{names});selMode(false)},"تم حذف الكوماندات");
 };
 /* ---------- [جديد] سحب من نايت بوت ---------- */
@@ -6348,7 +6364,7 @@ const isApp=matchMedia("(display-mode: standalone)").matches||navigator.standalo
 async function doInstall(){
   const e=window.__bip;
   if(e){window.__bip=null;e.prompt();try{await e.userChoice}catch(_){}return}
-  alert(t("لتثبيت التطبيق: في كروم أو إيدج على الكمبيوتر اضغط ⋮ ثم «تثبيت التطبيق». في الآيفون: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية»."));
+  notice(("لتثبيت التطبيق: في كروم أو إيدج على الكمبيوتر اضغط ⋮ ثم «تثبيت التطبيق». في الآيفون: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية»."));
 }
 document.querySelectorAll(".instb").forEach(b=>b.onclick=doInstall);
 if(isApp)document.querySelectorAll(".instb,#nav a[data-act=install]").forEach(x=>x.remove());
@@ -6378,7 +6394,7 @@ $("#tmsave").onclick=()=>act(async()=>{
   await api("POST",base()+"/timers",{id:TM_ID,text:$("#tmtext").value,every:parseInt($("#tmevery").value,10),lines:parseInt($("#tmlines").value,10)||0,on:cur?cur.on:true});
   $("#tmform").hidden=true;
 },"تم الحفظ");
-$("#tmreset").onclick=()=>{if(ask("ترجع الرسائل المجدولة الافتراضية؟ الرسائل اللي أضفتها تنحذف."))act(()=>api("POST",base()+"/timers/reset"),"تم الحفظ")};
+$("#tmreset").onclick=async()=>{if(await ask("ترجع الرسائل المجدولة الافتراضية؟ الرسائل اللي أضفتها تنحذف."))act(()=>api("POST",base()+"/timers/reset"),"تم الحفظ")};
 document.querySelectorAll(".srchip").forEach(b=>b.onclick=()=>act(()=>api("POST",base()+"/sr/settings",{on:b.dataset.sr==="on"}),"تم الحفظ"));
 $("#sr-save").onclick=()=>act(()=>api("POST",base()+"/sr/settings",{per_user:parseInt($("#sr-user").value,10),max_queue:parseInt($("#sr-queue").value,10),max_minutes:parseInt($("#sr-min").value,10),perm:$("#sr-perm").value}),"تم الحفظ");
 $("#sr-copy").onclick=()=>copyText($("#sr-playerurl").value);
@@ -6404,9 +6420,9 @@ $("#savecmd").onclick=()=>act(async()=>{
 $("#added").onclick=()=>act(async()=>{
   await api("POST",base()+"/editors",{name:$("#newed").value});$("#newed").value="";
 },"تمت إضافة المود");
-$("#unlink").onclick=()=>{if(ask("تلغي الربط مع تويتش؟"))act(()=>api("POST",base()+"/unlink"),"تم إلغاء الربط")};
-$("#leave").onclick=()=>{
-  if(ask("متأكد تبي تشيل البوت من قناتك؟"))act(()=>api("POST",base()+"/leave"),"تم إزالة البوت",true);
+$("#unlink").onclick=async()=>{if(await ask("تلغي الربط مع تويتش؟"))act(()=>api("POST",base()+"/unlink"),"تم إلغاء الربط")};
+$("#leave").onclick=async()=>{
+  if(await ask("متأكد تبي تشيل البوت من قناتك؟"))act(()=>api("POST",base()+"/leave"),"تم إزالة البوت",true);
 };
 $("#logout").onclick=async()=>{await api("POST","/s/api/logout");location.href="/"};
 const qp=new URLSearchParams(location.search);
@@ -6941,6 +6957,14 @@ main>.top h1{font-size:30px}
 .nbrow small{color:var(--sf2);font-size:12px}
 .nbrow p{margin:2px 0 0;color:var(--mut);font-size:13.5px;word-break:break-word}
 .nbrow.off{opacity:.5}
+#askdlg{position:fixed;inset:0;z-index:200;background:rgba(5,4,8,.72);display:grid;place-items:center;padding:20px;animation:askin .14s ease-out}
+#askdlg[hidden]{display:none!important}
+.askbox{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--line2);border-radius:var(--r);padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+.askbox p{margin:0 0 20px;font-size:16px;line-height:1.7;color:var(--tx);font-weight:500}
+.askbtns{display:flex;gap:10px}
+.askbtns .btn{flex:1;width:auto;padding:11px}
+@keyframes askin{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){#askdlg{animation:none}}
 .selbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:122px;z-index:9;background:var(--raise);border:1px solid var(--line2);border-radius:var(--r);padding:10px 14px;margin-bottom:10px}
 .selbar .chk{margin:0}
 .selcb{width:20px!important;height:20px;margin:3px 0 0!important;flex-shrink:0;accent-color:var(--sf);cursor:pointer}
