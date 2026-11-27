@@ -11834,6 +11834,8 @@ class Bot:
       winner, loser, lid = uname, tname, tinfo.get("id")
     else:
       winner, loser, lid = tname, uname, await self.twitch.user_id(me)
+    if not lid:  # [fix] ما قدرنا نجيب حساب الخسران: نرجّع النقاط بدل ما نقول «نجا لأنه مود»
+      return await fail("صار خطأ مع تويتش، ورجعت لك نقاطك", "Twitch error, points refunded")
     secs = st.get("n", 60)
     c2 = dict(ctx, target=tname, winner=winner, loser=loser, seconds=secs)
     await self.send_chat(ch, act_fill(st.get("v") or DUEL_TEXT, c2)[:490])
@@ -11963,8 +11965,8 @@ class Bot:
           live = bool(si)
           was = self.live_state.get(ch)
           self.live_state[ch] = (live, (si or {}).get("id") if live else None)
-          if was is None and first:
-            pass  # أول فحص بعد التشغيل: ما نعتبره بداية بث
+          if was is None:
+            pass  # [fix] أول فحص للقناة (بعد التشغيل أو لما يتفعّل الإشعار والبث شغال): ما نعتبره بداية بث
           elif live and not (was and was[0]):
             await self.golive_post(ch, si)
             await self.fire(ch, "live_start", {"user": ch, "game": si.get("game_name") or "", "title": si.get("title") or ""})
@@ -12009,7 +12011,8 @@ class Bot:
     r = d.get(user)
     if r is None:
       r = d[user] = {"x": 0, "w": 0, "m": 0, "lm": 0}
-      if len(d) > MAX_XP_USERS:
+      # [fix] التنظيف دفعة وحدة كل 500 شخص بدل ترتيب 20 ألف اسم مع كل مشاهد جديد (كان يبطّئ البوت بالقنوات الكبيرة)
+      if len(d) > MAX_XP_USERS + 500:
         for k in sorted(d, key=lambda u: d[u].get("x", 0))[:len(d) - MAX_XP_USERS]:
           if k != user:
             del d[k]
