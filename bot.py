@@ -10,7 +10,7 @@ import html as html_mod
 import secrets
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from urllib.parse import urlencode
 
 import aiohttp
@@ -2816,7 +2816,9 @@ def disp_cmd(name, c):
 # [جديد] سحب الكوماندات من نايت بوت (قائمة الكوماندات العامة للقناة)
 NB_PERMS = {"everyone": "everyone", "subscriber": "sub", "regular": "vip", "twitch_vip": "vip",
             "moderator": "mod", "admin": "broadcaster", "owner": "broadcaster"}
-NB_OK_VARS = {"user", "touser", "channel", "game", "count", "uptime", "url", "query", "time", "random", "pick"}
+NB_OK_VARS = {"user", "touser", "channel", "game", "count", "uptime", "url", "query", "time", "random", "pick",
+              "urlfetch", "customapi", "twitch", "countdown", "countup", "urlencode", "querystring", "userlevel",
+              "provider", "clip"}
 
 
 def nb_convert(cmd):
@@ -2850,6 +2852,75 @@ def nb_convert(cmd):
     return name, None, str(e), ""
   entry["bang"] = bang
   return n, entry, "", note
+
+
+_NB_FN_RE = re.compile(r"\$\(([A-Za-z][\w.]*)(?:\s+([^$()]*?))?\s*\)")
+_NB_CACHE = {}
+
+
+async def nb_fetch(url):
+  """[جديد] $(urlfetch) و $(customapi): يجيب نص من رابط (مثل نايت بوت، أقصى 400 حرف). يمنع الروابط الداخلية."""
+  url = url.strip()
+  if url.lower().startswith("json "):
+    url = url[5:].strip()
+  if not re.match(r"https?://", url, re.I) or len(url) > 600:
+    return ""
+  hit = _NB_CACHE.get(url)
+  if hit and time.time() - hit[0] < 10:
+    return hit[1]
+  try:
+    import ipaddress
+    import socket
+    from urllib.parse import urlsplit
+    host = urlsplit(url).hostname or ""
+    infos = await asyncio.get_running_loop().getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    for inf in infos:
+      ip = ipaddress.ip_address(inf[4][0])
+      if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+        return ""
+    async with http_session().get(url, timeout=aiohttp.ClientTimeout(total=6), allow_redirects=False,
+                                  headers={"User-Agent": "majekbot (+https://majekbot.com)"}) as r:
+      raw = await r.content.read(4000)
+    out = re.sub(r"\s+", " ", raw.decode("utf-8", "ignore")).strip()[:400]
+  except Exception as e:
+    print(f"urlfetch: {e}")
+    out = ""
+  _NB_CACHE[url] = (time.time(), out)
+  if len(_NB_CACHE) > 300:
+    for k in list(_NB_CACHE)[:100]:
+      _NB_CACHE.pop(k, None)
+  return out
+
+
+def nb_span(sec, lang):
+  sec = int(abs(sec))
+  d, h, m = sec // 86400, sec % 86400 // 3600, sec % 3600 // 60
+  if lang == "en":
+    parts = [f"{d} days" if d else "", f"{h} hours" if h else "", f"{m} minutes" if m or not (d or h) else ""]
+  else:
+    parts = [f"{d} يوم" if d else "", f"{h} ساعة" if h else "", f"{m} دقيقة" if m or not (d or h) else ""]
+  return (", " if lang == "en" else " و ").join(p for p in parts if p)
+
+
+def nb_date(v):
+  """تاريخ من $(countdown ...): ISO أو مثل "Dec 25 2026 8:00:00 PM". بدون منطقة زمنية = توقيت الرياض."""
+  v = re.sub(r"\s+[A-Z]{2,5}$", "", v.strip().strip('"\''))
+  dt = None
+  try:
+    dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+  except ValueError:
+    for f in ("%b %d %Y %I:%M:%S %p", "%b %d %Y %I:%M %p", "%b %d %Y %H:%M:%S", "%b %d %Y %H:%M", "%b %d %Y",
+              "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M", "%d/%m/%Y"):
+      try:
+        dt = datetime.strptime(v, f)
+        break
+      except ValueError:
+        continue
+  if dt is None:
+    return None
+  if dt.tzinfo is None:
+    dt = dt.replace(tzinfo=timezone(timedelta(hours=3)))
+  return dt
 
 
 def nb_auto_key(word):
@@ -11064,6 +11135,92 @@ class Bot:
     finally:
       self.clipping.discard(channel_name)
 
+  async def nb_expand(self, text, ch, user, target, query, level):
+    """[جديد] باقي متغيرات نايت بوت: $(urlfetch) $(customapi) $(twitch) $(countdown) $(countup) $(urlencode)
+    $(random.pick) $(random.chatter) $(userlevel) $(user.name)... تشتغل من الداخل للخارج مثل نايت بوت."""
+    if "$(" not in text:
+      return text
+    lang = self.lang_of(ch)
+    lvl_names = {0: "everyone", 1: "subscriber", 2: "vip", 3: "moderator", 4: "owner"}
+
+    async def one(name, arg):
+      n = name.lower()
+      arg = (arg or "").strip()
+      if n in ("urlfetch", "customapi"):
+        return await nb_fetch(arg)
+      if n == "urlencode":
+        from urllib.parse import quote
+        return quote(arg, safe="")
+      if n == "querystring":
+        from urllib.parse import quote
+        return quote(query, safe="")
+      if n in ("user", "user.name", "user.displayname"):
+        return user
+      if n in ("touser", "touser.name"):
+        return target or user
+      if n in ("userlevel", "user.level"):
+        return lvl_names.get(level, "everyone")
+      if n == "provider":
+        return "twitch"
+      if n == "channel" or n == "channel.name":
+        return ch
+      if n == "random.chatter":
+        rc = [u for u in self.recent_chat.get(ch, {}) if u != ch]
+        return random.choice(rc) if rc else user
+      if n == "random.pick":
+        opts = re.findall(r"'([^']*)'|\"([^\"]*)\"", arg)
+        opts = [a or b for a, b in opts] or [x.strip() for x in arg.split(",") if x.strip()]
+        return random.choice(opts) if opts else ""
+      if n in ("countdown", "countup"):
+        dt = nb_date(arg)
+        if not dt:
+          return ""
+        diff = (dt - datetime.now(timezone.utc)).total_seconds()
+        if n == "countup":
+          diff = -diff
+        if diff <= 0:
+          return "0"
+        return nb_span(diff, lang)
+      if n == "time":
+        tz = (arg.split() or ["Asia/Riyadh"])[0].strip('"\'')
+        return now_in_tz(tz).strftime("%I:%M %p" if lang == "en" else "%H:%M")
+      if n == "twitch":
+        m = re.match(r"""\s*@?(\w{2,25})\s*(?:["'](.*)["'])?\s*$""", arg)
+        if not m:
+          return ""
+        who, tpl = m.group(1).lower(), m.group(2) or "{{displayName}}"
+        info = await self.twitch.user_info(who) or {}
+        if not info:
+          return ""
+        vals = {"name": info.get("login") or who, "displayName": info.get("display_name") or who,
+                "url": f"https://twitch.tv/{who}", "game": "", "title": "", "uptimeLength": "", "uptimeAt": ""}
+        if re.search(r"\{\{(game|title|status)\}\}", tpl):
+          try:
+            g, ti = await self.twitch.channel_info(who)
+            vals["game"], vals["title"] = g or "", ti or ""
+          except Exception:
+            pass
+        if "{{uptime" in tpl:
+          si = await self.twitch.stream_info(who)
+          if si:
+            vals["uptimeLength"] = fmt_dur(time.time() - parse_ts(si["started_at"]), lang)
+        vals["status"] = vals["title"]
+        return re.sub(r"\{\{(\w+)\}\}", lambda mm: str(vals.get(mm.group(1), "")), tpl)
+      return ""  # متغير ما ندعمه (مثل eval أو weather): ينشال بدل ما يطلع كنص
+
+    for _ in range(12):
+      m = _NB_FN_RE.search(text)
+      if not m:
+        break
+      try:
+        val = await one(m.group(1), m.group(2))
+      except Exception as e:
+        print(f"متغير نايت بوت {m.group(1)}: {e}")
+        val = ""
+      val = str(val).replace("$(", "$ (")
+      text = text[:m.start()] + val + text[m.end():]
+    return text
+
   async def run_custom(self, message, cmd, entry, parts, channel_name, level):
     send = message.channel.send
     mention = f"@{message.author.name}"
@@ -11128,10 +11285,17 @@ class Bot:
         if auto_clip:
           self.push_overlay(channel_name, target, clip)
 
-    text = format_response(entry["reply"], message.author.name, channel_name, target)
+    game_now = ""
+    if "$(game)" in entry["reply"]:  # [fix] $(game) في الكوماند العادي كان يطلع فاضي
+      try:
+        game_now = (await self.twitch.channel_info(channel_name))[0] or ""
+      except Exception:
+        game_now = ""
+    text = format_response(entry["reply"], message.author.name, channel_name, target, game_now)
     query = " ".join(parts[1:]) if len(parts) > 1 else ""
     text = expand_args(text, query, self.lang_of(channel_name))
     text = await self.expand(text, channel_name, cmd)
+    text = await self.nb_expand(text, channel_name, message.author.name, target, query, level)
     if "$(clip)" in text:
       text = text.replace("$(clip)", clip_url)
     elif clip_url:
