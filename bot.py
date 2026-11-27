@@ -2818,7 +2818,7 @@ NB_PERMS = {"everyone": "everyone", "subscriber": "sub", "regular": "vip", "twit
             "moderator": "mod", "admin": "broadcaster", "owner": "broadcaster"}
 NB_OK_VARS = {"user", "touser", "channel", "game", "count", "uptime", "url", "query", "time", "random", "pick",
               "urlfetch", "customapi", "twitch", "countdown", "countup", "urlencode", "querystring", "userlevel",
-              "provider", "clip"}
+              "provider", "clip", "accountage", "followage"}
 
 
 def nb_convert(cmd):
@@ -2851,6 +2851,7 @@ def nb_convert(cmd):
   msg = re.sub(r"\[(user|touser|channel|query|querystring|count|game|uptime|[1-9])\]",
                lambda m: "$(" + ("query" if m.group(1).lower() == "querystring" else m.group(1).lower()) + ")", msg, flags=re.I)
   masked = bool(re.search(r"\[(urlfetch|customapi|twitch|eval)\b", msg, re.I))
+  msg = nb_mention_last(msg)
   if masked and re.fullmatch(r"(clip|clips|كليب|كلب|مقطع)", name):
     try:
       n, entry = build_command({"name": name, "type": "clip", "secs": 30, "bang": True,
@@ -2862,9 +2863,9 @@ def nb_convert(cmd):
   if re.fullmatch(r"(up|uptime|live|مدة|مده|المدة|المده)", name) and (masked or "uptime" in msg.lower()):
     msg = "البث صار له $(uptime)"
   elif re.fullmatch(r"\[twitch \$\((touser|user)\)\]", msg.strip(), re.I):  # عمر الحساب (!accountage)
-    msg = "$(touser) $(urlfetch https://decapi.me/twitch/accountage/$(touser)?precision=3)"
+    msg = "عمر حساب $(touser): $(accountage)"
   elif masked and re.search(r"follow", msg, re.I):
-    msg = "$(touser) $(urlfetch https://decapi.me/twitch/followage/$(channel)/$(touser)?precision=3)"
+    msg = "$(touser) متابع القناة من $(followage)"
   if masked:
     # «%[eval]» غالباً نسبة عشوائية (مثل كوماندات «كم نسبة...»)
     msg = re.sub(r"\[eval\]\s*%|%\s*\[eval\]", "$(random 0-100)%", msg, flags=re.I)
@@ -2958,6 +2959,14 @@ def nb_date(v):
   return dt
 
 
+def nb_mention_last(msg):
+  """[جديد] «$(user) خذ راحتك» تصير «خذ راحتك @$(user)»: الرد أول وبعده المنشن."""
+  m = re.match(r"^@?\$\((user|touser)\)[\s,،:]+(.+)$", msg.strip(), re.S)
+  if m and "$(" + m.group(1) + ")" not in m.group(2):
+    return m.group(2).strip() + " @$(" + m.group(1) + ")"
+  return msg
+
+
 def nb_migrate(store):
   """[جديد] يصلح الكوماندات اللي انسحبت من نايت بوت قبل (فيها [user] و [eval] ...) بدون ما يعيد الستريمر السحب."""
   fixed = 0
@@ -2973,6 +2982,16 @@ def nb_migrate(store):
       entry.update(perm=c.get("perm", "everyone"), cd=c.get("cd"), aliases=c.get("aliases") or [])
       cmds[name] = entry
       fixed += 1
+  if not store.data.get("nb_mig2"):  # مرة وحدة: الكوماندات المسحوبة قبل يصير المنشن آخر الرد
+    store.data["nb_mig2"] = 1
+    for cmds in store.data.get("commands", {}).values():
+      for c in cmds.values():
+        if c.get("type") == "text" and c.get("reply"):
+          new = nb_mention_last(c["reply"])
+          if new != c["reply"]:
+            c["reply"] = new
+            fixed += 1
+    store.save_soon(5)
   if fixed:
     print(f"نايت بوت: تم إصلاح {fixed} كوماند")
     store.save_soon(5)
@@ -3222,6 +3241,7 @@ class Store:
         self.data[k] = loaded.get(k, {})
       self.data["reports"] = loaded.get("reports", [])
       self.data["es_fp"] = loaded.get("es_fp", "")
+      self.data["nb_mig2"] = loaded.get("nb_mig2", 0)
       if "reminders" in loaded:
         self.data["reminders"] = loaded["reminders"]
       else:
@@ -11317,10 +11337,30 @@ class Bot:
     lang = self.lang_of(ch)
     lvl_names = {0: "everyone", 1: "subscriber", 2: "vip", 3: "moderator", 4: "owner"}
 
+    async def age(kind, who):
+      """عمر الحساب أو مدة المتابعة من تويتش مباشرة (بدل decapi)."""
+      who = (who or target or user).lstrip("@").lower()
+      info = await self.twitch.user_info(who)
+      if not info:
+        return ""
+      if kind == "accountage":
+        return fmt_dur(time.time() - parse_ts(info.get("created_at", "")), lang)
+      if who == ch:
+        return "—"
+      at, err = await self.twitch.followed_at(ch, info["id"])
+      if err == "not_following":
+        return "ما هو متابع" if lang != "en" else "not following"
+      return fmt_dur(time.time() - parse_ts(at), lang) if at else ""
+
     async def one(name, arg):
       n = name.lower()
       arg = (arg or "").strip()
+      if n in ("accountage", "followage"):
+        return await age(n, arg)
       if n in ("urlfetch", "customapi"):
+        mm = re.search(r"decapi\.me/twitch/(accountage|followage)/([\w@]+)(?:/([\w@]+))?", arg, re.I)
+        if mm:  # روابط decapi المشهورة نحسبها بنفسنا (أسرع وما تتعطل)
+          return await age(mm.group(1).lower(), mm.group(3) if mm.group(1).lower() == "followage" else mm.group(2))
         return await nb_fetch(arg)
       if n == "urlencode":
         from urllib.parse import quote
