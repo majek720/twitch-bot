@@ -2926,6 +2926,7 @@ class Store:
         "firstw": {},  # [جديد] قناة -> ترحيب أول كلمة
         "seen_users": {},  # [جديد] قناة -> {يوزر: 1} اللي كتبوا بالقناة قبل (لأول كلمة)
         "rewards_cfg": {},  # [جديد] قناة -> {رقم المكافأة: {auto: none/fulfill/refund}}
+        "deck": {},  # [جديد] قناة -> أزرار ريموت البث اللي رتبها الستريمر
     }
     # [patch-v2]
     self._save_lock = asyncio.Lock()  # يمنع كتابتين تتداخلان
@@ -3016,7 +3017,7 @@ class Store:
       for k in ("botacct", "bot_auth", "report_bans", "sr", "filters", "counts", "ai",
                 "alerts", "audit", "streaks", "streak_meta", "streak_cfg",
                 "discord_links", "discord_guilds", "xp", "xp_cfg", "actions", "golive", "firstw",
-                "seen_users", "rewards_cfg"):
+                "seen_users", "rewards_cfg", "deck"):
         self.data[k] = loaded.get(k, {})
       self.data["reports"] = loaded.get("reports", [])
       self.data["es_fp"] = loaded.get("es_fp", "")
@@ -4565,6 +4566,13 @@ main{flex:1;min-width:0}
 .actrow .meta{color:var(--mut);font-size:13px;margin-top:4px}
 .rwdot{width:14px;height:14px;border-radius:4px;display:inline-block;vertical-align:-2px;margin-inline-end:8px}
 .deck button.paused{opacity:.5}
+.deck button small{font-size:11px;color:var(--mut);font-weight:400}
+.deck button.gold small{color:var(--sfink)}
+.deck.editing button{outline:2px dashed var(--line2);outline-offset:-6px}
+.deck.editing button.sel{outline-color:var(--sf)}
+.deck button.addk{border-style:dashed;background:none;color:var(--mut)}
+.deck button .tm{position:absolute;top:6px;inset-inline-start:8px;font-size:11px;color:var(--sf2)}
+.deck button{position:relative}
 .actrow.off{opacity:.55}
 .copyrow input{margin:0;direction:ltr;flex:1;min-width:200px;color:var(--mut)}
 .copyrow .btn{width:auto}
@@ -4709,12 +4717,30 @@ main{flex:1;min-width:0}
 
         <section class="pg" id="p-deck" hidden>
           <div class="panel" style="margin-bottom:14px">
-            <h3>أزرار البث</h3>
-            <p class="mut">تحكم بالبث من جوالك وأنت تلعب. الأزرار تشمل اختصارات الألعاب حقتك، والأوامر التلقائية اللي فعّلت فيها «زر في الريموت».</p>
+            <div class="chead" style="margin-bottom:6px"><h3 style="margin:0">أزرار البث</h3><span class="own"><button class="btn sm line" id="deckedit">✏️ تعديل الأزرار</button></span></div>
+            <p class="mut" id="deckhint">تحكم بالبث من جوالك وأنت تلعب.</p>
             <div class="deck" id="deckgrid"></div>
-            <div id="deckrw" hidden>
-              <div class="sub">مكافآت نقاط القناة</div>
-              <div class="deck" id="deckrwgrid"></div>
+            <div class="tool" id="deckbar" hidden style="margin:14px 0 0">
+              <button class="btn" id="deckdone">تم</button>
+              <button class="btn ghost" id="deckreset">رجّع الأزرار الافتراضية</button>
+            </div>
+          </div>
+          <div class="panel" id="deckform" hidden style="margin-bottom:14px">
+            <h3 id="deckftitle">زر جديد</h3>
+            <div class="grid3">
+              <div><label>نوع الزر</label><select id="db-t"></select></div>
+              <div><label>اسم الزر</label><input id="db-label" maxlength="30"></div>
+              <div><label>الأيقونة (إيموجي)</label><input id="db-icon" maxlength="4" style="font-size:20px;text-align:center"></div>
+            </div>
+            <div id="db-fields"></div>
+            <label class="chk" style="margin-top:10px"><input type="checkbox" id="db-hot"><span>لون أحمر (للأزرار الحساسة)</span></label>
+            <div class="tool" style="margin:12px 0 0;flex-wrap:wrap">
+              <button class="btn" id="db-save">حفظ</button>
+              <button class="btn ghost" id="db-cancel">إلغاء</button>
+              <span style="flex:1"></span>
+              <button class="btn sm line" id="db-up">قدّم ↑</button>
+              <button class="btn sm line" id="db-down">أخّر ↓</button>
+              <button class="btn sm line" id="db-del" style="color:var(--bad)">حذف الزر</button>
             </div>
           </div>
           <div class="panel" style="margin-bottom:14px">
@@ -5319,7 +5345,7 @@ function go(p){
   $("#ptitle").textContent=t(TITLES[p]);
   $("#side").classList.remove("open");$("#bd").hidden=true;
   if(p==="cp")renderCP(true);
-  if(p==="deck")renderDeckRw();
+  if(p==="deck"&&CH&&CH.role==="owner"&&(CH.deckbtns||[]).some(b=>b.t==="reward"))loadRewards().then(()=>renderDeck());
 }
 const openModal=()=>{$("#modal").hidden=false};
 const closeModal=()=>{$("#modal").hidden=true};
@@ -5379,7 +5405,7 @@ function render(){
   if(!own&&OWNPG.includes(PG))go("ov");
   renderTop();renderSim();renderCmds();renderBuiltin();renderStats();
   if(own){renderOwn();renderAuto();renderSongs();renderSpam();renderBot();renderAI();renderAlerts();renderStreak();renderLog();renderSO();renderLV();renderActs();renderFW();renderGL()}
-  renderDeck();
+  if(!DECKEDIT)renderDeck();
 }
 function renderTop(){
   const u=CH.usage||{},k=Object.keys(u).sort((a,b)=>u[b]-u[a]).slice(0,5),max=k.length?u[k[0]]:1,box=$("#topbox");
@@ -5616,23 +5642,93 @@ function renderAlerts(){
 }
 
 /* ---------- [جديد] ريموت البث ---------- */
-function renderDeck(){
-  const g=$("#deckgrid");if(!g)return;g.innerHTML="";
-  const key=(ic,label,cls,fn)=>{const b=document.createElement("button");if(cls)b.className=cls;
-    b.innerHTML='<b data-nt></b><span data-nt></span>';b.querySelector("b").textContent=ic;b.querySelector("span").textContent=label;
-    b.onclick=async()=>{b.classList.add("busy");try{await fn()}finally{b.classList.remove("busy")}};g.appendChild(b)};
-  const deck=(body,msg)=>act(()=>api("POST",base()+"/deck",body),msg);
-  key("🎬",t("كليب"),"gold",()=>deck({k:"clip"},"تم إنشاء الكليب"));
-  key("🧹",t("مسح الشات"),"hot",()=>{if(confirm(t("متأكد تبي تمسح الشات كامل؟")))return deck({k:"clear"},"تم مسح الشات")});
-  key("📺",t("إعلان 60ث"),"",()=>deck({k:"ad"},"تم تشغيل الإعلان"));
-  key("🐢",t("سلو مود"),"",()=>deck({k:"chatmode",v:"slow_on"},"تم تشغيل السلو مود"));
-  key("🐇",t("إلغاء السلو"),"",()=>deck({k:"chatmode",v:"slow_off"},"تم إلغاء السلو مود"));
-  key("😀",t("إيموت فقط"),"",()=>deck({k:"chatmode",v:"emote_on"},"تم"));
-  key("💬",t("إلغاء الإيموت فقط"),"",()=>deck({k:"chatmode",v:"emote_off"},"تم"));
-  Object.keys(CH.commands).filter(n=>CH.commands[n].type==="game").sort().forEach(n=>{
-    const gm=CH.commands[n].game;key("🎮",gm,"",()=>deck({k:"game",v:gm},"تم تغيير اللعبة"))});
-  (CH.deck||[]).forEach(x=>key("⚡",x.name,"",()=>deck({k:"action",v:x.id},"تم التشغيل")));
+let DECKEDIT=false,DB=null,DBI=-1;
+const DMODES=[["slow","سلو مود"],["emote","إيموت فقط"],["followers","المتابعين فقط"],["subs","المشتركين فقط"]];
+const dtl=k=>{const T=CH.decktypes||{};return T[k]?(LANG==="en"?T[k][1]:T[k][0]):k};
+function deckSub(b){
+  const en=LANG==="en",m=en?"min":"د",s_=en?"s":"ث";
+  if(b.t==="clip")return b.n+s_;
+  if(b.t==="ad")return b.n+s_;
+  if(b.t==="chatmode")return (b.v==="slow"?b.n+s_+" • ":"")+(b.d?b.d+" "+m:t("لين توقفه"));
+  if(b.t==="reward"){const r=((RW&&RW.rewards)||[]).find(x=>x.id===b.v);return r?t(r.paused?"موقفة":"شغالة")+(b.d?" • "+b.d+" "+m:""):""}
+  return "";
 }
+function renderDeck(){
+  const g=$("#deckgrid");if(!g)return;g.innerHTML="";g.classList.toggle("editing",DECKEDIT);
+  if(!DECKEDIT)DB=JSON.parse(JSON.stringify(CH.deckbtns||[]));
+  $("#deckbar").hidden=!DECKEDIT;$("#deckedit").hidden=DECKEDIT;
+  $("#deckhint").textContent=t(DECKEDIT?"اضغط على أي زر عشان تعدّله أو تحذفه، أو اضغط «زر جديد». التغييرات تنحفظ أول ما تضغط «حفظ».":"تحكم بالبث من جوالك وأنت تلعب.");
+  DB.forEach((b,i)=>{
+    const el=document.createElement("button");el.className=(i===0&&b.t==="clip"?"gold":"")+(b.hot?" hot":"")+(DECKEDIT&&i===DBI?" sel":"");
+    el.innerHTML='<b data-nt></b><span data-nt></span><small data-nt></small>';
+    el.querySelector("b").textContent=b.icon||"•";el.querySelector("span").textContent=b.label;el.querySelector("small").textContent=deckSub(b);
+    if(b.t==="reward"){const r=((RW&&RW.rewards)||[]).find(x=>x.id===b.v);if(r&&r.paused)el.classList.add("paused")}
+    el.onclick=async()=>{
+      if(DECKEDIT)return openDB(i);
+      if(b.t==="clear"&&!confirm(t("متأكد تبي تمسح الشات كامل؟")))return;
+      const body={k:"btn",id:b.id};
+      if(b.t==="reward"){const r=((RW&&RW.rewards)||[]).find(x=>x.id===b.v);body.pause=!(r&&r.paused)}
+      el.classList.add("busy");
+      try{await act(async()=>{const d=await api("POST",base()+"/deck",body);
+          if(b.t==="reward"){await loadRewards();renderDeck()}
+          if(d&&d.timer)toast(t("يرجع لحاله بعد {n} دقيقة").replace("{n}",d.timer))},"تم")}
+      finally{el.classList.remove("busy")}
+    };
+    g.appendChild(el);
+  });
+  if(DECKEDIT){const a=document.createElement("button");a.className="addk";a.innerHTML='<b>＋</b><span data-nt></span>';a.querySelector("span").textContent=t("زر جديد");a.onclick=()=>openDB(-1);g.appendChild(a)}
+  if(!RW&&(DB||[]).some(b=>b.t==="reward"))loadRewards().then(()=>renderDeck());
+}
+function dbFields(b){
+  const box=$("#db-fields");box.innerHTML="";const T=b.t;
+  const lab=x=>{const l=document.createElement("label");l.textContent=t(x);box.appendChild(l)};
+  const inp=(k,type,ph,attrs)=>{const e=document.createElement(type==="area"?"textarea":"input");if(type!=="area")e.type=type;e.value=b[k]??"";if(ph)e.placeholder=t(ph);
+    if(type==="number"||k==="v"&&T==="sound")e.dir="ltr";Object.assign(e,attrs||{});e.oninput=()=>{b[k]=type==="number"?(e.value===""?"":+e.value):e.value};box.appendChild(e);return e};
+  const sel=(k,opts)=>{const e=document.createElement("select");opts.forEach(([v,l])=>e.add(new Option(t(l),v)));if(b[k]==null&&opts.length)b[k]=opts[0][0];e.value=b[k];e.onchange=()=>{b[k]=e.value;dbFields(b)};box.appendChild(e);return e};
+  const hint=x=>{const p=document.createElement("p");p.className="hint";p.style.margin="4px 0 0";p.textContent=t(x);box.appendChild(p)};
+  if(T==="clip"){lab("طول الكليب (ثواني)");if(b.n==null)b.n=30;inp("n","number","30",{min:5,max:60})}
+  else if(T==="ad"){lab("مدة الإعلان");if(b.n==null)b.n=60;const e=document.createElement("select");[30,60,90,120,150,180].forEach(v=>e.add(new Option(v+(LANG==="en"?" s":" ثانية"),v)));e.value=b.n;e.onchange=()=>{b.n=+e.value};box.appendChild(e)}
+  else if(T==="chatmode"){lab("الوضع");sel("v",DMODES);if(b.v==="slow"){lab("ثواني بين كل رسالة");if(b.n==null)b.n=30;inp("n","number","30",{min:3,max:120})}
+    lab("كم دقيقة يبقى شغال؟");if(b.d==null)b.d=0;inp("d","number","0",{min:0,max:720});hint("صفر = يبقى شغال لين تضغط زر الإلغاء")}
+  else if(T==="chatoff"){lab("الوضع اللي ينلغي");sel("v",DMODES)}
+  else if(T==="game"){lab("اسم اللعبة");inp("v","text","Fortnite")}
+  else if(T==="title"){lab("العنوان الجديد");inp("v","text","")}
+  else if(T==="say"){lab("الرسالة");inp("v","area","")}
+  else if(T==="tts"){lab("النص اللي ينقرا بصوت");inp("v","area","")}
+  else if(T==="sound"){lab("رابط ملف الصوت (mp3)");inp("v","text","https://...");lab("قوة الصوت %");if(b.n==null)b.n=80;inp("n","number","80",{min:5,max:100})}
+  else if(T==="shoutout"){lab("اسم القناة");inp("v","text","")}
+  else if(T==="reward"){lab("المكافأة");const L=((RW&&RW.rewards)||[]).filter(r=>r.mine);
+    if(!L.length){hint(RW&&RW.ok?"ما عندك مكافآت من majek bot. سوّها من صفحة نقاط القناة.":"اربط المكافآت من صفحة نقاط القناة.");if(!RW)loadRewards().then(()=>dbFields(b))}
+    else{sel("v",L.map(r=>[r.id,r.title]))}
+    lab("إذا وقفتها، كم دقيقة تبقى موقفة؟");if(b.d==null)b.d=0;inp("d","number","0",{min:0,max:720});hint("صفر = تبقى موقفة لين تضغط الزر مرة ثانية")}
+  else if(T==="action"){lab("الأمر التلقائي");const L=((CH.auto2||{}).list||[]);
+    if(!L.length)hint("ما عندك أوامر تلقائية للحين");else sel("v",L.map(x=>[x.id,x.name]))}
+}
+function openDB(i){
+  DBI=i;const b=i>=0?DB[i]:{t:"say",label:"",icon:""};
+  $("#deckform").hidden=false;$("#deckftitle").textContent=t(i>=0?"تعديل زر":"زر جديد");
+  const ts=$("#db-t");if(!ts.options.length)Object.keys(CH.decktypes||{}).forEach(k=>ts.add(new Option(dtl(k),k)));
+  else [...ts.options].forEach(o=>o.textContent=dtl(o.value));
+  window.__DBE=JSON.parse(JSON.stringify(b));const e=window.__DBE;
+  ts.value=e.t;$("#db-label").value=e.label;$("#db-icon").value=e.icon;$("#db-hot").checked=!!e.hot;
+  ts.onchange=()=>{const T=(CH.decktypes||{})[ts.value]||[];const old=e.t;Object.keys(e).forEach(k=>{if(!["id"].includes(k))delete e[k]});
+    e.t=ts.value;e.label=$("#db-label").value&&$("#db-label").value!==dtl(old)?$("#db-label").value:dtl(ts.value);e.icon=T[2]||"";$("#db-label").value=e.label;$("#db-icon").value=e.icon;dbFields(e)};
+  if(i<0){ts.onchange()}else dbFields(e);
+  ["db-up","db-down","db-del"].forEach(x=>$("#"+x).hidden=i<0);
+  renderDeck();$("#deckform").scrollIntoView({behavior:"smooth",block:"start"});
+}
+function saveDeck(msg){return act(async()=>{await api("POST",base()+"/deck",{k:"save",buttons:DB})},msg||"تم الحفظ")}
+$("#deckedit").onclick=()=>{DECKEDIT=true;DB=JSON.parse(JSON.stringify(CH.deckbtns||[]));renderDeck()};
+$("#deckdone").onclick=()=>{DECKEDIT=false;DBI=-1;$("#deckform").hidden=true;renderDeck()};
+$("#deckreset").onclick=()=>{if(confirm(t("ترجع الأزرار الافتراضية وتنحذف أزرارك؟"))){DECKEDIT=false;DBI=-1;$("#deckform").hidden=true;act(()=>api("POST",base()+"/deck",{k:"reset"}),"تم")}};
+$("#db-cancel").onclick=()=>{$("#deckform").hidden=true;DBI=-1;renderDeck()};
+$("#db-save").onclick=async()=>{const e=window.__DBE;e.label=$("#db-label").value.trim()||dtl(e.t);e.icon=$("#db-icon").value.trim();e.hot=$("#db-hot").checked;
+  const old=JSON.stringify(DB);if(DBI>=0)DB[DBI]=e;else{if(DB.length>=40)return toast(t("الحد 40 زر"),1);DB.push(e)}
+  try{await api("POST",base()+"/deck",{k:"save",buttons:DB});toast(t("تم الحفظ"));$("#deckform").hidden=true;DBI=-1;await loadCh()}
+  catch(x){DB=JSON.parse(old);if(x.message!=="auth")toast(x.message,1)}};
+$("#db-del").onclick=()=>{if(DBI<0)return;DB.splice(DBI,1);DBI=-1;$("#deckform").hidden=true;saveDeck("تم الحذف")};
+const mv=d=>{if(DBI<0)return;const j=DBI+d;if(j<0||j>=DB.length)return;[DB[DBI],DB[j]]=[DB[j],DB[DBI]];DBI=j;renderDeck();saveDeck("تم الحفظ")};
+$("#db-up").onclick=()=>mv(-1);$("#db-down").onclick=()=>mv(1);
 $("#decksend").onclick=()=>act(async()=>{await api("POST",base()+"/deck",{k:"say",v:$("#deckmsg").value});$("#deckmsg").value=""},"تم الإرسال");
 
 /* ---------- [جديد] الأوامر التلقائية ---------- */
@@ -5824,15 +5920,6 @@ $("#cp-save").onclick=()=>{
     maxu:+$("#cp-maxu").value||0,color:$("#cp-color").value,input:$("#cp-input").checked,skip:$("#cp-skip").checked,enabled:$("#cp-enabled").checked};
   act(async()=>{await api("POST",base()+"/rewards",{id:RWEDIT?RWEDIT.id:"",reward});$("#cpform").hidden=true;await renderCP(true)},"تم الحفظ");
 };
-async function renderDeckRw(){
-  const w=$("#deckrw"),g=$("#deckrwgrid");if(!w||!CH||CH.role!=="owner"||!CH.rewards_ok){if(w)w.hidden=true;return}
-  await loadRewards();const L=(RW.rewards||[]).filter(r=>r.mine&&r.enabled);
-  w.hidden=!L.length;g.innerHTML="";
-  L.forEach(r=>{const b=document.createElement("button");b.className=r.paused?"paused":"";
-    b.innerHTML='<b data-nt>🪙</b><span data-nt></span><small data-nt></small>';b.querySelector("span").textContent=r.title;
-    b.querySelector("small").textContent=t(r.paused?"موقفة":"شغالة");
-    b.onclick=()=>act(async()=>{await api("POST",base()+"/deck",{k:"reward",v:r.id,pause:!r.paused});await renderDeckRw()},"تم الحفظ");g.appendChild(b)});
-}
 /* ---------- [جديد] أول كلمة، إعلان البث، OBS ---------- */
 function renderFW(){const f=(CH.auto2||{}).firstw||{};$("#fw-ever").checked=!!f.ever_on;$("#fw-stream").checked=!!f.stream_on;$("#fw-evertext").value=f.ever_text||"";$("#fw-streamtext").value=f.stream_text||""}
 $("#fw-save").onclick=()=>act(()=>api("POST",base()+"/firstw",{ever_on:$("#fw-ever").checked,stream_on:$("#fw-stream").checked,ever_text:$("#fw-evertext").value,stream_text:$("#fw-streamtext").value}),"تم الحفظ");
@@ -5855,7 +5942,15 @@ Object.assign(EN,{"ريموت البث":"Stream remote","الشات":"Chat","ا�
 "أزرار البث":"Stream buttons","تحكم بالبث من جوالك وأنت تلعب. الأزرار تشمل اختصارات الألعاب حقتك، والأوامر التلقائية اللي فعّلت فيها «زر في الريموت».":"Control your stream from your phone while you play. Buttons include your game shortcuts and any action with \"Remote button\" turned on.",
 "رسالة سريعة بالشات":"Quick chat message","اكتب رسالة يرسلها البوت":"Type a message for the bot to send","مسح الشات":"Clear chat","متأكد تبي تمسح الشات كامل؟":"Clear the whole chat?","تم مسح الشات":"Chat cleared","تم إنشاء الكليب":"Clip created","تم تغيير اللعبة":"Game changed","تم التشغيل":"Started",
 "أمر جديد":"New action","«إذا صار كذا، سوِّ كذا». كل أمر له حدث يشغّله وخطوات يسويها ورا بعض، مثل رسالة ثم انتظار ثم صوت ثم إعلان بالديسكورد.":"\"When this happens, do that.\" Each action has a trigger and steps that run in order, like a message, then a wait, then a sound, then a Discord post.",
-"قوالب جاهزة:":"Templates:","تحدي 1v1":"1v1 duel","مدة التايم للخسران (ثواني)":"Loser timeout (seconds)","رسالة النتيجة":"Result message",
+"قوالب جاهزة:":"Templates:","✏️ تعديل الأزرار":"✏️ Edit buttons","تحكم بالبث من جوالك وأنت تلعب.":"Control your stream from your phone while you play.",
+"اضغط على أي زر عشان تعدّله أو تحذفه، أو اضغط «زر جديد». التغييرات تنحفظ أول ما تضغط «حفظ».":"Tap any button to edit or delete it, or tap New button. Changes save when you press Save.",
+"رجّع الأزرار الافتراضية":"Restore default buttons","زر جديد":"New button","تعديل زر":"Edit button","نوع الزر":"Button type","اسم الزر":"Button name","الأيقونة (إيموجي)":"Icon (emoji)",
+"لون أحمر (للأزرار الحساسة)":"Red (for sensitive buttons)","قدّم ↑":"Move up ↑","أخّر ↓":"Move down ↓","حذف الزر":"Delete button","لين توقفه":"until off","يرجع لحاله بعد {n} دقيقة":"Reverts automatically in {n} min",
+"طول الكليب (ثواني)":"Clip length (seconds)","مدة الإعلان":"Ad length","الوضع":"Mode","ثواني بين كل رسالة":"Seconds between messages","كم دقيقة يبقى شغال؟":"How many minutes does it stay on?",
+"صفر = يبقى شغال لين تضغط زر الإلغاء":"Zero = stays on until you press the off button","الوضع اللي ينلغي":"Mode to turn off","الرسالة":"Message","رابط ملف الصوت (mp3)":"Sound file URL (mp3)","قوة الصوت %":"Volume %","اسم القناة":"Channel name",
+"ما عندك مكافآت من majek bot. سوّها من صفحة نقاط القناة.":"No majek bot rewards yet. Create them on the Channel points page.","اربط المكافآت من صفحة نقاط القناة.":"Connect rewards on the Channel points page.",
+"إذا وقفتها، كم دقيقة تبقى موقفة؟":"When paused, how many minutes does it stay paused?","صفر = تبقى موقفة لين تضغط الزر مرة ثانية":"Zero = stays paused until you press again","الأمر التلقائي":"Action","ما عندك أوامر تلقائية للحين":"No actions yet",
+"ترجع الأزرار الافتراضية وتنحذف أزرارك؟":"Restore the default buttons and delete yours?","الحد 40 زر":"Max 40 buttons","تم":"Done","تحدي 1v1":"1v1 duel","مدة التايم للخسران (ثواني)":"Loser timeout (seconds)","رسالة النتيجة":"Result message",
 "المشاهد يكتب @اسم مع المكافأة. إذا المنشن غلط أو الشخص مو بالشات ترجع نقاطه. المتغيرات: $(user) $(target) $(winner) $(loser) $(seconds)":"The viewer types @name with the reward. If the mention is wrong or the person isn't in chat, points are refunded. Variables: $(user) $(target) $(winner) $(loser) $(seconds)","نقاط القناة":"Channel points","مكافآت نقاط القناة":"Channel point rewards","مكافأة جديدة":"New reward","تعديل مكافأة":"Edit reward",
 "سوّ مكافآت تويتش وعدّلها ووقّفها من هنا، واربط كل وحدة بأمر تلقائي، مثل «اشرب ماي» تشغّل صوت، أو «اقرأ رسالتي» تقرأ نص المشاهد بصوت على البث.":"Create, edit and pause Twitch rewards here, and link each one to an action, like \"Drink water\" playing a sound or \"Read my message\" reading the viewer's text aloud on stream.",
 "المكافآت اللي سويتها قبل من لوحة تويتش تقدر تربطها بأوامر، بس تويتش ما يسمح لأي بوت يعدّلها أو يقبل طلباتها. سوّها من هنا عشان تتحكم فيها كاملة.":"Rewards you made in the Twitch dashboard can trigger actions, but Twitch doesn't let any bot edit them or approve their redemptions. Create them here for full control.",
@@ -7871,6 +7966,8 @@ def make_web_app(bot):
         "levels": bot.xp_view(ch, own),
         "auto2": bot.actions_view(ch) if own else {},
         "deck": [{"id": x["id"], "name": x["name"]} for x in bot.actions_of(ch) if x.get("deck") and x.get("on")],
+        "deckbtns": bot.deck_buttons(ch),
+        "decktypes": {k: list(v) for k, v in DECK_TYPES.items()},
         "rewards_ok": bool(store.data["tokens"].get(ch, {}).get("rewards")),
         "discord": discord_view(ch) if own else {},
         "audit": store.data["audit"].get(ch, [])[:60] if own else [],
@@ -8429,6 +8526,34 @@ def make_web_app(bot):
     _, ch, role = a
     b = await jbody(request)
     k = b.get("k")
+    if k == "save":  # [جديد] الستريمر يرتب أزراره
+      a2, err2 = access(request, owner_only=True)
+      if err2:
+        return err2
+      try:
+        lst = deck_clean(b.get("buttons"), {x["id"] for x in bot.actions_of(ch)})
+      except ValueError as e:
+        return jerr(str(e))
+      store.data["deck"][ch] = lst
+      store.save_quick()
+      bot.audit(ch, a[0], "عدّل أزرار ريموت البث")
+      return web.json_response({"ok": True})
+    if k == "reset":
+      a2, err2 = access(request, owner_only=True)
+      if err2:
+        return err2
+      store.data["deck"].pop(ch, None)
+      store.save_quick()
+      return web.json_response({"ok": True})
+    if k == "btn":
+      btn = next((x for x in bot.deck_buttons(ch) if x["id"] == str(b.get("id"))), None)
+      if not btn:
+        return jerr("الزر مو موجود")
+      ok, msg = await bot.deck_press(ch, btn, a[0], b.get("pause"))
+      if not ok:
+        return jerr(msg)
+      timer = btn.get("d") if (btn["t"] == "chatmode" or (btn["t"] == "reward" and b.get("pause"))) else 0
+      return web.json_response({"ok": True, "timer": timer or 0})
     if k == "clip":
       ok, res = await twitch.create_clip(ch, 30)
       if not ok:
@@ -9197,6 +9322,87 @@ def act_clean(raw, existing_ids):
           "deck": bool(raw.get("deck")) or tt == "manual", "cd": cd, "perm": perm, "q": bool(raw.get("q"))}
 
 
+DECK_TYPES = {  # [جديد] أنواع أزرار ريموت البث
+    "clip": ("كليب", "Clip", "🎬"),
+    "clear": ("مسح الشات", "Clear chat", "🧹"),
+    "ad": ("إعلان", "Ad", "📺"),
+    "chatmode": ("وضع الشات", "Chat mode", "🐢"),
+    "chatoff": ("إلغاء وضع الشات", "Chat mode off", "🐇"),
+    "game": ("تغيير اللعبة", "Change game", "🎮"),
+    "title": ("تغيير العنوان", "Change title", "📝"),
+    "say": ("رسالة بالشات", "Chat message", "💬"),
+    "tts": ("قراءة بصوت على البث", "Read aloud on stream", "🗣"),
+    "sound": ("صوت على البث", "Sound on stream", "🔔"),
+    "shoutout": ("شاوت آوت", "Shoutout", "📣"),
+    "reward": ("إيقاف/تشغيل مكافأة", "Pause/resume reward", "🪙"),
+    "action": ("أمر تلقائي", "Action", "⚡"),
+}
+DECK_MODES = {"slow": "slow_mode", "emote": "emote_mode", "followers": "follower_mode", "subs": "subscriber_mode"}
+MAX_DECK = 40
+
+
+def deck_clean(lst, action_ids):
+  """يتحقق من أزرار الريموت اللي جاية من الموقع."""
+  if not isinstance(lst, list):
+    raise ValueError("صار خطأ")
+  out, seen = [], set()
+  for raw in lst[:MAX_DECK]:
+    if not isinstance(raw, dict):
+      continue
+    t = str(raw.get("t") or "")
+    if t not in DECK_TYPES:
+      continue
+    bid = str(raw.get("id") or "")
+    if not re.fullmatch(r"[a-f0-9]{8}", bid) or bid in seen:
+      bid = secrets.token_hex(4)
+    seen.add(bid)
+    label = str(raw.get("label") or "").strip()[:30] or DECK_TYPES[t][0]
+    icon = str(raw.get("icon") or "").strip()[:4] or DECK_TYPES[t][2]
+    v = str(raw.get("v") or "").strip()[:300]
+
+    def num(k, lo, hi, dflt):
+      try:
+        return max(lo, min(hi, int(raw.get(k) if raw.get(k) not in (None, "") else dflt)))
+      except (TypeError, ValueError):
+        return dflt
+    b = {"id": bid, "t": t, "label": label, "icon": icon}
+    if t == "clip":
+      b["n"] = num("n", 5, 60, 30)
+    elif t == "ad":
+      b["n"] = min((30, 60, 90, 120, 150, 180), key=lambda x: abs(x - num("n", 30, 180, 60)))
+    elif t in ("chatmode", "chatoff"):
+      if v not in DECK_MODES:
+        raise ValueError(f"زر «{label}»: اختر وضع الشات")
+      b["v"] = v
+      if t == "chatmode":
+        b["n"] = num("n", 3, 120, 30)
+        b["d"] = num("d", 0, 720, 0)
+    elif t in ("game", "title", "say", "tts", "shoutout"):
+      if not v:
+        raise ValueError(f"زر «{label}» يحتاج نص")
+      if t == "say" and v.startswith(("/", ".")):
+        raise ValueError("الرسالة ما تبدأ بـ / أو .")
+      b["v"] = v
+    elif t == "sound":
+      if not SOUND_URL_RE.fullmatch(v):
+        raise ValueError(f"زر «{label}»: رابط الصوت لازم يبدأ بـ https://")
+      b["v"] = v
+      b["n"] = num("n", 5, 100, 80)
+    elif t == "reward":
+      if not re.fullmatch(r"[\w-]{5,60}", v):
+        raise ValueError(f"زر «{label}»: اختر المكافأة")
+      b["v"] = v
+      b["d"] = num("d", 0, 720, 0)
+    elif t == "action":
+      if v not in action_ids:
+        raise ValueError(f"زر «{label}»: اختر الأمر")
+      b["v"] = v
+    if raw.get("hot"):
+      b["hot"] = True
+    out.append(b)
+  return out
+
+
 def act_fill(text, ctx):
   """يعبّي المتغيرات في نص الأمر: $(user) $(viewers) ... و $(pick أ|ب) و $(random 1-10)."""
   def one(m):
@@ -9604,6 +9810,7 @@ class Bot:
     self.recent_chat = {}  # [جديد] قناة -> {يوزر: آخر رسالة} لساعات المتابعة بدون صلاحية
     self.live_state = {}  # [جديد] قناة -> (لايف؟، رقم البث) لبداية/نهاية البث
     self.act_locks = {}  # [جديد] قناة -> قفل الأوامر اللي «تنتظر دورها»
+    self.deck_timers = {}  # [جديد] (قناة، الشي) -> مؤقت يرجّع وضع الشات أو المكافأة
     self.first_seen = {}  # [جديد] (قناة، البث) -> اللي كتبوا في هذا البث
     self.link_codes = {}  # [جديد] رمز ربط الديسكورد -> (آيدي الديسكورد، وقت الانتهاء)
 
@@ -11446,6 +11653,111 @@ class Bot:
             break
       except Exception as e:
         print(f"خطأ خطوة {t} في الأمر «{a.get('name')}»: {e}")
+
+  def deck_buttons(self, ch):
+    """أزرار الريموت: اللي رتبها الستريمر، أو الافتراضية لو ما عدّل شي."""
+    saved = self.store.data["deck"].get(ch)
+    if saved is not None:
+      return saved
+    out = [{"id": "00000001", "t": "clip", "label": "كليب", "icon": "🎬", "n": 30},
+           {"id": "00000002", "t": "clear", "label": "مسح الشات", "icon": "🧹", "hot": True},
+           {"id": "00000003", "t": "ad", "label": "إعلان 60ث", "icon": "📺", "n": 60},
+           {"id": "00000004", "t": "chatmode", "label": "سلو مود", "icon": "🐢", "v": "slow", "n": 30, "d": 0},
+           {"id": "00000005", "t": "chatoff", "label": "إلغاء السلو", "icon": "🐇", "v": "slow"},
+           {"id": "00000006", "t": "chatmode", "label": "إيموت فقط", "icon": "😀", "v": "emote", "d": 0, "n": 30},
+           {"id": "00000007", "t": "chatoff", "label": "إلغاء الإيموت", "icon": "💬", "v": "emote"}]
+    i = 8
+    for name, c in sorted(self.store.data["commands"].get(ch, {}).items()):
+      if c.get("type") == "game" and c.get("game") and i < 30:
+        out.append({"id": f"{i:08x}", "t": "game", "label": c["game"][:30], "icon": "🎮", "v": c["game"]})
+        i += 1
+    for a in self.actions_of(ch):
+      if a.get("deck") and a.get("on") and i < MAX_DECK:
+        out.append({"id": f"{i:08x}", "t": "action", "label": a["name"][:30], "icon": "⚡", "v": a["id"]})
+        i += 1
+    return out
+
+  def deck_later(self, ch, key, minutes, coro_fn):
+    """يشغّل شي بعد مدة (ترجيع وضع الشات أو المكافأة). يلغي المؤقت القديم لنفس الشي."""
+    old = self.deck_timers.pop((ch, key), None)
+    if old and not old.done():
+      old.cancel()
+    if minutes <= 0:
+      return
+
+    async def _go():
+      try:
+        await asyncio.sleep(minutes * 60)
+        await coro_fn()
+      except asyncio.CancelledError:
+        pass
+      except Exception as e:
+        print(f"خطأ مؤقت الريموت: {e}")
+      finally:
+        self.deck_timers.pop((ch, key), None)
+    self.deck_timers[(ch, key)] = asyncio.create_task(_go())
+
+  async def deck_press(self, ch, b, who, pause=None):
+    """ينفّذ زر من الريموت. يرجع (نجح؟، رسالة الخطأ)."""
+    t = b["t"]
+    if t == "clip":
+      ok, res = await self.twitch.create_clip(ch, b.get("n", 30))
+      if not ok:
+        return False, "ما قدرت أسوي كليب (لازم تكون لايف)"
+      await self.send_chat(ch, f"🎬 {res}")
+    elif t == "clear":
+      if not await self.twitch.clear_chat(ch):
+        return False, "ما قدرت أمسح الشات (البوت لازم يكون مود)"
+      self.audit(ch, who, "مسح الشات من الريموت")
+    elif t == "ad":
+      ok, _ = await self.twitch.run_ad(ch, b.get("n", 60))
+      if not ok:
+        return False, "ما قدرت أشغّل إعلان (لازم تكون لايف وأفلييت، ويمكن تحتاج إعادة الربط)"
+    elif t in ("chatmode", "chatoff"):
+      key = DECK_MODES[b["v"]]
+      body = {key: t == "chatmode"}
+      if key == "slow_mode" and t == "chatmode":
+        body["slow_mode_wait_time"] = b.get("n", 30)
+      if not await self.twitch.chat_mode(ch, body):
+        return False, "ما قدرت أغيّر وضع الشات (يمكن تحتاج إعادة الربط)"
+      if t == "chatmode":
+        self.deck_later(ch, "mode:" + key, b.get("d", 0), lambda: self.twitch.chat_mode(ch, {key: False}))
+      else:
+        self.deck_later(ch, "mode:" + key, 0, None)
+    elif t == "game":
+      ok, _ = await self.twitch.set_game(ch, b["v"])
+      if not ok:
+        return False, "ما قدرت أغيّر اللعبة"
+    elif t == "title":
+      ok, _ = await self.twitch.set_title(ch, b["v"])
+      if not ok:
+        return False, "ما قدرت أغيّر العنوان"
+    elif t == "say":
+      await self.send_chat(ch, b["v"][:490])
+    elif t == "tts":
+      self.push_overlay_event(ch, "tts", text=b["v"][:300], lang=self.lang_of(ch))
+    elif t == "sound":
+      self.push_overlay_event(ch, "sound", url=b["v"], vol=b.get("n", 80))
+    elif t == "shoutout":
+      if not await self.do_shoutout(ch, b["v"].lstrip("@").lower()):
+        return False, "ما لقيت القناة"
+    elif t == "reward":
+      pause = bool(pause)
+      st, _ = await self.twitch.bc_call(ch, "PATCH", "channel_points/custom_rewards", {"id": b["v"]}, {"is_paused": pause})
+      if st != 200:
+        return False, "ما قدرت أغيّر المكافأة (لازم تكون مسوّاة من majek bot)"
+      if pause and b.get("d"):
+        rid = b["v"]
+        self.deck_later(ch, "rw:" + rid, b["d"], lambda: self.twitch.bc_call(
+            ch, "PATCH", "channel_points/custom_rewards", {"id": rid}, {"is_paused": False}))
+      else:
+        self.deck_later(ch, "rw:" + b["v"], 0, None)
+    elif t == "action":
+      a = next((x for x in self.actions_of(ch) if x["id"] == b["v"]), None)
+      if not a:
+        return False, "الأمر مو موجود"
+      asyncio.create_task(self.run_action(ch, a, {"user": who, "login": who}))
+    return True, ""
 
   def rewards_cfg(self, ch):
     return self.store.data["rewards_cfg"].setdefault(ch, {})
