@@ -2820,27 +2820,50 @@ NB_OK_VARS = {"user", "touser", "channel", "game", "count", "uptime", "url", "qu
 
 
 def nb_convert(cmd):
-  """يحوّل كوماند نايت بوت لصيغة البوت. يرجع (الاسم، البيانات، سبب الرفض أو "")."""
+  """يحوّل كوماند نايت بوت لصيغة البوت. يرجع (الاسم، البيانات أو None، سبب الرفض، ملاحظة)."""
   raw = str(cmd.get("name") or "").strip()
   msg = str(cmd.get("message") or "").strip()
   bang = raw.startswith("!")
   name = raw.lstrip("!").lower()
-  msg = msg.replace("$(querystring)", "$(query)").replace("$(touser)", "$(touser)")
+  if not bang:
+    name = re.sub(r"^\W+|\W+$", "", name)  # «متى؟» تنحفظ «متى» (نفس طريقة مطابقة الشات)
+  if not name or len(name) > 30 or re.search(r"\s", name):
+    return name or raw, None, "اسم الكوماند ما ينفع", ""
+  msg = msg.replace("$(querystring)", "$(query)")
   msg = re.sub(r'\$\(twitch \$\(channel\) "\{\{game\}\}"\)', "$(game)", msg)
   msg = re.sub(r'\$\(twitch \$\(channel\) "\{\{uptimeLength\}\}"\)', "$(uptime)", msg)
+  if msg.lower().startswith("/me "):
+    msg = msg[4:].strip()
+  msg = msg.lstrip("/.").strip()
+  if not msg:
+    return name, None, "الرد فاضي", ""
   bad = [k for k in re.findall(r"\$\((\w+)", msg) if k.lower() not in NB_OK_VARS and not k.isdigit()]
-  if bad:
-    return name, None, "فيه متغير ما ندعمه: $(" + bad[0] + ")"
+  note = ("فيه متغير ما يشتغل عندنا: $(" + bad[0] + ")") if bad else ""
   try:
     cd = int(cmd.get("coolDown") or 0)
   except (TypeError, ValueError):
     cd = 0
+  perm = NB_PERMS.get(str(cmd.get("userLevel") or "everyone"), "everyone")
   try:
-    n, entry = build_command({"name": name, "reply": msg, "bang": bang, "cd": max(0, min(3600, cd)),
-                              "perm": NB_PERMS.get(str(cmd.get("userLevel") or "everyone"), "everyone")})
+    n, entry = build_command({"name": name, "reply": msg, "bang": True, "cd": max(0, min(3600, cd)), "perm": perm})
   except ValueError as e:
-    return name, None, str(e)
-  return n, entry, ""
+    return name, None, str(e), ""
+  entry["bang"] = bang
+  return n, entry, "", note
+
+
+def nb_auto_key(word):
+  """أي رد تلقائي يطلع لو أحد كتب هالكلمة (عشان نوقفه لو نايت بوت فيه كوماند بنفس الكلمة)."""
+  w = word.lower()
+  if w in ("السلام", "سلام"):
+    return ("salam", "both")
+  if w == "مساء":
+    return ("evening", "both")
+  if w == "باك":
+    return ("back",)
+  if w in ("brb", "برب"):
+    return ("brb",)
+  return ()
 
 
 async def nightbot_commands(login):
@@ -3927,7 +3950,7 @@ const EN={
 "محاولات كثيرة، حاول بعد شوي":"Too many attempts, try again later",
 "الرد ما يبدأ بـ / أو .":"The reply can't start with / or ."
 };
-Object.assign(EN,{"سحب من Nightbot":"Import from Nightbot","سحب الكوماندات من Nightbot":"Import commands from Nightbot","اكتب اسم القناة اللي فيها نايت بوت، ونجيب كومانداتها العامة. تختار اللي تبيه وينسخ للبوت.":"Type the channel that uses Nightbot and we'll fetch its public commands. Pick the ones you want and they get copied over.","اسم القناة":"Channel name","اعرض الكوماندات":"Show commands","انسخ المحدد":"Copy selected","تحديد الكل":"Select all","ما فيه كوماندات عامة في هالقناة":"This channel has no public commands","موجود عندك، بينكتب فوقه":"Already exists, will be overwritten","اختر كوماند واحد على الأقل":"Pick at least one command","انسحب {n} كوماند":"Imported {n} commands","نايت بوت مو مفعّل في هالقناة":"Nightbot isn't set up on this channel","نايت بوت ما رد، جرّب بعد شوي":"Nightbot didn't respond, try again shortly","ما قدرت أجيب الكوماندات من نايت بوت":"Couldn't fetch the commands from Nightbot","ما قدرت أوصل لنايت بوت، جرّب بعد شوي":"Couldn't reach Nightbot, try again shortly","اسم القناة غير صحيح":"Invalid channel name"});
+Object.assign(EN,{"سحب من Nightbot":"Import from Nightbot","سحب الكوماندات من Nightbot":"Import commands from Nightbot","اكتب اسم القناة اللي فيها نايت بوت، ونجيب كومانداتها العامة. تختار اللي تبيه وينسخ للبوت.":"Type the channel that uses Nightbot and we'll fetch its public commands. Pick the ones you want and they get copied over.","اسم القناة":"Channel name","اعرض الكوماندات":"Show commands","انسخ المحدد":"Copy selected","تحديد الكل":"Select all","ما فيه كوماندات عامة في هالقناة":"This channel has no public commands","موجود عندك، بينكتب فوقه":"Already exists, will be overwritten","الرد فاضي":"Empty reply","اختر كوماند واحد على الأقل":"Pick at least one command","انسحب {n} كوماند":"Imported {n} commands","نايت بوت مو مفعّل في هالقناة":"Nightbot isn't set up on this channel","نايت بوت ما رد، جرّب بعد شوي":"Nightbot didn't respond, try again shortly","ما قدرت أجيب الكوماندات من نايت بوت":"Couldn't fetch the commands from Nightbot","ما قدرت أوصل لنايت بوت، جرّب بعد شوي":"Couldn't reach Nightbot, try again shortly","اسم القناة غير صحيح":"Invalid channel name"});
 Object.assign(EN,{"!f يحوّل الكاتيقوري، و !settitle يغيّر العنوان": "!f switches the category and !settitle changes the title", "!permit يسمح لشخص بالروابط دقيقة وحدة": "!permit lets someone post links for one minute", "!poll سؤال | خيار | خيار من الشات مباشرة": "!poll question | option | option straight from chat", "!skip و !volume للمودات، و !wrongsong للمشاهد": "!skip and !volume for mods, !wrongsong for viewers", "!streak و !topstreak في الشات": "!streak and !topstreak in chat", "$(pick نعم|لا)": "$(pick yes|no)", "/streak و /top في الديسكورد بعد ربط الحساب بـ /link": "/streak and /top in Discord after linking with /link", "Chat magic, one command at a time • سحر الشات، كوماند بعد كوماند": "Chat magic, one command at a time", "أسماء بديلة (اختياري)": "Aliases (optional)", "مثال: dc, ديسكورد": "e.g. dc, server", "majek bot • سحر الشات، كوماند بعد كوماند": "majek bot • Chat magic, one command at a time", "أذكار وأدعية جاهزة تتغير كل مرة": "Ready-made adhkar and duas that change every time", "أذكار وأدعية وتذكيرات تنكتب بالشات بالفاصل اللي تبيه، وما تتكلم إذا الشات ساكت.": "Adhkar, duas and reminders posted at the interval you choose, and they stay quiet when chat is dead.", "أقدر أخلي المودات يعدلون؟": "Can my mods make changes?", "إعلان تلقائي في روم الديسكورد لما أحد يوصل رقم جديد": "Automatic Discord announcements when someone hits a milestone", "إيه، أضفهم من صفحة المودات ويدخلون بحساباتهم ويعدلون الكوماندات.": "Yes. Add them on the Mods page and they log in with their own accounts to edit commands and quotes.", "إيه، كل المميزات مجانية.": "Yes, every feature is free.", "اضغط «فعّل البوت في قناتك» وادخل بحسابك.": "Press \"Add the bot to your channel\" and log in.", "مستويات وساعات متابعة": "Levels & watch time", "إكس بي، مستويات، وصفحة متصدرين بـ !leaderboard": "XP, levels and a leaderboard page with !leaderboard", "البوت يتجاهل البوتات المعروفة ويرد بس على كوماندات قناتك، فتقدر تستخدمه معهم.": "The bot ignores known bots and only answers your channel's commands, so you can run it alongside them.", "البوت يحسب كم بث ورا بعض حضر كل مشاهد، ويحتفل بالأرقام الكبيرة. والمتابع يشوف ستريكه من سيرفر الديسكورد حقك.": "The bot counts how many streams in a row each viewer attends and celebrates big milestones. Viewers can check their streak in your Discord server.", "البوت يكتب باسم حسابك أو أي حساب تختاره": "The bot posts as your account or any account you choose", "الطابور يطلع في صفحة قناتك": "The queue shows on your channel page", "المشاهدين يطلبون من يوتيوب بالرابط أو بالاسم، والأغاني تشتغل داخل الموقع أو في OBS.": "Viewers request YouTube songs by link or name, and they play on the site or in OBS.", "تحدد مين يقدر يسأل وكم مرة": "Choose who can ask and how often", "تصويت تويتش": "Twitch polls", "تضيف البوت لسيرفرك من صفحة «الستريك والديسكورد» وتكتب /setup، والمتابع يكتب /link مرة وحدة ويربط حسابه، وبعدها /streak يطلع ستريكه.": "Add the bot to your server from the \"Streaks & Discord\" page and type /setup. Each viewer types /link once to connect their account, then /streak shows their streak.", "تطبيق على جوالك": "An app on your phone", "تعليمات خاصة بأسلوب قناتك": "Custom instructions in your channel's style", "تغيير اللعبة والعنوان": "Game and title changes", "ثبّت لوحة التحكم كتطبيق على الآيفون والأندرويد": "Install the dashboard as an app on iPhone and Android", "حد لكل مشاهد وحد لمدة الأغنية": "Per-viewer limits and a max song length", "حساب بوت خاص فيك": "Your own bot account", "ردود تلقائية على السلام ومساء الخير وباك وبرب": "Auto replies to salam, good evening, back and brb", "روابط، حروف كبيرة، رموز، تكرار، رسائل طويلة": "Links, caps, symbols, repetition, long messages", "زر تجربة يرسل التنبيه للشات قبل ما تعتمده": "A test button posts the alert to chat before you rely on it", "شاوت آوت تلقائي للريد مع كليب في OBS": "Automatic raid shoutout with a clip in OBS", "شرط عدد رسائل الشات قبل كل تذكير": "A minimum number of chat messages before each reminder", "عدّل الكوماندات والتنبيهات من لوحة الستريمر بأي وقت.": "Edit commands and alerts from the streamer dashboard anytime.", "عشان البوت يقرأ الشات ويغيّر اللعبة والعنوان ويسوي كليبات.": "So the bot can read chat, change the game and title, and make clips.", "عندي بوت ثاني، يتعارضون؟": "I already use another bot. Will they clash?", "فريق المودات": "Mod team", "كليب من الشات": "Clips from chat", "كوماند يسوي كليب لآخر ثواني ويرسل الرابط": "A command that clips the last few seconds and posts the link", "كوماندات مخصصة": "Custom commands", "كيف أشيل البوت؟": "How do I remove the bot?", "كيف يشوف المتابع ستريكه في الديسكورد؟": "How do viewers see their streak in Discord?", "لا، البوت يشتغل على السحاب. حتى لو جهازك مطفي يرد ويحمي الشات.": "No, the bot runs in the cloud. Even with your PC off it replies and protects chat.", "لازم جهازي يكون شغال؟": "Does my PC need to be on?", "ما يكتب روابط ولا يدخل بالجدل": "No links and no arguing", "متغيرات مثل $(user) $(random) $(time) وأسماء بديلة وكول داون": "Variables like $(user) $(random) $(time), plus aliases and cooldowns", "من الإعدادات في لوحة الستريمر اضغط «إزالة البوت من قناتي» ويطلع فوراً.": "In the streamer dashboard settings press \"Remove the bot from my channel\" and it leaves right away.", "منشن البوت بأي سؤال ويرد بجملة أو جملتين، ويعرف اللعبة وعنوان البث.": "Mention the bot with any question and it answers in a sentence or two, knowing your game and stream title.", "مودات يعدلون الكوماندات، وسجل يوضح مين غيّر وش": "Mods edit commands, and a log shows who changed what", "نزّل نسخة من بيانات البوت (قنوات، كوماندات، ربط تويتش). لا تشاركها مع أحد.": "Download a copy of the bot's data (channels, commands, Twitch links). Don't share it with anyone.", "نسخة احتياطية وحالة البوت • Backup & status": "Backup & status", "نص كل تنبيه تكتبه أنت مع متغيرات مثل $(months)": "You write each alert's text, with variables like $(months)", "هل البوت مجاني؟": "Is the bot free?", "يحذف السبام ويكتم المخالف قبل ما يلاحظه أحد، ويلقط التحايل على الكلمات الممنوعة.": "Deletes spam and times out offenders before anyone notices, and catches tricks around banned words.", "يشكر المتابعين والمشتركين والإهداءات والبتس، ويرحّب بالريد مع شاوت آوت وكليب يطلع على بثك.": "Thanks followers, subs, gifters and cheerers, and welcomes raids with a shoutout and a clip on your stream.", "يلقط التشكيل والتطويل والحروف المفرّقة (ك ل م ة)": "Catches diacritics, stretched letters and spaced-out letters", "⬇️ تحميل نسخة احتياطية": "⬇️ Download backup", "🩺 حالة البوت": "🩺 Bot status"});
 const AR={};for(const k in EN)AR[EN[k]]=k;
 let LANG="ar";
@@ -6180,11 +6203,11 @@ $("#nbload").onclick=async()=>{
     if(!d.list.length){const p=document.createElement("p");p.className="empty";p.textContent=t("ما فيه كوماندات عامة في هالقناة");box.appendChild(p);return}
     const all=document.createElement("label");all.className="chk";all.innerHTML='<input type="checkbox" id="nball" checked> <span></span>';all.querySelector("span").textContent=t("تحديد الكل");box.appendChild(all);
     d.list.forEach(r=>{
-      const row=document.createElement("label");row.className="nbrow chk"+(r.why?" off":"");
-      const cb=document.createElement("input");cb.type="checkbox";cb.value=r.key;cb.disabled=!!r.why;cb.checked=!r.why&&!r.exists;
+      const row=document.createElement("label");row.className="nbrow chk"+(r.bad?" off":"");
+      const cb=document.createElement("input");cb.type="checkbox";cb.value=r.key;cb.disabled=!!r.bad;cb.checked=!r.bad;
       const tx=document.createElement("div");
       const b=document.createElement("b");b.dir="ltr";b.setAttribute("data-nt","");b.textContent=r.name;tx.appendChild(b);
-      const sm=document.createElement("small");sm.setAttribute("data-nt","");sm.textContent=r.why?t(r.why):(r.exists?t("موجود عندك، بينكتب فوقه"):"");if(sm.textContent)tx.appendChild(sm);
+      const sm=document.createElement("small");sm.setAttribute("data-nt","");sm.textContent=[r.exists&&!r.bad?t("موجود عندك، بينكتب فوقه"):"",r.why?t(r.why):""].filter(Boolean).join(" • ");if(sm.textContent)tx.appendChild(sm);
       const p=document.createElement("p");p.dir="auto";p.setAttribute("data-nt","");p.textContent=r.reply;tx.appendChild(p);
       row.append(cb,tx);box.appendChild(row);
     });
@@ -8245,16 +8268,17 @@ def make_web_app(bot):
     rows = []
     conv = {}
     for c in lst:
-      n, entry, why = nb_convert(c)
+      n, entry, why, note = nb_convert(c)
       if entry:
         conv[n] = entry
-      rows.append({"name": ("!" if str(c.get("name") or "").startswith("!") else "") + n,
+      rows.append({"name": (("!" if entry is None or entry.get("bang", True) else "") + n) if entry else str(c.get("name") or ""),
                    "key": n, "reply": str(c.get("message") or "")[:300],
-                   "why": why, "exists": n in cmds})
+                   "why": why or note, "bad": bool(why), "exists": n in cmds})
     want = b.get("names")
     if not isinstance(want, list):
       return web.json_response({"ok": True, "login": login, "list": rows})
     added = 0
+    autos = store.autos(ch)
     for n in [str(x).lower() for x in want][:400]:
       if n not in conv:
         continue
@@ -8262,6 +8286,9 @@ def make_web_app(bot):
         break
       cmds[n] = conv[n]
       added += 1
+      if not conv[n].get("bang", True):
+        for k in nb_auto_key(n):  # الكوماند يحل محل الرد التلقائي
+          autos.setdefault(k, {})["on"] = False
     if added:
       store.save_quick()
       bot.audit(ch, a[0], f"سحب {added} كوماند من نايت بوت")
