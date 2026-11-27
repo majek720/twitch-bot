@@ -2847,8 +2847,10 @@ def nb_convert(cmd):
     cd = 0
   perm = NB_PERMS.get(str(cmd.get("userLevel") or "everyone"), "everyone")
   alias = str(cmd.get("alias") or "").strip().lower().split(" ")[0]
-  # [جديد] نايت بوت يخفي روابط urlfetch في قائمته العامة («[urlfetch [channel]]»)، فنتعرف على الكوماندات المعروفة بالاسم
-  masked = bool(re.search(r"\[(urlfetch|customapi|twitch)\b", msg, re.I))
+  # [جديد] قائمة نايت بوت العامة تخفي المتغيرات: $(user) تجي «[user]» و $(urlfetch ...) تجي «[urlfetch [channel]]»
+  msg = re.sub(r"\[(user|touser|channel|query|querystring|count|game|uptime|[1-9])\]",
+               lambda m: "$(" + ("query" if m.group(1).lower() == "querystring" else m.group(1).lower()) + ")", msg, flags=re.I)
+  masked = bool(re.search(r"\[(urlfetch|customapi|twitch|eval)\b", msg, re.I))
   if masked and re.fullmatch(r"(clip|clips|كليب|كلب|مقطع)", name):
     try:
       n, entry = build_command({"name": name, "type": "clip", "secs": 30, "bang": True,
@@ -2861,6 +2863,14 @@ def nb_convert(cmd):
     msg = "البث صار له $(uptime)"
   elif masked and re.search(r"follow", msg, re.I):
     msg = "$(touser) $(urlfetch https://decapi.me/twitch/followage/$(channel)/$(touser)?precision=3)"
+  if masked:
+    # «%[eval]» غالباً نسبة عشوائية (مثل كوماندات «كم نسبة...»)
+    msg = re.sub(r"\[eval\]\s*%|%\s*\[eval\]", "$(random 0-100)%", msg, flags=re.I)
+    # الباقي ما نقدر نعرف وش فيه (نايت بوت يخفيه): ينشال من الرد
+    msg = re.sub(r"\[(?:eval|urlfetch|customapi|twitch)(?:[^\[\]]|\[[^\]]*\])*\]", "", msg, flags=re.I)
+    msg = re.sub(r"\s{2,}", " ", msg).strip()
+    if not msg or not re.search(r"[^\W_]", re.sub(r"\$\(\w+\)", "", msg)):
+      return name, None, "نايت بوت يخفي محتوى هالكوماند، اكتبه بنفسك", ""
   if alias in ("!game", "!setgame", "!category", "!cat"):  # كوماند نايت بوت يغيّر اللعبة (alias = !game)
     try:
       n, entry = build_command({"name": name, "type": "game", "game": msg[:100], "bang": True,
@@ -2944,6 +2954,27 @@ def nb_date(v):
   if dt.tzinfo is None:
     dt = dt.replace(tzinfo=timezone(timedelta(hours=3)))
   return dt
+
+
+def nb_migrate(store):
+  """[جديد] يصلح الكوماندات اللي انسحبت من نايت بوت قبل (فيها [user] و [eval] ...) بدون ما يعيد الستريمر السحب."""
+  fixed = 0
+  for ch, cmds in store.data.get("commands", {}).items():
+    for name, c in list(cmds.items()):
+      rep_ = str(c.get("reply") or "")
+      if c.get("type") != "text" or not re.search(r"\[(user|touser|channel|query|querystring|count|[1-9]|eval|urlfetch|customapi|twitch)\b", rep_, re.I):
+        continue
+      n, entry, why, _ = nb_convert({"name": ("!" if c.get("bang", True) else "") + name, "message": rep_,
+                                     "coolDown": c.get("cd") or 0})
+      if not entry or n != name:
+        continue
+      entry.update(perm=c.get("perm", "everyone"), cd=c.get("cd"), aliases=c.get("aliases") or [])
+      cmds[name] = entry
+      fixed += 1
+  if fixed:
+    print(f"نايت بوت: تم إصلاح {fixed} كوماند")
+    store.save_soon(5)
+  return fixed
 
 
 def nb_auto_key(word):
@@ -10320,6 +10351,10 @@ class Bot:
     data = self.store.data
     if OWNER not in data["channels"] and OWNER not in data["banned"]:
       data["channels"].append(OWNER)
+    try:
+      nb_migrate(self.store)
+    except Exception as e:
+      print(f"nb_migrate: {e}")
     asyncio.create_task(start_web_server(self))
     asyncio.create_task(self.periodic_reminders())
     asyncio.create_task(self.resub_loop())
