@@ -6182,7 +6182,7 @@ $("#unlink").onclick=()=>{if(ask("تلغي الربط مع تويتش؟"))act(()
 $("#leave").onclick=()=>{
   if(ask("متأكد تبي تشيل البوت من قناتك؟"))act(()=>api("POST",base()+"/leave"),"تم إزالة البوت",true);
 };
-$("#logout").onclick=async()=>{await api("POST","/s/api/logout");onAuth({enabled:true})};
+$("#logout").onclick=async()=>{await api("POST","/s/api/logout");location.href="/"};
 const qp=new URLSearchParams(location.search);
 if(qp.get("msg")==="ready")toast("تم تفعيل البوت وربط تويتش ✅");
 if(qp.get("msg")==="botset")toast("تم ربط حساب البوت ✅");
@@ -6715,7 +6715,6 @@ html{scroll-behavior:smooth}
   <a class="l" href="#faq">الأسئلة</a>
   <span class="sp"></span>
   <button class="btn ghost langbtn">EN</button>
-  <a class="btn" href="/s">لوحة الستريمر</a>
 </nav>
 
 <div class="sec2">
@@ -6907,7 +6906,7 @@ initLang();
 
 OWNER_HTML, STREAMER_HTML, PUBLIC_HTML = iconize(OWNER_HTML), iconize(STREAMER_HTML), iconize(PUBLIC_HTML)
 OWNER_HTML = OWNER_HTML.replace("<!--CANON-->", '<meta name="robots" content="noindex">')
-STREAMER_HTML = STREAMER_HTML.replace("<!--CANON-->", "")
+STREAMER_HTML = STREAMER_HTML.replace("<!--CANON-->", '<meta name="robots" content="noindex">')
 PUBLIC_HTML = PUBLIC_HTML.replace("<!--CANON-->", "")
 
 # [جديد] صفحة المتصدرين العامة (!leaderboard)
@@ -7340,7 +7339,12 @@ def make_web_app(bot):
     return web.Response(text=OWNER_HTML, content_type="text/html")
 
   async def home(request):
-    return web.Response(text=HOME_PAGE, content_type="text/html")
+    # موقع واحد: اللي مفعّل البوت (أو مود في قناة) يدخل على طول على لوحة الستريمر، والجديد يشوف الواجهة
+    nc = {"Cache-Control": "private, no-cache"}
+    login_name = read_session(request.cookies.get("ssess", ""))
+    if login_name and login_name not in store.data["banned"] and channels_for(login_name):
+      raise web.HTTPFound("/s", headers=nc)
+    return web.Response(text=HOME_PAGE, content_type="text/html", headers=nc)
 
   # [جديد] ملفات محركات البحث (جوجل): robots.txt و sitemap.xml
   async def robots(request):
@@ -7352,7 +7356,7 @@ def make_web_app(bot):
 
   async def sitemap(request):
     base = SITE_URL or ""
-    urls = [base + "/", base + "/s"] + [f"{base}/c/{c}" for c in store.data["channels"]
+    urls = [base + "/"] + [f"{base}/c/{c}" for c in store.data["channels"]
                                         if c not in store.data["banned"]]
     body = "".join(f"<url><loc>{u}</loc></url>" for u in urls)
     return web.Response(text='<?xml version="1.0" encoding="UTF-8"?>'
@@ -8933,6 +8937,7 @@ def make_web_app(bot):
   r.add_get("/icon.svg", icon)
   for _p, _b in (("/icon-192.png", ICON192_PNG), ("/icon-512.png", ICON512_PNG), ("/icon-maskable.png", ICONMASK_PNG)):
     r.add_get(_p, (lambda body: (lambda request: _png(body)))(_b))
+  r.add_get("/favicon.ico", lambda request: _png(ICON192_PNG))
   r.add_get("/avatar.png", avatar_png)
   r.add_get("/banner.jpg", banner_jpg)
   r.add_get("/banner-en.jpg", banner_en_jpg)
