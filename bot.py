@@ -2758,12 +2758,14 @@ def norm_cmd(v):
 
 def build_command(b):
   """يتحقق من بيانات كوماند جاية من الواجهة ويرجع (الاسم، الكوماند)."""
-  name = str(b.get("name", "")).strip().lstrip("!").lower()
-  if not name or len(name) > 30 or re.search(r"\s", name) or name in BUILTIN:
+  raw = str(b.get("name", "")).strip().lower()
+  # [جديد] الكوماند يتكتب زي ما يكتبه المشاهد: «!discord» أو «سلام» أو «@avalx»
+  bang = raw.startswith("!") or (b.get("bang") is not False and not raw[:1] in ("@", "#", "?", "؟"))
+  name = raw.lstrip("!")
+  if not name or len(name) > 30 or re.search(r"\s", name) or (bang and name in BUILTIN):
     raise ValueError("اسم الكوماند ما ينفع")
-  bang = b.get("bang") is not False
-  if not bang and not re.fullmatch(r"\w+[?؟!]*", name):
-    raise ValueError("الكوماند بدون ! لازم يكون حروف وأرقام بس")
+  if not bang and not re.search(r"\w", name):
+    raise ValueError("اسم الكوماند ما ينفع")
   perm = b.get("perm") if b.get("perm") in PERMS else "everyone"
   reply = str(b.get("reply", "")).strip()[:450]
   if reply.startswith(("/", ".")):
@@ -2827,8 +2829,6 @@ def nb_convert(cmd):
   msg = str(cmd.get("message") or "").strip()
   bang = raw.startswith("!")
   name = raw.lstrip("!").lower()
-  if not bang:
-    name = re.sub(r"^\W+", "", name)  # «عمري؟» تنحفظ زي ما هي (الشات يتعرف عليها مع ؟ أو بدونها)
   if not name or len(name) > 30 or re.search(r"\s", name):
     return name or raw, None, "اسم الكوماند ما ينفع", ""
   msg = msg.replace("$(querystring)", "$(query)")
@@ -4019,7 +4019,7 @@ const EN={
 "إضافة القناة":"Add channel","القنوات الحالية":"Current channels",
 "إضافة / تعديل كوماند":"Add / edit command","نوع الكوماند":"Command type",
 "💬 رد عادي":"💬 Text reply","🎮 اختصار لعبة (يغيّر لعبة البث)":"🎮 Game shortcut (changes the stream's game)",
-"اسم الكوماند بدون ! مثل: fortnite":"Command name without !, e.g. fortnite",
+"الكوماند مثل: !discord أو سلام أو @avalx":"Command, e.g. !discord, hello or @avalx","اكتب الكوماند زي ما بيكتبه المشاهد: مع ! أو @ أو أي بداية تبيها، أو كلمة عادية بدون شي.":"Type the command exactly as viewers will: with !, @ or any prefix, or a plain word.","__old_cname":"Command name without !, e.g. fortnite",
 "اسم اللعبة مثل: Fortnite":"Game name, e.g. Fortnite",
 "لازم الستريمر يربط تويتش من تبويب الإعدادات في موقع الستريمر عشان تغيير اللعبة يشتغل.":"The streamer must link Twitch from the Settings tab on the streamer site for game changing to work.",
 "رد البوت":"Bot reply","رد البوت بعد تغيير اللعبة (اختياري)":"Bot reply after changing the game (optional)",
@@ -4175,14 +4175,14 @@ function cmdFormInit(){
   $("#chips").onclick=e=>{if(e.target.tagName==="SPAN"){const ta=$("#creply");ta.value+=e.target.textContent;ta.focus()}};
   cmdFormSync();
 }
-function cmdFormGet(){return{type:$("#ctype").value,bang:$("#cbang").value!=="no",name:$("#cname").value,game:$("#cgame").value,secs:parseInt($("#csecs").value,10)||30,cd:$("#ccd").value,reply:$("#creply").value,perm:$("#cperm").value,aliases:$("#calias").value}}
+function cmdFormGet(){const nm=$("#cname").value.trim();return{type:$("#ctype").value,bang:nm.startsWith("!"),name:nm,game:$("#cgame").value,secs:parseInt($("#csecs").value,10)||30,cd:$("#ccd").value,reply:$("#creply").value,perm:$("#cperm").value,aliases:$("#calias").value}}
 function cmdFormClear(){
-  $("#ctype").value="text";$("#cperm").value="everyone";$("#cbang").value="yes";
+  $("#ctype").value="text";$("#cperm").value="everyone";
   $("#cname").value="";$("#calias").value="";$("#cgame").value="";$("#csecs").value=30;$("#ccd").value="";$("#creply").value="";cmdFormSync();
 }
 function cmdFormFill(n,c){
-  $("#ctype").value=c.type||"text";$("#cperm").value=c.perm||"everyone";$("#cbang").value=c.bang===false?"no":"yes";
-  $("#cname").value=n;$("#calias").value=(c.aliases||[]).join(", ");$("#cgame").value=c.game||"";$("#csecs").value=c.secs||30;$("#ccd").value=c.cd==null?"":c.cd;$("#creply").value=c.reply||"";
+  $("#ctype").value=c.type||"text";$("#cperm").value=c.perm||"everyone";
+  $("#cname").value=(c.bang===false?"":"!")+n;$("#calias").value=(c.aliases||[]).join(", ");$("#cgame").value=c.game||"";$("#csecs").value=c.secs||30;$("#ccd").value=c.cd==null?"":c.cd;$("#creply").value=c.reply||"";
   cmdFormSync();window.scrollTo({top:0,behavior:"smooth"});
 }
 function renderCmdList(box,cmds,onDel){
@@ -4211,13 +4211,8 @@ CMD_FORM = r"""
     <option value="game">🎮 اختصار لعبة (يغيّر لعبة البث)</option>
     <option value="clip">🎬 كليب (يسوي كليب للبث)</option>
   </select>
-  <input id="cname" dir="ltr" placeholder="اسم الكوماند بدون ! مثل: fortnite">
-  <label>طريقة التفعيل</label>
-  <select id="cbang">
-    <option value="yes">يبدأ بـ ! (مثل: !discord)</option>
-    <option value="no">بدون ! أو معها (مثل: discord)</option>
-  </select>
-  <input id="calias" dir="auto" placeholder="أسماء بديلة (اختياري)" title="مثال: dc, ديسكورد">
+  <input id="cname" dir="ltr" placeholder="الكوماند مثل: !discord أو سلام أو @avalx">
+  <input id="calias" type="hidden">
   <input id="cgame" dir="ltr" placeholder="اسم اللعبة مثل: Fortnite" hidden>
   <p class="hint" id="gamehint" hidden>لازم الستريمر يربط تويتش من تبويب الإعدادات في موقع الستريمر عشان تغيير اللعبة يشتغل.</p>
   <label id="clabel" hidden>مدة الكليب بالثواني (من 5 إلى 60)</label>
@@ -8519,9 +8514,9 @@ def make_web_app(bot):
         break
       cmds[n] = conv[n]
       added += 1
-      old = re.sub(r"\W+$", "", n)  # [جديد] نسخة قديمة انحفظت بدون «؟»
-      if old != n and old in cmds and not cmds[old].get("bang", True):
-        del cmds[old]
+      for old in {re.sub(r"\W+$", "", n), re.sub(r"^\W+|\W+$", "", n)}:  # نسخة قديمة انحفظت بدون «؟» أو «@»
+        if old != n and old in cmds and not cmds[old].get("bang", True):
+          del cmds[old]
       if not conv[n].get("bang", True):
         for k in nb_auto_key(n):  # الكوماند يحل محل الرد التلقائي
           autos.setdefault(k, {})["on"] = False
