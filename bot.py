@@ -2847,6 +2847,20 @@ def nb_convert(cmd):
     cd = 0
   perm = NB_PERMS.get(str(cmd.get("userLevel") or "everyone"), "everyone")
   alias = str(cmd.get("alias") or "").strip().lower().split(" ")[0]
+  # [جديد] نايت بوت يخفي روابط urlfetch في قائمته العامة («[urlfetch [channel]]»)، فنتعرف على الكوماندات المعروفة بالاسم
+  masked = bool(re.search(r"\[(urlfetch|customapi|twitch)\b", msg, re.I))
+  if masked and re.fullmatch(r"(clip|clips|كليب|كلب|مقطع)", name):
+    try:
+      n, entry = build_command({"name": name, "type": "clip", "secs": 30, "bang": True,
+                                "cd": max(0, min(3600, cd)), "perm": perm})
+    except ValueError as e:
+      return name, None, str(e), ""
+    entry["bang"] = bang
+    return n, entry, "", ""
+  if re.fullmatch(r"(up|uptime|live|مدة|مده|المدة|المده)", name) and (masked or "uptime" in msg.lower()):
+    msg = "البث صار له $(uptime)"
+  elif masked and re.search(r"follow", msg, re.I):
+    msg = "$(touser) $(urlfetch https://decapi.me/twitch/followage/$(channel)/$(touser)?precision=3)"
   if alias in ("!game", "!setgame", "!category", "!cat"):  # كوماند نايت بوت يغيّر اللعبة (alias = !game)
     try:
       n, entry = build_command({"name": name, "type": "game", "game": msg[:100], "bang": True,
