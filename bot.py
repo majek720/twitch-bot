@@ -2762,7 +2762,7 @@ def build_command(b):
   if not name or len(name) > 30 or re.search(r"\s", name) or name in BUILTIN:
     raise ValueError("اسم الكوماند ما ينفع")
   bang = b.get("bang") is not False
-  if not bang and not re.fullmatch(r"\w+", name):
+  if not bang and not re.fullmatch(r"\w+[?؟!]*", name):
     raise ValueError("الكوماند بدون ! لازم يكون حروف وأرقام بس")
   perm = b.get("perm") if b.get("perm") in PERMS else "everyone"
   reply = str(b.get("reply", "")).strip()[:450]
@@ -2828,7 +2828,7 @@ def nb_convert(cmd):
   bang = raw.startswith("!")
   name = raw.lstrip("!").lower()
   if not bang:
-    name = re.sub(r"^\W+|\W+$", "", name)  # «متى؟» تنحفظ «متى» (نفس طريقة مطابقة الشات)
+    name = re.sub(r"^\W+", "", name)  # «عمري؟» تنحفظ زي ما هي (الشات يتعرف عليها مع ؟ أو بدونها)
   if not name or len(name) > 30 or re.search(r"\s", name):
     return name or raw, None, "اسم الكوماند ما ينفع", ""
   msg = msg.replace("$(querystring)", "$(query)")
@@ -2861,6 +2861,8 @@ def nb_convert(cmd):
     return n, entry, "", ""
   if re.fullmatch(r"(up|uptime|live|مدة|مده|المدة|المده)", name) and (masked or "uptime" in msg.lower()):
     msg = "البث صار له $(uptime)"
+  elif re.fullmatch(r"\[twitch \$\((touser|user)\)\]", msg.strip(), re.I):  # عمر الحساب (!accountage)
+    msg = "$(touser) $(urlfetch https://decapi.me/twitch/accountage/$(touser)?precision=3)"
   elif masked and re.search(r"follow", msg, re.I):
     msg = "$(touser) $(urlfetch https://decapi.me/twitch/followage/$(channel)/$(touser)?precision=3)"
   if masked:
@@ -4240,6 +4242,7 @@ window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();window.__bi
   let busy=false;
   const typing=()=>{const a=document.activeElement;return !!(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.value)};
   function run(){
+    try{window.__mkSave&&window.__mkSave()}catch(e){}  // [جديد] نحفظ مكانك وشغلك قبل التحديث
     try{if(navigator.serviceWorker)navigator.serviceWorker.getRegistration().then(r=>r&&r.update()).catch(()=>{})}catch(e){}
     location.reload();
   }
@@ -4562,6 +4565,7 @@ const OC={ch:"#7c3aed",bans:"#ef4444",cmd:"#3b82f6",msg:"#0d9488",basic:"#f59e0b
 let OP="ch";
 function ogo(p){
   OP=p;
+  try{sessionStorage.setItem("mk_opg",p)}catch(e){}
   for(const x of OPG)$("#t-"+x).hidden=x!==p;
   document.querySelectorAll("#onav a[data-p],.sgrp a[data-p]").forEach(a=>a.classList.toggle("on",a.dataset.p===p));
   $("#app").style.setProperty("--pc",OC[p]);
@@ -4571,7 +4575,7 @@ function ogo(p){
 document.querySelectorAll("#onav a[data-p]").forEach(a=>a.onclick=()=>ogo(a.dataset.p));
 $("#oburger").onclick=()=>{$("#oside").classList.add("open");$("#obd").hidden=false};
 $("#obd").onclick=()=>{$("#oside").classList.remove("open");$("#obd").hidden=true};
-ogo("ch");
+ogo((()=>{try{const v=sessionStorage.getItem("mk_opg");return OPG.includes(v)?v:"ch"}catch(e){return "ch"}})());
 setInterval(()=>{if(!$("#app").hidden)load()},60000);
 initLang();
 load();
@@ -5570,6 +5574,7 @@ function fillSel(){
 function go(p){
   if(OWNPG.includes(p)&&(!CH||CH.role!=="owner"))p="ov";
   PG=p;
+  try{sessionStorage.setItem("mk_pg",p)}catch(e){}
   document.querySelectorAll(".pg").forEach(x=>x.hidden=x.id!=="p-"+p);
   document.querySelectorAll("#nav a,.sgrp a").forEach(x=>x.classList.toggle("on",x.dataset.p===p));
   $("#app").style.setProperty("--pc",COLORS[p]||"#7c3aed");
@@ -6480,7 +6485,29 @@ const goto=qp.get("go");
 if(location.search)history.replaceState(null,"","/s");
 //REPORT_JS
 initLang();
-init().then(()=>{if(goto&&CH)go(goto)});
+/* [جديد] بعد التحديث: يرجعك لنفس الصفحة ونفس الكوماند اللي كنت تكتبه */
+window.__mkSave=()=>{
+  const f={};
+  document.querySelectorAll("#modal input[id],#modal textarea[id],#modal select[id],.pg:not([hidden]) input[id],.pg:not([hidden]) textarea[id],.pg:not([hidden]) select[id]").forEach(el=>{
+    if(el.type==="file"||el.type==="password")return;
+    f[el.id]=el.type==="checkbox"||el.type==="radio"?(el.checked?"1":"0"):el.value;
+  });
+  sessionStorage.setItem("mk_draft",JSON.stringify({ts:Date.now(),pg:PG,ch:$("#chsel").value,modal:!$("#modal").hidden,y:scrollY,f}));
+};
+async function mkRestore(){
+  let d=null;try{d=JSON.parse(sessionStorage.getItem("mk_draft")||"null");sessionStorage.removeItem("mk_draft")}catch(e){}
+  if(d&&Date.now()-d.ts>10*60*1000)d=null;
+  if(d&&d.ch&&d.ch!==$("#chsel").value&&[...$("#chsel").options].some(o=>o.value===d.ch)){$("#chsel").value=d.ch;await loadCh()}
+  let pg=goto;try{pg=pg||(d&&d.pg)||sessionStorage.getItem("mk_pg")}catch(e){}
+  if(pg&&CH)go(pg);
+  if(!d)return;
+  if(d.modal)openModal();
+  for(const id in d.f){const el=document.getElementById(id);if(!el)continue;
+    if(el.type==="checkbox"||el.type==="radio")el.checked=d.f[id]==="1";else el.value=d.f[id];}
+  try{cmdFormSync()}catch(e){}
+  setTimeout(()=>scrollTo(0,d.y||0),60);
+}
+init().then(()=>{if(CH)mkRestore()});
 </script>
 </body>
 </html>
@@ -8472,6 +8499,9 @@ def make_web_app(bot):
         break
       cmds[n] = conv[n]
       added += 1
+      old = re.sub(r"\W+$", "", n)  # [جديد] نسخة قديمة انحفظت بدون «؟»
+      if old != n and old in cmds and not cmds[old].get("bang", True):
+        del cmds[old]
       if not conv[n].get("bang", True):
         for k in nb_auto_key(n):  # الكوماند يحل محل الرد التلقائي
           autos.setdefault(k, {})["on"] = False
@@ -11046,7 +11076,7 @@ class Bot:
       if not name or len(name) > 30 or name in BUILTIN:
         await say("bad_name")
         return True
-      if not bang and not re.fullmatch(r"\w+", name):
+      if not bang and not re.fullmatch(r"\w+[?؟!]*", name):
         await say("bad_plain")
         return True
 
@@ -11197,10 +11227,18 @@ class Bot:
     parts = content.split(maxsplit=2)
     if not parts:
       return False
-    word = re.sub(r"^\W+|\W+$", "", parts[0].lower())
+    cmds = self.store.data["commands"].get(channel_name, {})
+    raw = parts[0].lower()
+    word = re.sub(r"^\W+|\W+$", "", raw)
     if not word:
       return False
-    word, entry = find_cmd(self.store.data["commands"].get(channel_name, {}), word)
+    entry = None
+    for cand in (raw, word, word + "؟", word + "?"):  # [جديد] «عمري؟» تشتغل مع ؟ أو بدونها
+      w2, entry = find_cmd(cmds, cand)
+      if entry is not None and not entry.get("bang", True):
+        word = w2
+        break
+      entry = None
     if entry is None or entry.get("bang", True):
       return False
     parts[0] = word
