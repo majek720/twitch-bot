@@ -4795,7 +4795,6 @@ main{flex:1;min-width:0}
       <a data-act="install"><i>⬇️</i><span>تحميل التطبيق</span></a>
       <a data-act="pub" class="ext"><i>🌐</i><span>صفحة القناة العامة</span></a>
       <a data-act="rep"><i>🚩</i><span>البلاغات والدعم</span></a>
-      <a data-p="log" class="own"><i>📜</i><span>السجل</span></a>
       <a data-p="set" class="own"><i>⚙️</i><span>الإعدادات</span></a>
     </div>
     <div class="me">
@@ -7185,7 +7184,7 @@ a{color:inherit}
         </dl>
         <dl data-p="3" hidden>
           <div><dt>أوامر تلقائية</dt><dd>لما يصير شي في البث، البوت ينفّذ خطوات ورا بعض بدون برنامج على جهازك.</dd></div>
-          <div><dt>فريق المودات</dt><dd>المود يدخل بحسابه ويعدّل، وسجل يوضح مين غيّر وش.</dd></div>
+          <div><dt>فريق المودات</dt><dd>المود يدخل بحسابه ويعدّل الكوماندات والإعدادات.</dd></div>
           <div><dt>حساب بوت خاص</dt><dd>البوت يكتب باسم حسابك أو أي حساب تختاره.</dd></div>
           <div><dt>تطبيق على الجوال</dt><dd>ثبّت اللوحة على الآيفون أو الأندرويد.</dd></div>
         </dl>
@@ -7254,7 +7253,7 @@ Object.assign(EN,{"الشكل":"Preview","المميزات":"Features","التف
 "ربط الديسكورد":"Discord link","المتابع يشوف ستريكه ومستواه من سيرفرك، وإعلان تلقائي لما تبدأ البث.":"Viewers check their streak and level from your server, plus an automatic go-live post.",
 "أذكار وتذكيرات":"Adhkar and reminders","تنكتب بالفاصل اللي تختاره، وتسكت إذا الشات ساكت.":"Posted at the interval you pick, and quiet when chat is quiet.",
 "أوامر تلقائية":"Automations","لما يصير شي في البث، البوت ينفّذ خطوات ورا بعض بدون برنامج على جهازك.":"When something happens on stream, the bot runs a chain of steps with nothing installed on your PC.",
-"فريق المودات":"Mod team","المود يدخل بحسابه ويعدّل، وسجل يوضح مين غيّر وش.":"Mods log in with their own account, and a log shows who changed what.",
+"فريق المودات":"Mod team","المود يدخل بحسابه ويعدّل الكوماندات والإعدادات.":"Mods log in with their own account and edit commands and settings.",
 "حساب بوت خاص":"Your own bot account","البوت يكتب باسم حسابك أو أي حساب تختاره.":"The bot can post as your account or any account you choose.",
 "تطبيق على الجوال":"Phone app","ثبّت اللوحة على الآيفون أو الأندرويد.":"Install the dashboard on iPhone or Android.",
 "ادخل بتويتش":"Log in with Twitch","اضغط «فعّل البوت في قناتك».":"Press “Add the bot to your channel”.",
