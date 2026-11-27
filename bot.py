@@ -2846,6 +2846,15 @@ def nb_convert(cmd):
   except (TypeError, ValueError):
     cd = 0
   perm = NB_PERMS.get(str(cmd.get("userLevel") or "everyone"), "everyone")
+  alias = str(cmd.get("alias") or "").strip().lower().split(" ")[0]
+  if alias in ("!game", "!setgame", "!category", "!cat"):  # كوماند نايت بوت يغيّر اللعبة (alias = !game)
+    try:
+      n, entry = build_command({"name": name, "type": "game", "game": msg[:100], "bang": True,
+                                "cd": max(0, min(3600, cd)), "perm": perm})
+    except ValueError as e:
+      return name, None, str(e), ""
+    entry["bang"] = bang
+    return n, entry, "", ""
   try:
     n, entry = build_command({"name": name, "reply": msg, "bang": True, "cd": max(0, min(3600, cd)), "perm": perm})
   except ValueError as e:
@@ -8343,7 +8352,7 @@ def make_web_app(bot):
       if entry:
         conv[n] = entry
       rows.append({"name": (("!" if entry is None or entry.get("bang", True) else "") + n) if entry else str(c.get("name") or ""),
-                   "key": n, "reply": str(c.get("message") or "")[:300],
+                   "key": n, "reply": (("🎮 " + entry["game"]) if entry and entry["type"] == "game" else str(c.get("message") or ""))[:300],
                    "why": why or note, "bad": bool(why), "exists": n in cmds})
     want = b.get("names")
     if not isinstance(want, list):
