@@ -2862,6 +2862,47 @@ class Store:
 # ============================================================
 # Twitch API (تغيير اللعبة + تسجيل دخول الستريمرز + الشات عبر EventSub)
 # ============================================================
+_GAME_NAME_CACHE = {}
+
+
+async def game_official_name(q):
+  """[جديد] يحوّل اسم لعبة عربي أو مختصر (ايفل 4، الشر المقيم 4، gta 6) لاسمها الرسمي في تويتش."""
+  key = game_norm(q)
+  if key in _GAME_NAME_CACHE:
+    return _GAME_NAME_CACHE[key]
+  if not GEMINI_API_KEY:
+    return None
+  body = {
+      "systemInstruction": {"parts": [{"text":
+          "You convert what a gamer typed (Arabic, slang, abbreviation, number instead of roman numeral) "
+          "into the exact official English name of the video game or Twitch category they mean. "
+          "Examples: 'ايفل 4' -> 'Resident Evil 4'; 'الشر المقيم 4' -> 'Resident Evil 4'; "
+          "'gta 6' -> 'Grand Theft Auto VI'; 'جست شاتنق' -> 'Just Chatting'; 'كاونتر سترايك' -> 'Counter-Strike'. "
+          "Reply with only the name, nothing else. If you really don't know, reply NONE."}]},
+      "contents": [{"role": "user", "parts": [{"text": str(q)[:100]}]}],
+      "generationConfig": {"maxOutputTokens": 200, "temperature": 0},
+  }
+  url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+  try:
+    async with SharedHTTP() as s:
+      async with s.post(url, json=body, headers={"x-goog-api-key": GEMINI_API_KEY,
+                                                 "Content-Type": "application/json"}) as r:
+        if r.status != 200:
+          return None
+        data = await r.json(content_type=None)
+    parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or []
+    out = " ".join(p.get("text", "") for p in parts if not p.get("thought")).strip().strip("\"'`.").splitlines()
+    out = out[0].strip() if out else ""
+  except Exception as e:
+    print(f"اسم اللعبة الرسمي: {e}")
+    return None
+  out = None if (not out or out.upper() == "NONE" or len(out) > 100) else out
+  _GAME_NAME_CACHE[key] = out
+  if len(_GAME_NAME_CACHE) > 500:
+    _GAME_NAME_CACHE.pop(next(iter(_GAME_NAME_CACHE)))
+  return out
+
+
 def game_norm(name):
   """اسم اللعبة بدون نقاط ومسافات ورموز: «R.E.P.O.» و «repo» نفس الشي."""
   return re.sub(r"[^0-9a-z\u0600-\u06ff]+", "", str(name).lower())
@@ -2869,13 +2910,13 @@ def game_norm(name):
 
 # [جديد] اختصارات وأسماء عربية مشهورة للألعاب (للكوماند !game واختصارات الألعاب)
 GAME_ALIASES = {game_norm(k): v for k, v in {
-    "jc": "Just Chatting", "chatting": "Just Chatting", "سوالف": "Just Chatting", "دردشة": "Just Chatting",
+    "jc": "Just Chatting", "chatting": "Just Chatting", "سوالف": "Just Chatting", "دردشة": "Just Chatting", "جست": "Just Chatting", "جستشاتنق": "Just Chatting", "جستشاتينق": "Just Chatting",
     "fn": "Fortnite", "فورت": "Fortnite", "فورتنايت": "Fortnite",
     "mc": "Minecraft", "ماينكرافت": "Minecraft", "ماين": "Minecraft",
     "valo": "VALORANT", "val": "VALORANT", "فالو": "VALORANT", "فالورانت": "VALORANT",
     "lol": "League of Legends", "ow": "Overwatch 2", "ow2": "Overwatch 2", "اوفرواتش": "Overwatch 2",
-    "cs": "Counter-Strike", "cs2": "Counter-Strike", "csgo": "Counter-Strike", "كونتر": "Counter-Strike",
-    "gta": "Grand Theft Auto V", "gtav": "Grand Theft Auto V", "gta5": "Grand Theft Auto V", "قراند": "Grand Theft Auto V",
+    "cs": "Counter-Strike", "cs2": "Counter-Strike", "csgo": "Counter-Strike", "كونتر": "Counter-Strike", "كاونتر": "Counter-Strike", "كاونترسترايك": "Counter-Strike",
+    "gta": "Grand Theft Auto V", "gtav": "Grand Theft Auto V", "gta5": "Grand Theft Auto V", "قراند": "Grand Theft Auto V", "قراند5": "Grand Theft Auto V", "gta6": "Grand Theft Auto VI", "gtavi": "Grand Theft Auto VI", "قراند6": "Grand Theft Auto VI", "re4": "Resident Evil 4", "ايفل4": "Resident Evil 4", "رزدنتايفل4": "Resident Evil 4",
     "rl": "Rocket League", "روكيت": "Rocket League", "apex": "Apex Legends", "ابكس": "Apex Legends",
     "wz": "Call of Duty: Warzone", "warzone": "Call of Duty: Warzone", "وارزون": "Call of Duty: Warzone",
     "cod": "Call of Duty: Black Ops 7", "كود": "Call of Duty: Black Ops 7",
@@ -2995,35 +3036,49 @@ class TwitchAPI:
     return None, None
 
   async def find_game(self, name):
-    """[fix] يلقى اللعبة بذكاء: يتجاهل النقاط والمسافات (repo = R.E.P.O.)، ويفهم الاختصارات والأسماء العربية."""
-    q = GAME_ALIASES.get(game_norm(name), name).strip()
-    nq = game_norm(q)
+    """[fix] يلقى اللعبة بذكاء: يتجاهل النقاط والمسافات (repo = R.E.P.O.)، ويفهم الاختصارات والأسماء العربية.
+    لو ما لقى تطابق واضح (أو الاسم عربي): يسأل الذكاء الاصطناعي عن الاسم الرسمي ويبحث فيه."""
     token = await self.get_app_token()
-    st, d = await self.call("GET", "search/categories", token, params={"query": q, "first": 25})
-    items = d.get("data", []) if st == 200 else []
-    if nq and not any(game_norm(g["name"]) == nq for g in items):
-      # البحث أحياناً ما يلقى الأسماء اللي فيها نقاط: نجرب الاسم بالنقاط بين الحروف (R.E.P.O.)
-      if nq.isalnum() and len(nq) <= 6:
+
+    async def search(q):
+      nq = game_norm(q)
+      st, d = await self.call("GET", "search/categories", token, params={"query": q, "first": 25})
+      items = d.get("data", []) if st == 200 else []
+      if nq and nq.isascii() and nq.isalnum() and len(nq) <= 6 and not any(game_norm(g["name"]) == nq for g in items):
         st2, d2 = await self.call("GET", "search/categories", token,
                                   params={"query": ".".join(nq.upper()) + ".", "first": 10})
         items += d2.get("data", []) if st2 == 200 else []
-    if not items:
-      return None
+      if not items:
+        return None, 9
 
-    def score(g):
-      ng = game_norm(g["name"])
-      words = re.findall(r"[a-z0-9]+", g["name"].lower())
-      acro = "".join(w[0] for w in words if w)
-      if ng == nq:
-        return 0
-      if acro == nq and len(nq) >= 2:
-        return 1
-      if ng.startswith(nq):
-        return 2 + len(ng) / 1000
-      if nq in ng:
-        return 3 + len(ng) / 1000
-      return 4
-    return sorted(items, key=score)[0]
+      def score(g):
+        ng = game_norm(g["name"])
+        words = re.findall(r"[a-z0-9]+", g["name"].lower())
+        acro = "".join(w[0] for w in words if w)
+        if ng == nq:
+          return 0
+        if acro == nq and len(nq) >= 2:
+          return 1
+        if ng.startswith(nq):
+          return 2 + len(ng) / 1000
+        if nq in ng:
+          return 3 + len(ng) / 1000
+        return 4
+      best = sorted(items, key=score)[0]
+      return best, score(best)
+
+    q = GAME_ALIASES.get(game_norm(name), name).strip()
+    arabic = bool(re.search(r"[\u0600-\u06ff]", q))
+    best, sc = (None, 9) if arabic else await search(q)
+    if sc >= 2:  # ما فيه تطابق واضح: نسأل عن الاسم الرسمي (gta 6 = Grand Theft Auto VI)
+      official = await game_official_name(q)
+      if official and game_norm(official) != game_norm(q):
+        b2, sc2 = await search(official)
+        if b2 is not None and sc2 < sc:
+          best, sc = b2, sc2
+    if arabic and sc >= 3:
+      return None  # ما نغيّر لعبة غلط لاسم عربي ما فهمناه
+    return best
 
   async def _patch_channel(self, channel, body):
     """يرجع (نجح؟، كود الخطأ): disabled / not_linked / expired / refused"""
