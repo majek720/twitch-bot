@@ -7924,6 +7924,10 @@ def make_web_app(bot):
     who = read_session(request.cookies.get("ssess", ""))
     allowed = authed(request) or (who and who.lower() in STAGING_USERS)
     if not allowed and not request.path.startswith(STG_OPEN) and request.path != "/s":
+      if request.path.startswith("/s/api/"):  # اللوحة تعرض شاشة الدخول بدل «صار خطأ»
+        return web.json_response({"error": "unauthorized", "enabled": True}, status=401)
+      if request.path in ("/", "/home") and not who:
+        raise web.HTTPFound("/s")  # ما سجلت دخول: روح لصفحة الدخول
       return web.Response(status=404, text="Not found")
     try:
       resp = await handler(request)
