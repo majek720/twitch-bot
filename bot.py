@@ -7909,7 +7909,10 @@ def make_web_app(bot):
               "/manifest.json", "/sw.js", "/version", "/ping", "/robots.txt")
   STG_BAR = ('<div style="position:fixed;inset:auto 0 0 auto;z-index:9999;margin:10px;padding:5px 12px;'
              'border-radius:6px;background:#FFC53D;color:#1A1200;font:700 12.5px system-ui;pointer-events:none">'
-             '🧪 موقع التجربة: ما ينحفظ شي</div>')
+             '🧪 موقع التجربة: ما ينحفظ شي</div>'
+             '<a href="/home" style="position:fixed;inset:auto auto 0 0;z-index:9999;margin:10px;padding:5px 12px;'
+             'border-radius:6px;background:#FFC53D;color:#1A1200;font:700 12.5px system-ui;text-decoration:none">'
+             'الواجهة الأساسية</a>')
 
   @web.middleware
   async def staging_mw(request, handler):
@@ -7922,7 +7925,14 @@ def make_web_app(bot):
     allowed = authed(request) or (who and who.lower() in STAGING_USERS)
     if not allowed and not request.path.startswith(STG_OPEN) and request.path != "/s":
       return web.Response(status=404, text="Not found")
-    resp = await handler(request)
+    try:
+      resp = await handler(request)
+    except web.HTTPException:
+      raise
+    except Exception as e:  # موقع التجربة: نعرض سبب الخطأ عشان نصلحه بسرعة
+      import traceback
+      traceback.print_exc()
+      return jerr(f"خطأ في {request.path}: {type(e).__name__}: {e}"[:300], 500)
     resp.headers["X-Robots-Tag"] = "noindex, nofollow"
     if (allowed and isinstance(resp, web.Response) and (resp.content_type or "").startswith("text/html")
         and resp.text and "</body>" in resp.text):
@@ -7942,7 +7952,8 @@ def make_web_app(bot):
     # موقع واحد: اللي مفعّل البوت (أو مود في قناة) يدخل على طول على لوحة الستريمر، والجديد يشوف الواجهة
     nc = {"Cache-Control": "private, no-cache"}
     login_name = read_session(request.cookies.get("ssess", ""))
-    if login_name and login_name not in store.data["banned"] and channels_for(login_name):
+    if (login_name and login_name not in store.data["banned"] and channels_for(login_name)
+        and not (STAGING and request.path == "/home")):  # في موقع التجربة /home يعرض الواجهة دايماً
       raise web.HTTPFound("/s", headers=nc)
     return web.Response(text=HOME_PAGE, content_type="text/html", headers=nc)
 
@@ -9589,6 +9600,8 @@ def make_web_app(bot):
   app = web.Application(middlewares=[security_mw, staging_mw, nocache_mw, auth_mw], client_max_size=256 * 1024)
   r = app.router
   r.add_get("/", home)
+  if STAGING:
+    r.add_get("/home", home)
   r.add_get("/admin", index)
   r.add_get("/robots.txt", robots)
   r.add_get("/sitemap.xml", sitemap)
