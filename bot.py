@@ -4347,7 +4347,7 @@ window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();window.__bi
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="{{SITE}}/banner.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Reem+Kufi:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Reem+Kufi:wght@600;700&family=Alexandria:wght@600;700;800&display=swap" rel="stylesheet">
 <style>/*COMMON_CSS*/</style>
 </head>
 <body>
@@ -7081,6 +7081,33 @@ main>.top h1{font-size:30px}
 .nbrow small{color:var(--sf2);font-size:12px}
 .nbrow p{margin:2px 0 0;color:var(--mut);font-size:13.5px;word-break:break-word}
 .nbrow.off{opacity:.5}
+/* ---- [جديد] لمسة احترافية للوحة (نفس روح الواجهة الأساسية) ---- */
+:root{--disp:"Alexandria","IBM Plex Sans Arabic",system-ui,sans-serif;--vi:#8B6CFF}
+body{background:var(--ink) fixed;background-image:radial-gradient(ellipse 60% 40% at 85% -10%,rgba(255,107,87,.13),transparent 70%),radial-gradient(ellipse 50% 40% at 0% 10%,rgba(139,108,255,.10),transparent 70%)}
+main>.top h1{font-family:var(--disp);font-weight:800;letter-spacing:-.3px;line-height:1.3}
+.card h3,.panel h3,.chead b,.lh{font-family:var(--disp);font-weight:700}
+.card,.panel,.cmd,.grid4,.hero{background:linear-gradient(180deg,rgba(28,25,37,.92),rgba(18,16,25,.92))!important;border-color:var(--line)!important;box-shadow:0 1px 0 rgba(255,255,255,.03) inset,0 20px 40px -30px rgba(0,0,0,.8)}
+.cmd{transition:border-color .15s,transform .15s}
+.cmd:hover{border-color:var(--line2)!important}
+.btn{font-weight:700;transition:background .15s,transform .15s,box-shadow .15s}
+.btn:not(.ghost):not(.line):not(.red):not(.sm){box-shadow:0 8px 22px -10px rgba(255,107,87,.65)}
+.btn:not(.ghost):not(.line):not(.red):hover:not(:disabled){transform:translateY(-1px)}
+.btn.line,.btn.ghost{background:rgba(255,255,255,.03)}
+.btn.line:hover,.btn.ghost:hover{background:rgba(255,255,255,.07)}
+/* بطاقة القناة في الرئيسية */
+.hero{position:relative;overflow:hidden;isolation:isolate}
+.hero:before{content:"";position:absolute;inset:0;z-index:-1;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:40px 40px;-webkit-mask-image:radial-gradient(ellipse 70% 90% at 80% 50%,#000,transparent 80%);mask-image:radial-gradient(ellipse 70% 90% at 80% 50%,#000,transparent 80%)}
+.hero:after{display:block!important;content:"";position:absolute;inset:-40% auto auto -10%;width:60%;height:180%;z-index:-1;background:radial-gradient(closest-side,rgba(255,107,87,.18),transparent)}
+.hero h2{font-family:var(--disp);font-weight:800;font-size:34px!important}
+.av{box-shadow:0 12px 30px -10px rgba(255,107,87,.7)}
+.grid4 .stat b,.stat b{font-family:var(--disp);font-weight:800}
+/* شريط التبويبات */
+aside#side,aside#oside{background:rgba(9,8,13,.8)!important}
+.gtab.on{background:linear-gradient(180deg,transparent 60%,rgba(255,107,87,.08))}
+.sgrp a.on{background:linear-gradient(180deg,rgba(255,107,87,.10),rgba(255,107,87,.04));border-color:rgba(255,107,87,.35)}
+/* الحالة: لايف */
+.pill,.st{font-weight:700}
+input,select,textarea{transition:border-color .15s,box-shadow .15s}
 #askdlg{position:fixed;inset:0;z-index:200;background:rgba(5,4,8,.72);display:grid;place-items:center;padding:20px;animation:askin .14s ease-out}
 #askdlg[hidden]{display:none!important}
 .askbox{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--line2);border-radius:var(--r);padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.5)}
@@ -7177,7 +7204,7 @@ a{color:inherit}
 .trig button{flex:none}
 .tag{display:inline-flex;align-items:center;gap:9px;padding:6px 13px 6px 6px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.03);font-size:13.5px;color:var(--mut);margin-bottom:26px}
 .tag b{background:var(--sf);color:var(--sfink);font-size:12px;padding:3px 9px;border-radius:999px;font-weight:700}
-h1{font-family:var(--disp);font-weight:800;font-size:clamp(40px,5.6vw,72px);line-height:1.08;margin:0 0 22px;letter-spacing:-.5px}
+h1{font-family:var(--disp);font-weight:800;font-size:clamp(40px,5.6vw,72px);line-height:1.3;margin:0 0 22px;letter-spacing:-.5px}
 h1 span{background:linear-gradient(100deg,var(--sf) 10%,#FFB199 55%,var(--vi) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
 .lead{font-size:19px;line-height:1.75;color:var(--mut);margin:0 0 34px;max-width:31em}
 .ctas{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
