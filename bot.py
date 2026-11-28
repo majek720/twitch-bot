@@ -3428,7 +3428,7 @@ a{color:var(--sf2)}
 .sadu{height:14px;background:var(--sadu) repeat-x left bottom/21px 14px;border-top:3px solid var(--sf)}
 .wrap{max-width:720px;margin:0 auto;padding:16px}
 header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
-.logo{width:38px;height:38px;border-radius:10px;background:url(/avatar.png) center/cover no-repeat;flex-shrink:0;font-size:0!important;color:transparent}
+.logo{width:38px;height:38px;border-radius:10px;background:url(/avatar.png?v=3) center/cover no-repeat;flex-shrink:0;font-size:0!important;color:transparent}
 .tabs{display:flex;gap:4px;background:var(--surface);padding:4px;border-radius:12px;margin-bottom:16px;overflow-x:auto}
 .tabs button{flex:1;padding:9px;border:0;border-radius:9px;background:none;color:var(--mut);font:inherit;font-weight:500;cursor:pointer;white-space:nowrap}
 .tabs button.on{background:var(--raise);color:var(--tx)}
@@ -3685,7 +3685,7 @@ function applyLang(){
   const m=(LANG==="en"?EN:AR)[nz(document.title)];if(m)document.title=m;
   walk(document.body);
   document.querySelectorAll(".langbtn").forEach(b=>b.textContent=LANG==="en"?"عربي":"EN");
-  document.querySelectorAll("img.bnr").forEach(i=>{i.src=LANG==="en"?"/banner-en.jpg":"/banner.jpg"});
+  document.querySelectorAll("img.bnr").forEach(i=>{i.src=LANG==="en"?"/banner-en.jpg?v=3":"/banner.jpg?v=3"});
   onLang();
 }
 function initLang(){
@@ -3838,8 +3838,8 @@ window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();window.__bi
   window.addEventListener("pageshow",e=>{if(e.persisted)check()});
 })();
 </script>
-<link rel="icon" type="image/png" href="/icon-192.png?v=2">
-<link rel="apple-touch-icon" href="/icon-192.png?v=2">
+<link rel="icon" type="image/png" href="/icon-192.png?v=3">
+<link rel="apple-touch-icon" href="/icon-192.png?v=3">
 <script>try{if(localStorage.getItem("lang")==="en"){document.documentElement.dir="ltr";document.documentElement.lang="en"}}catch(e){}</script>
 <title>{{TITLE}}</title>
 <meta name="description" content="ماجيك بوت (majek bot): بوت شات تويتش عربي مجاني بلهجة سعودية: كوماندات، تنبيهات، ستريك يوصل للديسكورد، طلبات أغاني، حماية الشات وذكاء اصطناعي.">
@@ -3904,7 +3904,7 @@ main{flex:1;min-width:0}
 <div class="wrap">
 <div id="login" hidden>
   <div class="card">
-    <img class="bnr" src="/banner.jpg" alt="majek bot">
+    <img class="bnr" src="/banner.jpg?v=3" alt="majek bot">
     <h1 style="font-size:20px;margin:0 0 16px">majek bot</h1>
     <input id="pw" type="password" placeholder="كلمة المرور" autocomplete="current-password">
     <button class="btn" id="loginBtn">دخول</button>
@@ -3915,7 +3915,7 @@ main{flex:1;min-width:0}
 
 <div class="oshell" id="app" hidden>
   <aside id="oside">
-    <div class="brand"><img class="logo" src="/avatar.png" alt=""><span>majek bot</span></div>
+    <div class="brand"><img class="logo" src="/avatar.png?v=3" alt=""><span>majek bot</span></div>
     <div class="sadu"></div>
     <small class="bsub" id="botname"></small>
     <div class="nav" id="onav">
@@ -4375,7 +4375,7 @@ main{flex:1;min-width:0}
 </style>
 <div id="login" hidden style="padding:16px">
   <div class="card" style="max-width:440px;margin:10vh auto 0;text-align:center">
-    <img class="bnr" src="/banner.jpg" alt="majek bot">
+    <img class="bnr" src="/banner.jpg?v=3" alt="majek bot">
     <h1 style="font-size:20px;margin:0 0 8px">majek bot</h1>
     <p class="mut">ضغطة وحدة وتتفعّل الأمور: البوت يدخل قناتك ويرتبط تغيير اللعبة</p>
     <div id="loginbtns">
@@ -4390,7 +4390,7 @@ main{flex:1;min-width:0}
 
 <div class="shell" id="app" hidden>
   <aside id="side">
-    <div class="brand"><img class="logo" src="/avatar.png" alt=""><span>majek bot</span></div>
+    <div class="brand"><img class="logo" src="/avatar.png?v=3" alt=""><span>majek bot</span></div>
     <div class="sadu"></div>
     <select id="chsel" hidden></select>
     <div class="nav" id="nav">
@@ -6134,7 +6134,7 @@ html{scroll-behavior:smooth}
 @media(max-width:560px){.hero{padding:18px 16px 38px}.av{width:54px;height:54px;font-size:26px;border-radius:14px}.info h1{font-size:24px}}
 </style>
 <nav class="pnav" id="pnav">
-  <span class="pb"><img src="/avatar.png" alt=""><span>majek bot</span></span>
+  <span class="pb"><img src="/avatar.png?v=3" alt=""><span>majek bot</span></span>
   <a href="#srbox" id="nv-sr" hidden>🎵 طلبات الأغاني</a>
   <a href="#cmdsec">⌨️ الكوماندات</a>
   <a href="#lbbox" id="nv-lb" hidden>🔥 الستريك</a>
@@ -6178,7 +6178,7 @@ html{scroll-behavior:smooth}
     </div>
   </div>
   <p class="hint" style="text-align:center;margin-top:18px"><a href="/s">أنت الستريمر أو مود؟ ادخل لوحة التحكم</a></p>
-  <div class="brandf"><img src="/avatar.png" alt=""><div><b>majek bot</b><small>Chat magic, one command at a time • سحر الشات، كوماند بعد كوماند</small></div></div>
+  <div class="brandf"><img src="/avatar.png?v=3" alt=""><div><b>majek bot</b><small>Chat magic, one command at a time • سحر الشات، كوماند بعد كوماند</small></div></div>
 </div>
 <!--REPORT_HTML-->
 <div id="toast"></div>
@@ -6842,7 +6842,7 @@ h1 span{background:linear-gradient(100deg,var(--sf) 10%,#FFB199 55%,var(--vi) 10
 </style>
 
 <header class="nav"><div class="w">
-  <a class="brand" href="/"><img src="/avatar.png" alt=""><span>majek bot</span></a>
+  <a class="brand" href="/"><img src="/avatar.png?v=3" alt=""><span>majek bot</span></a>
   <nav class="links"><a href="#app">اللوحة</a><a href="#fx">المميزات</a><a href="#go">التفعيل</a><a href="#fq">الأسئلة</a></nav>
   <button class="btn langbtn">EN</button>
 </div></header>
@@ -6864,7 +6864,7 @@ h1 span{background:linear-gradient(100deg,var(--sf) 10%,#FFB199 55%,var(--vi) 10
       </div>
     </div>
     <div class="demo" aria-label="تجربة الأوامر التلقائية">
-      <div class="dh"><span class="t"><img src="/avatar.png" alt=""><span>majek bot</span></span><span class="live">متصل</span></div>
+      <div class="dh"><span class="t"><img src="/avatar.png?v=3" alt=""><span>majek bot</span></span><span class="live">متصل</span></div>
       <div class="db">
         <small class="l">اختر حدث وشوف وش يسوي البوت</small>
         <div class="trig" role="tablist" id="tabs"></div>
@@ -6889,9 +6889,9 @@ h1 span{background:linear-gradient(100deg,var(--sf) 10%,#FFB199 55%,var(--vi) 10
   <h2>كل شي في مكان واحد</h2>
   <p class="sub">من جوالك أو الكمبيوتر: الكوماندات، الريموت، المتصدرين، التنبيهات والديسكورد.</p>
   <div class="app">
-    <div class="abar"><img src="/avatar.png" alt=""><div class="tb"><span class="on">الرئيسية</span><span>الشات</span><span>التفاعل</span><span>الربط</span></div><span class="who"><i></i>majek113</span></div>
+    <div class="abar"><img src="/avatar.png?v=3" alt=""><div class="tb"><span class="on">الرئيسية</span><span>الشات</span><span>التفاعل</span><span>الربط</span></div><span class="who"><i></i>majek113</span></div>
     <div class="abody">
-      <div class="bn"><img class="bnr" src="/banner.jpg" alt="majek bot" width="1200" height="480"></div>
+      <div class="bn"><img class="bnr" src="/banner.jpg?v=3" alt="majek bot" width="1200" height="480"></div>
       <div class="tile"><small>رسائل البث الحالي</small><b>1,284</b><div class="bar"><s></s></div></div>
       <div class="deck"><span class="a">كليب</span><span>مسح الشات</span><span>إعلان</span><span>سلو مود</span><span>إيموت فقط</span><span>تغيير اللعبة</span><span>تحدي 1v1</span><span>ريد</span></div>
       <div class="tile lb"><small>المتصدرين</small>
@@ -6940,7 +6940,7 @@ h1 span{background:linear-gradient(100deg,var(--sf) 10%,#FFB199 55%,var(--vi) 10
 </div></section>
 
 <section class="end"><div class="w">
-  <img src="/avatar.png" alt="majek bot">
+  <img src="/avatar.png?v=3" alt="majek bot">
   <h2>خلّ البوت يشتغل عنك</h2>
   <p>فعّله الحين وجرّبه في بثك الجاي.</p>
   <a class="cta p" href="/auth/streamer"><span>فعّل البوت بحساب تويتش</span></a>
@@ -7155,9 +7155,9 @@ MANIFEST = {
     "display": "standalone", "background_color": "#0B0A10",
     "theme_color": "#0B0A10", "lang": "ar", "dir": "rtl",
     # [fix] روابط أيقونات جديدة (v2): لما تتغير الأيقونة لازم يتغير رابطها عشان التطبيق المثبّت يحدّثها
-    "icons": [{"src": "/icon-192.png?v=2", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-              {"src": "/icon-512.png?v=2", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-              {"src": "/icon-maskable.png?v=2", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}],
+    "icons": [{"src": "/icon-192.png?v=3", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+              {"src": "/icon-512.png?v=3", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+              {"src": "/icon-maskable.png?v=3", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}],
 }
 
 
@@ -9077,7 +9077,7 @@ def make_web_app(bot):
                         {"name": "ساعات المتابعة", "value": fmt_watch(r.get("w", 0)), "inline": True},
                         {"name": "الستريك", "value": f"🔥 {sc}", "inline": True},
                         {"name": "الرسائل", "value": f"{r.get('m', 0):,}", "inline": True}],
-             "thumbnail": {"url": f"{SITE_URL}/icon-192.png?v=2"} if SITE_URL else None,
+             "thumbnail": {"url": f"{SITE_URL}/icon-192.png?v=3"} if SITE_URL else None,
              "footer": {"text": f"قناة {ch} • majek bot"}}
       if not emb["thumbnail"]:
         emb.pop("thumbnail")
