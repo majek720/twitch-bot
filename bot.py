@@ -3065,11 +3065,52 @@ class TwitchAPI:
           return 3 + len(ng) / 1000
         return 4
       best = sorted(items, key=score)[0]
+      # [fix] تويتش فيه أكثر من تصنيف بنفس الاسم (Resident Evil 4 القديمة والريميك):
+      # الافتراضي الأحدث، ولو كتب قديم/2005/الأصلية ياخذ الأقدم
+      twins = {g["id"]: g for g in items if game_norm(g["name"]) == game_norm(best["name"])}
+      if len(twins) > 1:
+        tw = sorted(twins.values(), key=lambda g: int(g["id"]) if str(g["id"]).isdigit() else 0)
+        best = tw[0] if want_old else tw[-1]
+      # [fix] نسخ بأسماء مختلفة: «Dead Space (2008)» / «Resident Evil 2 (1998)» / «… Classic» / «… Remake»
+      base = game_norm(re.sub(r"\s*[(\[]?\b(19|20)\d\d\b[)\]]?|\b(remake|remastered|original|classic)\b", " ",
+                              best["name"], flags=re.I))
+      if base:
+        alts = []
+        for g in items:
+          gn = g["name"]
+          if game_norm(re.sub(r"\s*[(\[]?\b(19|20)\d\d\b[)\]]?|\b(remake|remastered|original|classic)\b", " ",
+                              gn, flags=re.I)) != base:
+            continue
+          yr = re.search(r"\b(19|20)(\d\d)\b", gn)
+          old = bool(re.search(r"\b(original|classic)\b", gn, re.I)) or bool(yr and int(yr.group(0)) < 2015)
+          new = bool(re.search(r"\bremake\b", gn, re.I))
+          alts.append((g, old, new))
+        if want_old:
+          pick = [g for g, o, n in alts if o]
+          if pick:
+            best = pick[0]
+        elif want_new:
+          pick = [g for g, o, n in alts if n]
+          if pick:
+            best = pick[0]
       return best, score(best)
 
+    old_w = r"\b(original|classic|old)\b|(ال)?قديم\S*|(ال)?[اأ]صلي\S*"
+    new_w = r"\b(remake|new)\b|(ال)?ريميك|(ال)?جديد\S*"
+    year = re.search(r"\b(19\d\d|20\d\d)\b", name)
+    want_old = bool(re.search(old_w, name, re.I) or (year and int(year.group(1)) < 2020)) \
+      and not re.search(new_w, name, re.I)
+    want_new = bool(re.search(new_w, name, re.I))
+    cleaned = re.sub(new_w + "|" + old_w, " ", name, flags=re.I)
+    cleaned = re.sub(r"[()\[\]]", " ", cleaned).strip()
+    name = cleaned if game_norm(cleaned) else name
     q = GAME_ALIASES.get(game_norm(name), name).strip()
     arabic = bool(re.search(r"[\u0600-\u06ff]", q))
     best, sc = (None, 9) if arabic else await search(q)
+    if sc >= 2 and year:  # «Resident Evil 4 2005»: نجرب بدون السنة
+      b0, s0 = await search(re.sub(r"\b(19|20)\d\d\b", " ", q).strip())
+      if b0 is not None and s0 < sc:
+        best, sc = b0, s0
     if sc >= 2:  # ما فيه تطابق واضح: نسأل عن الاسم الرسمي (gta 6 = Grand Theft Auto VI)
       official = await game_official_name(q)
       if official and game_norm(official) != game_norm(q):
