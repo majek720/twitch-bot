@@ -2862,6 +2862,29 @@ class Store:
 # ============================================================
 # Twitch API (تغيير اللعبة + تسجيل دخول الستريمرز + الشات عبر EventSub)
 # ============================================================
+def game_norm(name):
+  """اسم اللعبة بدون نقاط ومسافات ورموز: «R.E.P.O.» و «repo» نفس الشي."""
+  return re.sub(r"[^0-9a-z\u0600-\u06ff]+", "", str(name).lower())
+
+
+# [جديد] اختصارات وأسماء عربية مشهورة للألعاب (للكوماند !game واختصارات الألعاب)
+GAME_ALIASES = {game_norm(k): v for k, v in {
+    "jc": "Just Chatting", "chatting": "Just Chatting", "سوالف": "Just Chatting", "دردشة": "Just Chatting",
+    "fn": "Fortnite", "فورت": "Fortnite", "فورتنايت": "Fortnite",
+    "mc": "Minecraft", "ماينكرافت": "Minecraft", "ماين": "Minecraft",
+    "valo": "VALORANT", "val": "VALORANT", "فالو": "VALORANT", "فالورانت": "VALORANT",
+    "lol": "League of Legends", "ow": "Overwatch 2", "ow2": "Overwatch 2", "اوفرواتش": "Overwatch 2",
+    "cs": "Counter-Strike", "cs2": "Counter-Strike", "csgo": "Counter-Strike", "كونتر": "Counter-Strike",
+    "gta": "Grand Theft Auto V", "gtav": "Grand Theft Auto V", "gta5": "Grand Theft Auto V", "قراند": "Grand Theft Auto V",
+    "rl": "Rocket League", "روكيت": "Rocket League", "apex": "Apex Legends", "ابكس": "Apex Legends",
+    "wz": "Call of Duty: Warzone", "warzone": "Call of Duty: Warzone", "وارزون": "Call of Duty: Warzone",
+    "cod": "Call of Duty: Black Ops 7", "كود": "Call of Duty: Black Ops 7",
+    "rdr2": "Red Dead Redemption 2", "pubg": "PUBG: BATTLEGROUNDS", "ببجي": "PUBG: BATTLEGROUNDS",
+    "روبلوكس": "Roblox", "فيفا": "EA Sports FC 26", "fifa": "EA Sports FC 26", "fc": "EA Sports FC 26",
+    "repo": "R.E.P.O.", "ريبو": "R.E.P.O.", "dbd": "Dead by Daylight", "tft": "Teamfight Tactics",
+}.items()}
+
+
 class TwitchAPI:
 
   def __init__(self, store):
@@ -2972,15 +2995,35 @@ class TwitchAPI:
     return None, None
 
   async def find_game(self, name):
-    st, d = await self.call("GET", "search/categories", await self.get_app_token(),
-                            params={"query": name, "first": 10})
+    """[fix] يلقى اللعبة بذكاء: يتجاهل النقاط والمسافات (repo = R.E.P.O.)، ويفهم الاختصارات والأسماء العربية."""
+    q = GAME_ALIASES.get(game_norm(name), name).strip()
+    nq = game_norm(q)
+    token = await self.get_app_token()
+    st, d = await self.call("GET", "search/categories", token, params={"query": q, "first": 25})
     items = d.get("data", []) if st == 200 else []
+    if nq and not any(game_norm(g["name"]) == nq for g in items):
+      # البحث أحياناً ما يلقى الأسماء اللي فيها نقاط: نجرب الاسم بالنقاط بين الحروف (R.E.P.O.)
+      if nq.isalnum() and len(nq) <= 6:
+        st2, d2 = await self.call("GET", "search/categories", token,
+                                  params={"query": ".".join(nq.upper()) + ".", "first": 10})
+        items += d2.get("data", []) if st2 == 200 else []
     if not items:
       return None
-    for g in items:
-      if g["name"].lower() == name.lower():
-        return g
-    return items[0]
+
+    def score(g):
+      ng = game_norm(g["name"])
+      words = re.findall(r"[a-z0-9]+", g["name"].lower())
+      acro = "".join(w[0] for w in words if w)
+      if ng == nq:
+        return 0
+      if acro == nq and len(nq) >= 2:
+        return 1
+      if ng.startswith(nq):
+        return 2 + len(ng) / 1000
+      if nq in ng:
+        return 3 + len(ng) / 1000
+      return 4
+    return sorted(items, key=score)[0]
 
   async def _patch_channel(self, channel, body):
     """يرجع (نجح؟، كود الخطأ): disabled / not_linked / expired / refused"""
