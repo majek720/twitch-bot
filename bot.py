@@ -2866,19 +2866,22 @@ _GAME_NAME_CACHE = {}
 
 
 async def game_official_name(q):
-  """[جديد] يحوّل اسم لعبة عربي أو مختصر (ايفل 4، الشر المقيم 4، gta 6) لاسمها الرسمي في تويتش."""
+  """[جديد] يرجع قائمة (لين 3) أسماء رسمية محتملة. يحوّل اسم لعبة عربي أو مختصر (ايفل 4، الشر المقيم 4، gta 6) لاسمها الرسمي في تويتش."""
   key = game_norm(q)
   if key in _GAME_NAME_CACHE:
     return _GAME_NAME_CACHE[key]
   if not GEMINI_API_KEY:
-    return None
+    return []
   body = {
       "systemInstruction": {"parts": [{"text":
           "You convert what a gamer typed (Arabic, slang, abbreviation, number instead of roman numeral) "
           "into the exact official English name of the video game or Twitch category they mean. "
           "Examples: 'ايفل 4' -> 'Resident Evil 4'; 'الشر المقيم 4' -> 'Resident Evil 4'; "
           "'gta 6' -> 'Grand Theft Auto VI'; 'جست شاتنق' -> 'Just Chatting'; 'كاونتر سترايك' -> 'Counter-Strike'. "
-          "Reply with only the name, nothing else. If you really don't know, reply NONE."}]},
+          "If it is Arabic words that translate a game's name (even a new or small game you don't know), "
+          "also give the literal English translation in title case, e.g. 'طرق غبية للبناء' -> 'Dumb Ways to Build'. "
+          "Reply with up to 3 candidate names, one per line, most likely first, nothing else. "
+          "If you really have no idea, reply NONE."}]},
       "contents": [{"role": "user", "parts": [{"text": str(q)[:100]}]}],
       "generationConfig": {"maxOutputTokens": 200, "temperature": 0},
   }
@@ -2888,15 +2891,19 @@ async def game_official_name(q):
       async with s.post(url, json=body, headers={"x-goog-api-key": GEMINI_API_KEY,
                                                  "Content-Type": "application/json"}) as r:
         if r.status != 200:
-          return None
+          return []
         data = await r.json(content_type=None)
     parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or []
-    out = " ".join(p.get("text", "") for p in parts if not p.get("thought")).strip().strip("\"'`.").splitlines()
-    out = out[0].strip() if out else ""
+    lines = " ".join(p.get("text", "") for p in parts if not p.get("thought")).splitlines()
+    out = []
+    for ln in lines:
+      ln = re.sub(r"^\s*(\d+[.)]|[-*•])\s*", "", ln).strip().strip("\"'`.").strip()
+      if ln and ln.upper() != "NONE" and len(ln) <= 100 and ln not in out:
+        out.append(ln)
+    out = out[:3]
   except Exception as e:
     print(f"اسم اللعبة الرسمي: {e}")
-    return None
-  out = None if (not out or out.upper() == "NONE" or len(out) > 100) else out
+    return []
   _GAME_NAME_CACHE[key] = out
   if len(_GAME_NAME_CACHE) > 500:
     _GAME_NAME_CACHE.pop(next(iter(_GAME_NAME_CACHE)))
@@ -3095,8 +3102,8 @@ class TwitchAPI:
             best = pick[0]
       return best, score(best)
 
-    old_w = r"\b(original|classic|old)\b|(ال)?قديم\S*|(ال)?[اأ]صلي\S*"
-    new_w = r"\b(remake|new)\b|(ال)?ريميك|(ال)?جديد\S*"
+    old_w = r"\b(original|classic|old)\b|(?<!\S)(ال)?(قديم|[اأ]صلي|كلاسي?ك|[اأ]وري?جي?نال)\S*"
+    new_w = r"\b(remake|new)\b|(?<!\S)(ال)?(ري?مي?ك|جديد)\S*"
     year = re.search(r"\b(19\d\d|20\d\d)\b", name)
     want_old = bool(re.search(old_w, name, re.I) or (year and int(year.group(1)) < 2020)) \
       and not re.search(new_w, name, re.I)
@@ -3105,18 +3112,26 @@ class TwitchAPI:
     cleaned = re.sub(r"[()\[\]]", " ", cleaned).strip()
     name = cleaned if game_norm(cleaned) else name
     q = GAME_ALIASES.get(game_norm(name), name).strip()
+    noyear = re.sub(r"\b(19|20)\d\d\b", " ", name).strip()
+    if year and game_norm(noyear) and re.search(r"[\u0600-\u06ff]", noyear):
+      q = GAME_ALIASES.get(game_norm(noyear), noyear).strip()  # «رزدنت ايفل 4 2005»: السنة بس تحدد النسخة
     arabic = bool(re.search(r"[\u0600-\u06ff]", q))
     best, sc = (None, 9) if arabic else await search(q)
-    if sc >= 2 and year:  # «Resident Evil 4 2005»: نجرب بدون السنة
-      b0, s0 = await search(re.sub(r"\b(19|20)\d\d\b", " ", q).strip())
+    if sc >= 2 and year and not arabic:  # «Resident Evil 4 2005» / «re4 2005»: نجرب بدون السنة
+      b0, s0 = await search(GAME_ALIASES.get(game_norm(noyear), noyear).strip())
       if b0 is not None and s0 < sc:
         best, sc = b0, s0
     if sc >= 2:  # ما فيه تطابق واضح: نسأل عن الاسم الرسمي (gta 6 = Grand Theft Auto VI)
-      official = await game_official_name(q)
-      if official and game_norm(official) != game_norm(q):
+      cands = await game_official_name(q)
+      cands = [cands] if isinstance(cands, str) else list(cands or [])
+      for official in cands:  # «طرق غبية للبناء» = Dumb Ways to Build
+        if game_norm(official) == game_norm(q):
+          continue
         b2, sc2 = await search(official)
         if b2 is not None and sc2 < sc:
           best, sc = b2, sc2
+        if sc == 0:
+          break
     if arabic and sc >= 3:
       return None  # ما نغيّر لعبة غلط لاسم عربي ما فهمناه
     return best
