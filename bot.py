@@ -2214,6 +2214,7 @@ MSG = {
     "up": ("البث شغال من {d}", "The stream has been live for {d}"),
     "up_off": ("القناة أوفلاين الحين", "The channel is offline right now"),
     "game_now": ("اللعبة الحالية: {g}", "Current game: {g}"),
+    "game_set": ("تم تغيير اللعبة إلى: {g} 🎮", "The stream game has been updated to: {g} 🎮"),
     "game_none": ("ما قدرت أعرف المعلومة الحين", "I couldn't get that right now"),
     "title_now": ("عنوان البث: {t}", "Stream title: {t}"),
     "no_user": ("ما لقيت مستخدم باسم {u}", "I couldn't find a user named {u}"),
@@ -10550,11 +10551,19 @@ class Bot:
       return True
 
     if cmd == "game":
+      if arg and level >= PERMS["mod"]:  # [جديد] !game اسم اللعبة: يغيّر اللعبة (مثل نايت بوت)
+        ok, res = await self.twitch.set_game(ch, arg[:100])
+        await say("game_set", g=res) if ok else await say("e_" + res, q=arg[:60])
+        return True
       g, _ = await self.twitch.channel_info(ch)
       await say("game_now", g=g) if g else await say("game_none")
       return True
 
     if cmd == "title":
+      if arg and level >= PERMS["mod"]:  # [جديد] !title العنوان: يغيّر العنوان (مثل نايت بوت)
+        ok, res = await self.twitch.set_title(ch, arg)
+        await say("title_ok", t=res) if ok else await say("e_" + res, q="")
+        return True
       _, t = await self.twitch.channel_info(ch)
       await say("title_now", t=t) if t else await say("game_none")
       return True
