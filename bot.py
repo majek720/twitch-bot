@@ -3806,9 +3806,12 @@ window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();window.__bi
     location.reload();
   }
   function banner(txt,withBtn){
+    // [جديد] نفس ستايل الموقع الجديد: أسود ومرجاني، مع دائرة تدور
     const d=document.createElement("div");
-    d.style.cssText="position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:99999;background:#1A3039;color:#EAF1EC;border:1px solid #335762;border-inline-start:4px solid #F2A93B;padding:11px 16px;border-radius:12px;font:600 14px \"IBM Plex Sans Arabic\",system-ui,sans-serif;box-shadow:0 12px 32px rgba(0,0,0,.45);display:flex;gap:12px;align-items:center";
-    d.innerHTML="<span>"+txt+"</span>"+(withBtn?"<button style=\"background:#F2A93B;color:#241604;border:0;border-radius:8px;padding:6px 14px;font:inherit;font-weight:600;cursor:pointer\">"+(en()?"Update now":"تحديث الآن")+"</button>":"");
+    d.setAttribute("role","status");
+    d.style.cssText="position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:99999;background:rgba(18,16,25,.96);color:#F4F1F8;border:1px solid #352F44;padding:10px 12px 10px 16px;border-radius:12px;font:600 14px \"IBM Plex Sans Arabic\",system-ui,sans-serif;box-shadow:0 18px 40px -12px rgba(0,0,0,.7),0 0 0 1px rgba(255,107,87,.12);display:flex;gap:12px;align-items:center;white-space:nowrap;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)";
+    const sp=withBtn?"<span style=\"width:9px;height:9px;border-radius:50%;background:#FF6B57;box-shadow:0 0 0 4px rgba(255,107,87,.18)\"></span>":"<span style=\"width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,107,87,.25);border-top-color:#FF6B57;animation:mkspin .7s linear infinite\"></span>";
+    d.innerHTML="<style>@keyframes mkspin{to{transform:rotate(360deg)}}</style>"+sp+"<span>"+txt+"</span>"+(withBtn?"<button style=\"background:#FF6B57;color:#1A0703;border:0;border-radius:8px;padding:7px 14px;font:inherit;font-weight:700;cursor:pointer\">"+(en()?"Update now":"تحديث الآن")+"</button>":"");
     const b=d.querySelector("button");if(b)b.onclick=run;
     (document.body||document.documentElement).appendChild(d);
   }
@@ -4672,7 +4675,7 @@ main{flex:1;min-width:0}
 
         <section class="pg own" id="p-ai" hidden>
           <div class="panel" style="margin-bottom:14px">
-            <h3>الذكاء الاصطناعي (Gemini)</h3>
+            <h3>الذكاء الاصطناعي</h3>
             <p class="mut" id="aistate"></p>
             <p class="mut">المشاهد يمنشن البوت بسؤاله، أو يكتب !ai وبعدها سؤاله، والبوت يرد عليه بجملة أو جملتين.</p>
             <p class="hint" style="margin:0 0 10px;direction:ltr;text-align:start" id="ai-ex"></p>
@@ -5391,7 +5394,8 @@ function renderAI(){
   const a=CH.ai||{};
   document.querySelectorAll(".aichip").forEach(x=>x.classList.toggle("on",x.dataset.ai===(a.on?"on":"off")));
   $("#ai-perm").value=a.perm||"everyone";$("#ai-cd").value=a.cooldown||20;$("#ai-extra").value=a.extra||"";
-  $("#aistate").textContent=t(CH.ai_ready?"✅ مفتاح Gemini موجود، البوت جاهز يرد.":"⚠️ ما فيه GEMINI_API_KEY في Render: الميزة ما تشتغل لين صاحب البوت يضيفه.");
+  $("#aistate").hidden=!!CH.ai_ready;  // [جديد] نعرض التنبيه بس إذا الميزة ما تشتغل
+  $("#aistate").textContent=CH.ai_ready?"":t("⚠️ ما فيه GEMINI_API_KEY في Render: الميزة ما تشتغل لين صاحب البوت يضيفه.");
   const lg=CH.bot&&CH.bot.login;
   $("#ai-ex").textContent=(lg&&lg!==CH.name?"@"+lg+" ... | ":"")+"!ai ...";
 }
