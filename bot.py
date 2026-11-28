@@ -74,6 +74,10 @@ class SharedHTTP:
 
 
 OWNER = "majek113"
+# [جديد] موقع التجربة: نسخة ثانية من البوت على Render (STAGING=1) تدخلها أنت بس.
+# تقرأ بياناتك الحقيقية بس ما تحفظ شي، وما تكتب بالشات ولا الديسكورد ولا تلمس اشتراكات تويتش.
+STAGING = os.environ.get("STAGING", "").strip().lower() in ("1", "true", "yes", "on")
+STAGING_USERS = {u.strip().lower().lstrip("@") for u in (os.environ.get("STAGING_USERS") or OWNER).split(",") if u.strip()}
 IGNORED_USERS = set()
 DEFAULT_CHANNELS = ["majek113", "teamiik", "iz0yi", "vul1_", "lyorll"]
 
@@ -3280,6 +3284,8 @@ class Store:
         self.broken = True  # لا نكتب فوق الـ Gist ببيانات فاضية
 
   async def save(self):
+    if STAGING:
+      return  # موقع التجربة ما يكتب فوق بياناتك الحقيقية
     if self.broken:
       print("⚠️ تجاهلت الحفظ: ما قدرت أحمّل بياناتك من الـ Gist وما أبي أكتب فوقها. "
             "تأكد من GITHUB_TOKEN و GIST_ID وأعد التشغيل.")
@@ -3650,6 +3656,8 @@ class TwitchAPI:
 
   async def subscribe_chat(self, channel):
     """يشترك في رسائل شات القناة (EventSub) باسم البوت، ومعها تنبيهات الاشتراكات والريد والفولو."""
+    if STAGING:
+      return False, "staging"
     if not self.enabled:
       return False, "disabled"
     token = await self.get_app_token()
@@ -3701,10 +3709,14 @@ class TwitchAPI:
     return out
 
   async def drop_sub(self, sub_id):
+    if STAGING:
+      return  # لا نحذف اشتراكات الموقع الأساسي أبداً
     await self.call("DELETE", "eventsub/subscriptions",
                     await self.get_app_token(), params={"id": sub_id})
 
   async def unsubscribe_chat(self, channel):
+    if STAGING:
+      return
     bid = await self.user_id(channel)
     for s in await self.list_subs():
       if (s.get("condition") or {}).get("broadcaster_user_id") == bid:
@@ -7139,269 +7151,326 @@ PUBLIC_HTML = (PUBLIC_HTML.replace("<!--REPORT_HTML-->", REPORT_HTML).replace("/
 # ---------------- [جديد] الصفحة الرئيسية للبوت (تعريف ومميزات) ----------------
 # لوحة الأونر انتقلت إلى /admin
 HOME_HTML = (HEAD.replace("{{TITLE}}", "majek bot • ماجيك بوت") + r"""
+<link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--ink:#0B0A10;--deep:#07060B;--surface:#131119;--raise:#1C1925;--line:#262230;--line2:#383244;--tx:#F3F0F7;--mut:#A7A1B4;--dim:#6F697C;--sf:#FF6B57;--sf2:#FF9C8D;--sfink:#1A0703;--ok:#3DDC97}
-html{scroll-behavior:smooth}
-body{background:var(--ink);color:var(--tx)}
+:root{--ink:#09080D;--deep:#060509;--surface:#121019;--raise:#1A1724;--line:#24202F;--line2:#352F44;--tx:#F4F1F8;--mut:#A9A3B7;--dim:#6E6880;
+--sf:#FF6B57;--sf2:#FF9C8D;--sfink:#1A0703;--vi:#8B6CFF;--ok:#3DDC97;--disp:"Alexandria","IBM Plex Sans Arabic",system-ui,sans-serif}
+html{scroll-behavior:smooth;overflow-x:hidden}
+body{background:var(--ink);color:var(--tx);overflow-x:hidden}
 a{color:inherit}
-.w{max-width:1120px;margin:0 auto;padding:0 22px}
-.tb{display:flex;align-items:center;gap:22px;height:66px;border-bottom:1px solid var(--line)}
-.tb .me{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:var(--kufi);font-weight:700;font-size:19px}
-.tb .me img{width:34px;height:34px;border-radius:8px}
-.tb nav{display:flex;gap:2px;margin-inline-start:auto}
-.tb nav a{text-decoration:none;color:var(--mut);font-size:14.5px;font-weight:500;padding:8px 12px;border-radius:6px}
-.tb nav a:hover{color:var(--tx);background:var(--surface)}
-.tb .langbtn{width:auto;background:none;border:1px solid var(--line2);color:var(--tx);border-radius:6px;padding:6px 12px;font-size:13px}
-.hero{text-align:center;padding:64px 0 40px}
-.frame{position:relative;max-width:760px;margin:0 auto 46px}
-.frame:before{content:"";position:absolute;inset:14px -14px -14px 14px;border:2px solid var(--sf);border-radius:6px}
-[dir=rtl] .frame:before{inset:14px 14px -14px -14px}
-.frame img{position:relative;display:block;width:100%;height:auto;border-radius:6px;border:1px solid var(--line2)}
-.hero h1{font-family:var(--kufi);font-weight:700;font-size:clamp(34px,5vw,58px);line-height:1.15;margin:0 auto 16px;max-width:15em}
-.hero p{color:var(--mut);font-size:18px;line-height:1.75;max-width:34em;margin:0 auto 30px}
-.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--sf);color:var(--sfink);text-decoration:none;font-weight:700;font-size:17px;padding:15px 30px;border-radius:6px}
-.cta:hover{background:var(--sf2)}
-.cta:focus-visible,.ftabs button:focus-visible,.tb a:focus-visible{outline:2px solid var(--sf);outline-offset:3px}
-.small{display:block;margin-top:14px;color:var(--dim);font-size:14px}
-.sh{padding:70px 0 20px}
-.sh h2,.fx h2,.stp h2,.fq h2{font-family:var(--kufi);font-weight:700;font-size:clamp(26px,3.4vw,38px);margin:0 0 8px}
-.sh>.w>p,.fx>.w>p{color:var(--mut);font-size:16px;margin:0 0 32px}
-.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-.scr{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.scr .hd{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);font-size:13.5px;font-weight:600}
-.scr .hd small{color:var(--dim);font-weight:500}
-.scr .sb{padding:14px 16px;min-height:212px}
-.scr figcaption{padding:12px 16px 16px;color:var(--mut);font-size:14px;border-top:1px solid var(--line)}
-.dk{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.dk span{display:grid;place-items:center;text-align:center;height:58px;border-radius:6px;background:var(--raise);border:1px solid var(--line2);font-size:12.5px;font-weight:600}
-.dk span.a{background:var(--sf);border-color:var(--sf);color:var(--sfink)}
-.lbr{display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px}
-.lbr:last-child{border:0}
-.lbr i{font-style:normal;color:var(--dim);font-weight:700}
-.lbr b{direction:ltr;text-align:start;font-weight:600;unicode-bidi:isolate}
-.lbr em{font-style:normal;color:var(--sf2);font-size:12.5px;font-weight:600}
-.cl{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
-.cl:last-child{border:0}
-.cl code{font:600 13.5px "IBM Plex Sans Arabic",system-ui;color:var(--tx);direction:ltr;unicode-bidi:isolate}
-.cl span{color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
-.fx{padding:70px 0 20px}
-.fbox{display:grid;grid-template-columns:240px 1fr;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
-.ftabs{display:flex;flex-direction:column;border-inline-end:1px solid var(--line);background:var(--deep)}
-.ftabs button{all:unset;cursor:pointer;padding:18px 20px;font-weight:600;font-size:16px;color:var(--mut);border-bottom:1px solid var(--line);position:relative}
-.ftabs button:hover{color:var(--tx)}
-.ftabs button[aria-selected=true]{color:var(--tx);background:var(--surface)}
-.ftabs button[aria-selected=true]:before{content:"";position:absolute;inset-block:0;inset-inline-start:0;width:3px;background:var(--sf)}
-.ftabs small{display:block;color:var(--dim);font-size:12.5px;font-weight:500;margin-top:3px}
-.fp{padding:10px 28px}
-.fp dl{margin:0}
-.fp div{display:grid;grid-template-columns:200px 1fr;gap:18px;padding:17px 0;border-bottom:1px solid var(--line)}
-.fp div:last-child{border:0}
-.fp dt{font-weight:700;font-size:15.5px}
-.fp dd{margin:0;color:var(--mut);font-size:15px;line-height:1.65}
-.stp{padding:70px 0 20px}
-.sts{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.sts div{padding:26px 24px;border-inline-start:1px solid var(--line)}
-.sts div:first-child{border:0}
-.sts b{display:block;font-family:var(--kufi);font-size:40px;line-height:1;color:var(--sf);margin-bottom:14px}
-.sts strong{display:block;font-size:17px;margin-bottom:6px}
-.sts span{color:var(--mut);font-size:14.5px}
-.fq{padding:70px 0 30px}
-.fq .w{max-width:780px}
+.w{max-width:1200px;margin:0 auto;padding:0 24px}
+/* شريط علوي */
+.nav{position:sticky;top:0;z-index:30;background:rgba(9,8,13,.72);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid rgba(255,255,255,.06)}
+.nav .w{display:flex;align-items:center;gap:28px;height:68px}
+.brand{margin-inline-end:auto;display:flex;align-items:center;gap:11px;text-decoration:none;font-family:var(--disp);font-weight:700;font-size:19px}
+.brand img{width:36px;height:36px;border-radius:9px}
+.links{display:flex;gap:4px}
+.links a{text-decoration:none;color:var(--mut);font-size:14.5px;font-weight:500;padding:8px 13px;border-radius:7px;transition:color .15s,background .15s}
+.links a:hover{color:var(--tx);background:rgba(255,255,255,.05)}
+.nav .langbtn{width:auto;background:transparent;border:1px solid var(--line2);color:var(--tx);border-radius:7px;padding:7px 13px;font-size:13px;font-weight:600}
+/* الهيرو */
+.hero{position:relative;padding:84px 0 70px;isolation:isolate}
+.hero:before{content:"";position:absolute;inset:0;z-index:-2;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:56px 56px;-webkit-mask-image:radial-gradient(ellipse 80% 70% at 50% 30%,#000 30%,transparent 75%);mask-image:radial-gradient(ellipse 80% 70% at 50% 30%,#000 30%,transparent 75%)}
+.hero:after{content:"";position:absolute;inset:-120px 0 auto;height:620px;z-index:-1;background:radial-gradient(ellipse 45% 55% at 72% 30%,rgba(255,107,87,.20),transparent 70%),radial-gradient(ellipse 40% 50% at 22% 60%,rgba(139,108,255,.16),transparent 70%)}
+.hgrid{display:grid;grid-template-columns:1.05fr 1fr;gap:56px;align-items:center}
+.hgrid>*{min-width:0}
+.trig button{flex:none}
+.tag{display:inline-flex;align-items:center;gap:9px;padding:6px 13px 6px 6px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.03);font-size:13.5px;color:var(--mut);margin-bottom:26px}
+.tag b{background:var(--sf);color:var(--sfink);font-size:12px;padding:3px 9px;border-radius:999px;font-weight:700}
+h1{font-family:var(--disp);font-weight:800;font-size:clamp(40px,5.6vw,72px);line-height:1.08;margin:0 0 22px;letter-spacing:-.5px}
+h1 span{background:linear-gradient(100deg,var(--sf) 10%,#FFB199 55%,var(--vi) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{font-size:19px;line-height:1.75;color:var(--mut);margin:0 0 34px;max-width:31em}
+.ctas{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.cta{display:inline-flex;align-items:center;gap:10px;text-decoration:none;font-weight:700;font-size:16.5px;padding:15px 26px;border-radius:10px;transition:transform .15s,background .15s,box-shadow .15s}
+.cta.p{background:var(--sf);color:var(--sfink);box-shadow:0 10px 30px -10px rgba(255,107,87,.7)}
+.cta.p:hover{background:var(--sf2);transform:translateY(-1px)}
+.cta.s{background:rgba(255,255,255,.05);border:1px solid var(--line2);color:var(--tx)}
+.cta.s:hover{background:rgba(255,255,255,.09)}
+.cta svg{width:19px;height:19px}
+.cta:focus-visible,.trig button:focus-visible,.links a:focus-visible{outline:2px solid var(--sf);outline-offset:3px}
+.facts{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:26px;color:var(--dim);font-size:14px}
+.facts span{display:flex;align-items:center;gap:7px}
+.facts svg{width:16px;height:16px;color:var(--ok)}
+/* بطاقة التجربة */
+.demo{background:linear-gradient(180deg,rgba(26,23,36,.92),rgba(18,16,25,.92));border:1px solid var(--line2);border-radius:16px;box-shadow:0 40px 80px -30px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.02) inset;overflow:hidden}
+.dh{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)}
+.dh .t{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px}
+.dh .t img{width:22px;height:22px;border-radius:6px}
+.live{font-size:12px;font-weight:600;color:var(--ok);border:1px solid rgba(61,220,151,.35);background:rgba(61,220,151,.08);padding:3px 9px;border-radius:6px}
+.db{padding:16px 18px 18px}
+.db small.l{display:block;color:var(--mut);font-size:13px;margin-bottom:10px}
+.trig{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin-bottom:14px}
+.trig::-webkit-scrollbar{display:none}
+.trig button{all:unset;cursor:pointer;flex:none;display:flex;align-items:center;gap:7px;padding:8px 13px;border-radius:8px;font-size:13.5px;font-weight:600;color:var(--mut);background:rgba(255,255,255,.03);border:1px solid var(--line)}
+.trig button svg{width:15px;height:15px}
+.trig button[aria-selected=true]{background:var(--sf);border-color:var(--sf);color:var(--sfink)}
+.flow{border:1px solid var(--line);border-radius:12px;background:rgba(6,5,9,.55);padding:14px}
+.fh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+.fh b{font-size:15.5px}
+.fh small{color:var(--dim);font-size:12.5px}
+.stp{display:flex;gap:12px;align-items:flex-start;padding:11px 12px;border-radius:9px;border:1px solid transparent;margin-bottom:6px;background:rgba(255,255,255,.025);transition:border-color .25s,background .25s}
+.stp:last-child{margin-bottom:0}
+.stp i{flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line2);color:var(--dim);font-style:normal;font-size:11px;margin-top:2px}
+.stp div small{display:block;color:var(--dim);font-size:12px;margin-bottom:2px}
+.stp div span{font-size:14.5px;font-weight:500}
+.stp.on{border-color:rgba(255,107,87,.55);background:rgba(255,107,87,.07)}
+.stp.on i{border-color:var(--sf);color:var(--sf)}
+.stp.done i{border-color:var(--ok);background:var(--ok);color:#06140D}
+.run{margin-top:12px;color:var(--dim);font-size:13px;min-height:18px}
+/* أرقام */
+.nums{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-top:20px}
+.nums div{padding:26px 18px;text-align:center;border-inline-start:1px solid var(--line)}
+.nums div:first-child{border:0}
+.nums b{display:block;font-family:var(--disp);font-weight:800;font-size:clamp(28px,3.2vw,40px);line-height:1.1}
+.nums b em{font-style:normal;color:var(--sf)}
+.nums span{color:var(--mut);font-size:14px}
+/* لقطة اللوحة */
+.sec{padding:96px 0 0}
+.eyebrow{color:var(--sf);font-weight:700;font-size:14px;margin-bottom:12px}
+.sec h2{font-family:var(--disp);font-weight:800;font-size:clamp(30px,3.8vw,48px);line-height:1.15;margin:0 0 14px;letter-spacing:-.3px}
+.sec .sub{color:var(--mut);font-size:17.5px;line-height:1.7;max-width:40em;margin:0 0 40px}
+.app{border:1px solid var(--line2);border-radius:14px;overflow:hidden;background:var(--surface);box-shadow:0 50px 100px -40px rgba(0,0,0,.9)}
+.abar{display:flex;align-items:center;gap:18px;padding:0 18px;height:52px;border-bottom:1px solid var(--line);background:var(--deep)}
+.abar img{width:26px;height:26px;border-radius:7px}
+.abar .tb{display:flex;gap:2px;height:100%}
+.abar .tb span{display:flex;align-items:center;padding:0 13px;font-size:13.5px;color:var(--mut);font-weight:600;position:relative}
+.abar .tb span.on{color:var(--tx)}
+.abar .tb span.on:after{content:"";position:absolute;inset-inline:10px;bottom:-1px;height:2.5px;background:var(--sf);border-radius:2px}
+.abar .who{margin-inline-start:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mut)}
+.abar .who i{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.abody{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;padding:18px}
+.bn{grid-column:1/-1;position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
+.bn img{display:block;width:100%;height:auto;margin:0;border:0;aspect-ratio:auto}
+.tile{border:1px solid var(--line);border-radius:10px;background:var(--raise);padding:16px}
+.tile small{color:var(--dim);font-size:12.5px}
+.tile b{display:block;font-size:24px;font-family:var(--disp);margin-top:4px}
+.tile .bar{height:6px;border-radius:4px;background:var(--line);margin-top:12px;overflow:hidden}
+.tile .bar s{display:block;height:100%;width:68%;background:var(--sf);border-radius:4px}
+.deck{grid-column:span 2;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.deck span{display:grid;place-items:center;height:62px;border-radius:9px;background:var(--raise);border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--mut)}
+.deck span.a{background:rgba(255,107,87,.12);border-color:rgba(255,107,87,.5);color:var(--tx)}
+.lb .r{display:flex;justify-content:space-between;padding:6px 0;font-size:13.5px;border-bottom:1px solid var(--line)}
+.lb .r:last-child{border:0}
+.lb .r b{font-size:13.5px;font-family:inherit;margin:0;direction:ltr}
+.lb .r em{font-style:normal;color:var(--sf2);font-size:12.5px}
+/* المميزات */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.fcard{position:relative;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,var(--surface),rgba(18,16,25,.4));padding:26px;transition:border-color .2s,transform .2s}
+.fcard:hover{border-color:var(--line2);transform:translateY(-2px)}
+.fcard .fic{display:grid;place-items:center;width:44px;height:44px;border-radius:11px;background:rgba(255,107,87,.1);border:1px solid rgba(255,107,87,.25);color:var(--sf);margin-bottom:18px}
+.fcard .fic svg{width:22px;height:22px}
+.fcard h3{font-size:18px;margin:0 0 8px;font-weight:700}
+.fcard p{margin:0;color:var(--mut);font-size:15px;line-height:1.7}
+.fcard .k{display:flex;gap:6px;margin-top:14px}
+.fcard .k code{font:600 12.5px "IBM Plex Sans Arabic",system-ui;color:var(--sf2);background:rgba(255,107,87,.08);border:1px solid rgba(255,107,87,.2);padding:3px 8px;border-radius:6px;unicode-bidi:isolate}
+/* الخطوات */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:s}
+.steps div{border:1px solid var(--line);border-radius:14px;padding:26px;background:var(--surface)}
+.steps b{display:grid;place-items:center;width:38px;height:38px;border-radius:10px;background:var(--sf);color:var(--sfink);font-family:var(--disp);font-weight:800;margin-bottom:16px}
+.steps strong{display:block;font-size:17.5px;margin-bottom:6px}
+.steps span{color:var(--mut);font-size:15px;line-height:1.65}
+/* الأسئلة */
+.fq{max-width:820px}
 .fq details{border-bottom:1px solid var(--line)}
-.fq summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:16px;padding:18px 0;font-weight:600;font-size:16px}
+.fq summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:16px;padding:20px 0;font-weight:600;font-size:16.5px}
 .fq summary::-webkit-details-marker{display:none}
-.fq summary:after{content:"+";color:var(--sf);font-size:22px;line-height:1;font-weight:400}
+.fq summary:after{content:"+";color:var(--sf);font-size:24px;line-height:1;font-weight:300}
 .fq details[open] summary:after{content:"−"}
-.fq details p{margin:0 0 18px;color:var(--mut);line-height:1.75}
-.end{margin-top:60px;border-top:1px solid var(--line);padding:56px 0;text-align:center}
-.end h2{font-family:var(--kufi);font-size:clamp(26px,3.6vw,40px);margin:0 0 22px}
-.ft{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;padding:20px 22px;border-top:1px solid var(--line);color:var(--dim);font-size:13px;max-width:1120px;margin:0 auto}
-.ft a{color:var(--mut);text-decoration:none;margin-inline-start:16px}
-@media(max-width:900px){
- .tb nav{display:none}
- .tb .langbtn{margin-inline-start:auto}
- .hero{padding:36px 0 30px}
- .frame{margin:0 14px 40px}
- .hero p{font-size:16.5px}
- .trio{grid-template-columns:1fr}
- .fbox{grid-template-columns:1fr}
- .ftabs{flex-direction:row;overflow-x:auto;border-inline-end:0;border-bottom:1px solid var(--line);scrollbar-width:none}
- .ftabs button{flex:none;border-bottom:0;padding:14px 16px;font-size:15px}
- .ftabs small{display:none}
- .ftabs button[aria-selected=true]:before{inset-block:auto 0;inset-inline:0;width:auto;height:3px}
- .fp{padding:4px 18px}
- .fp div{grid-template-columns:1fr;gap:4px}
- .sts{grid-template-columns:1fr}
- .sts div{border-inline-start:0;border-top:1px solid var(--line)}
+.fq details p{margin:0 0 20px;color:var(--mut);line-height:1.8}
+/* الختام */
+.end{margin:110px 0 0;position:relative;isolation:isolate;border-top:1px solid var(--line);padding:90px 0;text-align:center;overflow:hidden}
+.end:before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse 50% 80% at 50% 100%,rgba(255,107,87,.22),transparent 70%)}
+.end img{width:84px;height:84px;border-radius:20px;margin-bottom:24px;box-shadow:0 20px 50px -15px rgba(255,107,87,.5)}
+.end h2{font-family:var(--disp);font-weight:800;font-size:clamp(30px,4.2vw,52px);margin:0 0 14px}
+.end p{color:var(--mut);font-size:18px;margin:0 0 32px}
+.foot{border-top:1px solid var(--line)}
+.foot .w{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;padding:22px 24px;color:var(--dim);font-size:13.5px}
+.foot a{color:var(--mut);text-decoration:none;margin-inline-start:18px}
+.foot a:hover{color:var(--tx)}
+@media(max-width:980px){
+ .links{display:none}
+ .hero{padding:44px 0 40px}
+ .hgrid{grid-template-columns:1fr;gap:40px}
+ .lead{font-size:17px}
+ .nums{grid-template-columns:repeat(2,1fr)}
+ .nums div:nth-child(3){border-inline-start:0}
+ .nums div:nth-child(n+3){border-top:1px solid var(--line)}
+ .sec{padding-top:72px}
+ .abar .tb span:nth-child(n+3){display:none}
+ .abody{grid-template-columns:1fr 1fr}
+ .deck{grid-column:1/-1;grid-template-columns:repeat(4,1fr)}
+ .lb{grid-column:1/-1}
+ .grid,.steps{grid-template-columns:1fr}
 }
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media(max-width:520px){.deck{grid-template-columns:repeat(2,1fr)}.cta{width:100%;justify-content:center}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.fcard,.cta,.stp{transition:none}}
 </style>
-<div class="w">
-  <header class="tb">
-    <a class="me" href="/"><img src="/avatar.png" alt=""><span>majek bot</span></a>
-    <nav><a href="#show">الشكل</a><a href="#fx">المميزات</a><a href="#st">التفعيل</a><a href="#fq">الأسئلة</a></nav>
-    <button class="btn langbtn">EN</button>
-  </header>
 
-  <section class="hero">
-    <div class="frame"><img class="bnr" src="/banner.jpg" alt="majek bot" width="1200" height="480"></div>
-    <h1>بوت واحد يدير شات تويتش حقك</h1>
-    <p>كوماندات وحماية وطلبات أغاني وستريك ومستويات، بلهجتنا وبالإنجليزي. يشتغل على السحاب، وتتحكم فيه كله من جوالك.</p>
-    <a class="cta" href="/auth/streamer">فعّل البوت في قناتك</a>
-    <span class="small">مجاني، والدخول بحساب تويتش</span>
-  </section>
-</div>
+<header class="nav"><div class="w">
+  <a class="brand" href="/"><img src="/avatar.png" alt=""><span>majek bot</span></a>
+  <nav class="links"><a href="#app">اللوحة</a><a href="#fx">المميزات</a><a href="#go">التفعيل</a><a href="#fq">الأسئلة</a></nav>
+  <button class="btn langbtn">EN</button>
+</div></header>
 
-<section class="sh" id="show">
-  <div class="w">
-    <h2>من داخل اللوحة</h2>
-    <p>ثلاث شاشات من اللي بتستخدمها كل يوم.</p>
-    <div class="trio">
-      <figure class="scr" style="margin:0">
-        <div class="hd"><span>ريموت البث</span><small>من جوالك</small></div>
-        <div class="sb"><div class="dk"><span class="a">كليب</span><span>مسح الشات</span><span>إعلان</span><span>سلو مود</span><span>إيموت فقط</span><span>تغيير اللعبة</span><span>تصفيق</span><span>تحدي 1v1</span><span>تذكير الماي</span></div></div>
-        <figcaption>أزرار تضغطها وأنت تلعب، وكل زر تحدد مدته.</figcaption>
-      </figure>
-      <figure class="scr" style="margin:0">
-        <div class="hd"><span>المتصدرين</span><small dir="ltr">!leaderboard</small></div>
-        <div class="sb">
-          <div class="lbr"><i>1</i><b>sara22</b><em>المستوى 24</em></div>
-          <div class="lbr"><i>2</i><b>fahad_x</b><em>المستوى 19</em></div>
-          <div class="lbr"><i>3</i><b>noor</b><em>المستوى 15</em></div>
-          <div class="lbr"><i>4</i><b>bigs</b><em>المستوى 11</em></div>
-          <div class="lbr"><i>5</i><b>abu_fahad</b><em>المستوى 9</em></div>
-        </div>
-        <figcaption>XP وساعات متابعة وستريك، بصفحة يفتحها أي مشاهد.</figcaption>
-      </figure>
-      <figure class="scr" style="margin:0">
-        <div class="hd"><span>الكوماندات</span><small>5 من 300</small></div>
-        <div class="sb">
-          <div class="cl"><code>!discord</code><span>سيرفرنا: <bdi>discord.gg/…</bdi></span></div>
-          <div class="cl"><code>!f</code><span>يغيّر اللعبة لـ Fortnite</span></div>
-          <div class="cl"><code>!clip</code><span>كليب آخر 30 ثانية</span></div>
-          <div class="cl"><code>!so</code><span>شاوت آوت مع كليب</span></div>
-          <div class="cl"><code>سلام</code><span>هلا والله <bdi>$(user)</bdi></span></div>
-        </div>
-        <figcaption>تكتبها بنفسك أو تسحبها من نايت بوت بضغطة.</figcaption>
-      </figure>
-    </div>
-  </div>
-</section>
-
-<section class="fx" id="fx">
-  <div class="w">
-    <h2>وش يقدر يسوي</h2>
-    <p>اختر قسم وشوف اللي فيه.</p>
-    <div class="fbox">
-      <div class="ftabs" role="tablist">
-        <button role="tab" aria-selected="true" data-t="0">الشات<small>كوماندات وحماية وردود</small></button>
-        <button role="tab" aria-selected="false" data-t="1">البث<small>تنبيهات وأغاني وريموت</small></button>
-        <button role="tab" aria-selected="false" data-t="2">المتابعين<small>ستريك ومستويات وديسكورد</small></button>
-        <button role="tab" aria-selected="false" data-t="3">الإدارة<small>أوامر تلقائية ومودات</small></button>
+<section class="hero"><div class="w">
+  <div class="hgrid">
+    <div>
+      <div class="tag"><b>جديد</b><span>سحب كوماندات نايت بوت بضغطة</span></div>
+      <h1>البوت اللي <span>يدير بثك</span> وأنت تلعب</h1>
+      <p class="lead">ماجيك بوت يرد على الشات ويحميه، ويشغّل أوامر تلقائية لحظة ما يصير شي في بثك: متابعة، ريد، اشتراك أو نقاط قناة. يشتغل على السحاب وتتحكم فيه كله من جوالك.</p>
+      <div class="ctas">
+        <a class="cta p" href="/auth/streamer"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 3 2.5 6.5V19h4.5v2.5h2.5L12 19h3.5L21 13.5V3H4zm15 9.5-3 3h-4l-2.5 2.5V15.5H6V5h13v7.5zM16 7.5h-2v5h2v-5zm-5 0H9v5h2v-5z"/></svg><span>فعّل البوت بحساب تويتش</span></a>
+        <a class="cta s" href="#fx">شوف المميزات</a>
       </div>
-      <div class="fp" role="tabpanel">
-        <dl data-p="0">
-          <div><dt>كوماندات خاصة فيك</dt><dd>تكتب الرد مرة، والبوت يعبّي الاسم والوقت والعداد بنفسه. وتقدر تسحب كوماندات نايت بوت كلها.</dd></div>
-          <div><dt>حماية الشات</dt><dd>يحذف الروابط والسبام والتكرار، ويلقط التحايل مثل التشكيل والحروف المفرّقة.</dd></div>
-          <div><dt>ردود تلقائية</dt><dd>يرد على السلام والترحيب وباك وبرب بدون ما تكتب شي.</dd></div>
-          <div><dt>ذكاء اصطناعي</dt><dd>منشن البوت بأي سؤال ويرد بجملة قصيرة ويعرف وش تلعب.</dd></div>
-        </dl>
-        <dl data-p="1" hidden>
-          <div><dt>تنبيهات الشات</dt><dd>يشكر المتابع والمشترك والمهدي، ويرحّب بالريد مع شاوت آوت وكليب على بثك.</dd></div>
-          <div><dt>طلبات الأغاني</dt><dd>من يوتيوب بالاسم أو الرابط، وتشتغل في الموقع أو في OBS.</dd></div>
-          <div><dt>ريموت البث</dt><dd>كليب، مسح الشات، إعلان، سلو مود، وأي زر تضيفه بنفسك.</dd></div>
-          <div><dt>نقاط القناة</dt><dd>مكافآت تشغّل أوامر، وتحدي 1v1 الخسران ياخذ تايم.</dd></div>
-        </dl>
-        <dl data-p="2" hidden>
-          <div><dt>ستريك الحضور</dt><dd>كم بث ورا بعض حضر كل مشاهد، وتقدر ترجّع الستريك لو طار.</dd></div>
-          <div><dt>مستويات وساعات متابعة</dt><dd>XP مع كل رسالة ودقيقة متابعة، وصفحة متصدرين بـ !leaderboard.</dd></div>
-          <div><dt>ربط الديسكورد</dt><dd>المتابع يشوف ستريكه ومستواه من سيرفرك، وإعلان تلقائي لما تبدأ البث.</dd></div>
-          <div><dt>أذكار وتذكيرات</dt><dd>تنكتب بالفاصل اللي تختاره، وتسكت إذا الشات ساكت.</dd></div>
-        </dl>
-        <dl data-p="3" hidden>
-          <div><dt>أوامر تلقائية</dt><dd>لما يصير شي في البث، البوت ينفّذ خطوات ورا بعض بدون برنامج على جهازك.</dd></div>
-          <div><dt>فريق المودات</dt><dd>المود يدخل بحسابه ويعدّل الكوماندات والإعدادات.</dd></div>
-          <div><dt>حساب بوت خاص</dt><dd>البوت يكتب باسم حسابك أو أي حساب تختاره.</dd></div>
-          <div><dt>تطبيق على الجوال</dt><dd>ثبّت اللوحة على الآيفون أو الأندرويد.</dd></div>
-        </dl>
+      <div class="facts">
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>مجاني بالكامل</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>بدون برنامج تنزّله</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>عربي وإنجليزي</span>
+      </div>
+    </div>
+    <div class="demo" aria-label="تجربة الأوامر التلقائية">
+      <div class="dh"><span class="t"><img src="/avatar.png" alt=""><span>majek bot</span></span><span class="live">متصل</span></div>
+      <div class="db">
+        <small class="l">اختر حدث وشوف وش يسوي البوت</small>
+        <div class="trig" role="tablist" id="tabs"></div>
+        <div class="flow">
+          <div class="fh"><b id="fname"></b><small id="fsrc"></small></div>
+          <div id="steps"></div>
+        </div>
+        <div class="run" id="run" aria-live="polite"></div>
       </div>
     </div>
   </div>
-</section>
+  <div class="nums">
+    <div><b><em>24</em>/7</b><span>شغال على السحاب</span></div>
+    <div><b>300</b><span>كوماند لكل قناة</span></div>
+    <div><b>16</b><span>حدث يشغّل أوامرك التلقائية</span></div>
+    <div><b><em>0</em></b><span>برامج على جهازك</span></div>
+  </div>
+</div></section>
 
-<section class="stp" id="st">
-  <div class="w">
-    <h2>التفعيل</h2>
-    <div class="sts" style="margin-top:26px">
-      <div><b>1</b><strong>ادخل بتويتش</strong><span>اضغط «فعّل البوت في قناتك».</span></div>
-      <div><b>2</b><strong>وافق على الصلاحيات</strong><span>عشان يقرأ الشات ويسوي كليبات ويغيّر العنوان.</span></div>
-      <div><b>3</b><strong>البوت في قناتك</strong><span>عدّل كل شي من اللوحة بأي وقت.</span></div>
+<section class="sec" id="app"><div class="w">
+  <div class="eyebrow">لوحة التحكم</div>
+  <h2>كل شي في مكان واحد</h2>
+  <p class="sub">من جوالك أو الكمبيوتر: الكوماندات، الريموت، المتصدرين، التنبيهات والديسكورد.</p>
+  <div class="app">
+    <div class="abar"><img src="/avatar.png" alt=""><div class="tb"><span class="on">الرئيسية</span><span>الشات</span><span>التفاعل</span><span>الربط</span></div><span class="who"><i></i>majek113</span></div>
+    <div class="abody">
+      <div class="bn"><img class="bnr" src="/banner.jpg" alt="majek bot" width="1200" height="480"></div>
+      <div class="tile"><small>رسائل البث الحالي</small><b>1,284</b><div class="bar"><s></s></div></div>
+      <div class="deck"><span class="a">كليب</span><span>مسح الشات</span><span>إعلان</span><span>سلو مود</span><span>إيموت فقط</span><span>تغيير اللعبة</span><span>تحدي 1v1</span><span>ريد</span></div>
+      <div class="tile lb"><small>المتصدرين</small>
+        <div class="r"><b>sara22</b><em>المستوى 24</em></div><div class="r"><b>fahad_x</b><em>المستوى 19</em></div><div class="r"><b>noor</b><em>المستوى 15</em></div>
+      </div>
+      <div class="tile"><small>الستريك الأعلى</small><b>42 بث</b><small>ورا بعض</small></div>
+      <div class="tile"><small>الكوماندات</small><b>87</b><small>منها 34 من نايت بوت</small></div>
     </div>
   </div>
-</section>
+</div></section>
 
-<section class="fq" id="fq">
-  <div class="w">
-    <h2>أسئلة متكررة</h2>
-    <details><summary>هل البوت مجاني؟</summary><p>إيه، كل المميزات مجانية.</p></details>
-    <details><summary>لازم جهازي يكون شغال؟</summary><p>لا، البوت يشتغل على السحاب. حتى لو جهازك مطفي يرد ويحمي الشات.</p></details>
-    <details><summary>أقدر أنقل كوماندات نايت بوت؟</summary><p>إيه، من صفحة الكوماندات اضغط «سحب من Nightbot» واكتب اسم قناتك، وتختار اللي تبيه.</p></details>
-    <details><summary>أقدر أخلي المودات يعدلون؟</summary><p>إيه، أضفهم من صفحة المودات ويدخلون بحساباتهم ويعدلون الكوماندات.</p></details>
-    <details><summary>عندي بوت ثاني، يتعارضون؟</summary><p>البوت يتجاهل البوتات المعروفة ويرد بس على كوماندات قناتك، فتقدر تستخدمه معهم.</p></details>
-    <details><summary>كيف أشيل البوت؟</summary><p>من الإعدادات في لوحة الستريمر اضغط «إزالة البوت من قناتي» ويطلع فوراً.</p></details>
+<section class="sec" id="fx"><div class="w">
+  <div class="eyebrow">المميزات</div>
+  <h2>كل اللي يحتاجه بثك</h2>
+  <p class="sub">بوت واحد بدل أربعة. كل جزء تشغّله أو تطفيه من اللوحة.</p>
+  <div class="grid">
+    <div class="fcard"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6M12 19h8"/></svg></div><h3>كوماندات بلا حدود</h3><p>اكتب الكوماند بأي بداية، وحط فيه منشن ونسب وعدّاد. أو اسحب كوماندات نايت بوت كلها بضغطة.</p><div class="k"><code>!discord</code><code>@avalx</code><code>عمري؟</code></div></div>
+    <div class="fcard"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 4 14h7l-1 7 9-11h-7l1-7z"/></svg></div><h3>أوامر تلقائية</h3><p>لما يجي ريد أو متابع أو مكافأة نقاط، البوت ينفّذ خطوات ورا بعض: رسالة، صوت، كليب، شاوت آوت.</p></div>
+    <div class="fcard"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v6c0 4.5 3.2 8 7.5 9 4.3-1 7.5-4.5 7.5-9V6L12 3z"/></svg></div><h3>حماية الشات</h3><p>يحذف الروابط والسبام والتكرار، ويلقط التحايل مثل التشكيل والحروف المفرّقة.</p></div>
+    <div class="fcard"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg></div><h3>ريموت البث</h3><p>أزرار على جوالك: كليب، مسح الشات، إعلان، سلو مود، وأي زر تضيفه بمدته.</p></div>
+    <div class="fcard"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg></div><h3>ستريك ومستويات</h3><p>ستريك الحضور وXP وساعات المتابعة، وصفحة متصدرين يفتحها أي مشاهد بـ <bdi>!leaderboard</bdi>.</p></div>
+    <div class="fcard"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l11-2v12M9 10l11-2"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></div><h3>طلبات الأغاني والديسكورد</h3><p>أغاني من يوتيوب على الموقع أو OBS، وربط ديسكورد يعلن بداية البث ويعرض الستريك.</p></div>
   </div>
-</section>
+</div></section>
 
-<section class="end">
-  <div class="w">
-    <h2>جاهز؟</h2>
-    <a class="cta" href="/auth/streamer">فعّل البوت في قناتك</a>
+<section class="sec" id="go"><div class="w">
+  <div class="eyebrow">التفعيل</div>
+  <h2>جاهز خلال دقيقة</h2>
+  <p class="sub">بدون تحميل ولا إعدادات معقدة.</p>
+  <div class="steps">
+    <div><b>1</b><strong>ادخل بتويتش</strong><span>اضغط «فعّل البوت بحساب تويتش».</span></div>
+    <div><b>2</b><strong>وافق على الصلاحيات</strong><span>عشان يقرأ الشات ويسوي كليبات ويغيّر العنوان.</span></div>
+    <div><b>3</b><strong>اسحب كوماندات نايت بوت</strong><span>أو ابدأ من الصفر، وعدّل كل شي من اللوحة.</span></div>
   </div>
-</section>
-<footer class="ft"><span>majek bot • ماجيك بوت</span><span><a href="/s">دخول المودات</a><a href="#fq">الأسئلة</a></span></footer>
+</div></section>
+
+<section class="sec" id="fq"><div class="w fq">
+  <div class="eyebrow">الأسئلة</div>
+  <h2>أسئلة متكررة</h2>
+  <details><summary>هل البوت مجاني؟</summary><p>إيه، كل المميزات مجانية.</p></details>
+  <details><summary>لازم جهازي يكون شغال؟</summary><p>لا، البوت يشتغل على السحاب. حتى لو جهازك مطفي يرد ويحمي الشات.</p></details>
+  <details><summary>أقدر أنقل كوماندات نايت بوت؟</summary><p>إيه، من صفحة الكوماندات اضغط «سحب من Nightbot» واكتب اسم قناتك، وتختار اللي تبيه.</p></details>
+  <details><summary>أقدر أخلي المودات يعدلون؟</summary><p>إيه، أضفهم من صفحة المودات ويدخلون بحساباتهم ويعدلون الكوماندات.</p></details>
+  <details><summary>عندي بوت ثاني، يتعارضون؟</summary><p>البوت يتجاهل البوتات المعروفة ويرد بس على كوماندات قناتك، فتقدر تستخدمه معهم.</p></details>
+  <details><summary>كيف أشيل البوت؟</summary><p>من الإعدادات في لوحة الستريمر اضغط «إزالة البوت من قناتي» ويطلع فوراً.</p></details>
+</div></section>
+
+<section class="end"><div class="w">
+  <img src="/avatar.png" alt="majek bot">
+  <h2>خلّ البوت يشتغل عنك</h2>
+  <p>فعّله الحين وجرّبه في بثك الجاي.</p>
+  <a class="cta p" href="/auth/streamer"><span>فعّل البوت بحساب تويتش</span></a>
+</div></section>
+<footer class="foot"><div class="w"><span>majek bot • ماجيك بوت</span><span><a href="/s">دخول المودات</a><a href="#fq">الأسئلة</a></span></div></footer>
 
 <script>
 //COMMON_JS
-Object.assign(EN,{"الشكل":"Preview","المميزات":"Features","التفعيل":"Setup","الأسئلة":"FAQ",
-"بوت واحد يدير شات تويتش حقك":"One bot that runs your Twitch chat",
-"كوماندات وحماية وطلبات أغاني وستريك ومستويات، بلهجتنا وبالإنجليزي. يشتغل على السحاب، وتتحكم فيه كله من جوالك.":"Commands, moderation, song requests, streaks and levels, in Arabic and English. It runs in the cloud and you control all of it from your phone.",
-"فعّل البوت في قناتك":"Add the bot to your channel","مجاني، والدخول بحساب تويتش":"Free. Log in with Twitch.",
-"من داخل اللوحة":"Inside the dashboard","ثلاث شاشات من اللي بتستخدمها كل يوم.":"Three screens you'll use every day.",
-"ريموت البث":"Stream remote","من جوالك":"From your phone","كليب":"Clip","مسح الشات":"Clear chat","إعلان":"Ad","سلو مود":"Slow mode","إيموت فقط":"Emote only","تغيير اللعبة":"Change game","تصفيق":"Applause","تحدي 1v1":"1v1 duel","تذكير الماي":"Water reminder",
-"أزرار تضغطها وأنت تلعب، وكل زر تحدد مدته.":"Buttons you press mid-game, each with its own duration.",
-"المتصدرين":"Leaderboard","المستوى 24":"Level 24","المستوى 19":"Level 19","المستوى 15":"Level 15","المستوى 11":"Level 11","المستوى 9":"Level 9",
-"XP وساعات متابعة وستريك، بصفحة يفتحها أي مشاهد.":"XP, watch time and streaks on a page any viewer can open.",
-"الكوماندات":"Commands","5 من 300":"5 of 300","سيرفرنا:":"Our server:","يغيّر اللعبة لـ Fortnite":"Switches the game to Fortnite","كليب آخر 30 ثانية":"Clips the last 30 seconds","شاوت آوت مع كليب":"Shoutout with a clip","هلا والله":"Welcome",
-"تكتبها بنفسك أو تسحبها من نايت بوت بضغطة.":"Write them yourself or import them from Nightbot in one click.",
-"وش يقدر يسوي":"What it can do","اختر قسم وشوف اللي فيه.":"Pick a section to see what's in it.",
-"الشات":"Chat","البث":"Stream","المتابعين":"Viewers","الإدارة":"Management",
-"كوماندات وحماية وردود":"Commands, moderation, replies","تنبيهات وأغاني وريموت":"Alerts, songs, remote","ستريك ومستويات وديسكورد":"Streaks, levels, Discord","أوامر تلقائية ومودات":"Automations and mods",
-"كوماندات خاصة فيك":"Your own commands","تكتب الرد مرة، والبوت يعبّي الاسم والوقت والعداد بنفسه. وتقدر تسحب كوماندات نايت بوت كلها.":"Write the reply once and the bot fills in names, time and counters. You can also import all your Nightbot commands.",
+Object.assign(EN,{"اللوحة":"Dashboard","المميزات":"Features","التفعيل":"Setup","الأسئلة":"FAQ","جديد":"New","سحب كوماندات نايت بوت بضغطة":"Import your Nightbot commands in one click",
+"البوت اللي":"The bot that","يدير بثك":"runs your stream","وأنت تلعب":"while you play",
+"ماجيك بوت يرد على الشات ويحميه، ويشغّل أوامر تلقائية لحظة ما يصير شي في بثك: متابعة، ريد، اشتراك أو نقاط قناة. يشتغل على السحاب وتتحكم فيه كله من جوالك.":"majek bot answers and protects your chat, and runs automations the moment something happens on stream: a follow, a raid, a sub or channel points. It runs in the cloud and you control all of it from your phone.",
+"فعّل البوت بحساب تويتش":"Add the bot with Twitch","شوف المميزات":"See features","مجاني بالكامل":"Completely free","بدون برنامج تنزّله":"Nothing to install","عربي وإنجليزي":"Arabic and English",
+"متصل":"Connected","اختر حدث وشوف وش يسوي البوت":"Pick an event and see what the bot does",
+"شغال على السحاب":"Running in the cloud","كوماند لكل قناة":"Commands per channel","حدث يشغّل أوامرك التلقائية":"Events that trigger automations","برامج على جهازك":"Apps on your PC",
+"لوحة التحكم":"Dashboard","كل شي في مكان واحد":"Everything in one place","من جوالك أو الكمبيوتر: الكوماندات، الريموت، المتصدرين، التنبيهات والديسكورد.":"From your phone or PC: commands, remote, leaderboard, alerts and Discord.",
+"الرئيسية":"Home","الشات":"Chat","التفاعل":"Engagement","الربط":"Integrations","رسائل البث الحالي":"Messages this stream","كليب":"Clip","مسح الشات":"Clear chat","إعلان":"Ad","سلو مود":"Slow mode","إيموت فقط":"Emote only","تغيير اللعبة":"Change game","تحدي 1v1":"1v1 duel","ريد":"Raid",
+"المتصدرين":"Leaderboard","المستوى 24":"Level 24","المستوى 19":"Level 19","المستوى 15":"Level 15","الستريك الأعلى":"Top streak","42 بث":"42 streams","ورا بعض":"in a row","الكوماندات":"Commands","منها 34 من نايت بوت":"34 imported from Nightbot",
+"كل اللي يحتاجه بثك":"Everything your stream needs","بوت واحد بدل أربعة. كل جزء تشغّله أو تطفيه من اللوحة.":"One bot instead of four. Switch each part on or off from the dashboard.",
+"كوماندات بلا حدود":"Flexible commands","اكتب الكوماند بأي بداية، وحط فيه منشن ونسب وعدّاد. أو اسحب كوماندات نايت بوت كلها بضغطة.":"Use any prefix, add mentions, percentages and counters, or import all your Nightbot commands in one click.",
+"أوامر تلقائية":"Automations","لما يجي ريد أو متابع أو مكافأة نقاط، البوت ينفّذ خطوات ورا بعض: رسالة، صوت، كليب، شاوت آوت.":"When a raid, follow or channel-points reward comes in, the bot runs a chain of steps: message, sound, clip, shoutout.",
 "حماية الشات":"Moderation","يحذف الروابط والسبام والتكرار، ويلقط التحايل مثل التشكيل والحروف المفرّقة.":"Removes links, spam and repeats, and catches tricks like diacritics and spaced-out letters.",
-"ردود تلقائية":"Auto replies","يرد على السلام والترحيب وباك وبرب بدون ما تكتب شي.":"Answers greetings, back and brb without you typing anything.",
-"ذكاء اصطناعي":"AI","منشن البوت بأي سؤال ويرد بجملة قصيرة ويعرف وش تلعب.":"Mention the bot with any question and it answers briefly, knowing what you're playing.",
-"تنبيهات الشات":"Chat alerts","يشكر المتابع والمشترك والمهدي، ويرحّب بالريد مع شاوت آوت وكليب على بثك.":"Thanks followers, subs and gifters, and welcomes raids with a shoutout and a clip on stream.",
-"طلبات الأغاني":"Song requests","من يوتيوب بالاسم أو الرابط، وتشتغل في الموقع أو في OBS.":"From YouTube by name or link, played on the site or in OBS.",
-"كليب، مسح الشات، إعلان، سلو مود، وأي زر تضيفه بنفسك.":"Clip, clear chat, ad, slow mode, and any button you add yourself.",
-"نقاط القناة":"Channel points","مكافآت تشغّل أوامر، وتحدي 1v1 الخسران ياخذ تايم.":"Rewards that run actions, plus 1v1 duels where the loser gets timed out.",
-"ستريك الحضور":"Attendance streaks","كم بث ورا بعض حضر كل مشاهد، وتقدر ترجّع الستريك لو طار.":"How many streams in a row each viewer attended, and you can restore a lost streak.",
-"مستويات وساعات متابعة":"Levels and watch time","XP مع كل رسالة ودقيقة متابعة، وصفحة متصدرين بـ !leaderboard.":"XP for every message and minute watched, with a leaderboard page via !leaderboard.",
-"ربط الديسكورد":"Discord link","المتابع يشوف ستريكه ومستواه من سيرفرك، وإعلان تلقائي لما تبدأ البث.":"Viewers check their streak and level from your server, plus an automatic go-live post.",
-"أذكار وتذكيرات":"Adhkar and reminders","تنكتب بالفاصل اللي تختاره، وتسكت إذا الشات ساكت.":"Posted at the interval you pick, and quiet when chat is quiet.",
-"أوامر تلقائية":"Automations","لما يصير شي في البث، البوت ينفّذ خطوات ورا بعض بدون برنامج على جهازك.":"When something happens on stream, the bot runs a chain of steps with nothing installed on your PC.",
-"فريق المودات":"Mod team","المود يدخل بحسابه ويعدّل الكوماندات والإعدادات.":"Mods log in with their own account and edit commands and settings.",
-"حساب بوت خاص":"Your own bot account","البوت يكتب باسم حسابك أو أي حساب تختاره.":"The bot can post as your account or any account you choose.",
-"تطبيق على الجوال":"Phone app","ثبّت اللوحة على الآيفون أو الأندرويد.":"Install the dashboard on iPhone or Android.",
-"ادخل بتويتش":"Log in with Twitch","اضغط «فعّل البوت في قناتك».":"Press “Add the bot to your channel”.",
-"وافق على الصلاحيات":"Approve the permissions","عشان يقرأ الشات ويسوي كليبات ويغيّر العنوان.":"So it can read chat, make clips and change the title.",
-"البوت في قناتك":"The bot is in your channel","عدّل كل شي من اللوحة بأي وقت.":"Change anything from the dashboard any time.",
-"أسئلة متكررة":"FAQ","أقدر أنقل كوماندات نايت بوت؟":"Can I bring my Nightbot commands?",
-"إيه، من صفحة الكوماندات اضغط «سحب من Nightbot» واكتب اسم قناتك، وتختار اللي تبيه.":"Yes. On the Commands page press “Import from Nightbot”, type your channel and pick the ones you want.",
-"جاهز؟":"Ready?","دخول المودات":"Mod login"});
+"ريموت البث":"Stream remote","أزرار على جوالك: كليب، مسح الشات، إعلان، سلو مود، وأي زر تضيفه بمدته.":"Buttons on your phone: clip, clear chat, ad, slow mode, and any button you add with its own duration.",
+"ستريك ومستويات":"Streaks and levels","ستريك الحضور وXP وساعات المتابعة، وصفحة متصدرين يفتحها أي مشاهد بـ !leaderboard.":"Attendance streaks, XP and watch time, with a leaderboard page any viewer can open via !leaderboard.",
+"طلبات الأغاني والديسكورد":"Song requests and Discord","أغاني من يوتيوب على الموقع أو OBS، وربط ديسكورد يعلن بداية البث ويعرض الستريك.":"YouTube songs on the site or in OBS, plus a Discord link that announces go-live and shows streaks.",
+"جاهز خلال دقيقة":"Ready in a minute","بدون تحميل ولا إعدادات معقدة.":"No downloads and no complicated setup.",
+"ادخل بتويتش":"Log in with Twitch","اضغط «فعّل البوت بحساب تويتش».":"Press “Add the bot with Twitch”.","وافق على الصلاحيات":"Approve the permissions","عشان يقرأ الشات ويسوي كليبات ويغيّر العنوان.":"So it can read chat, make clips and change the title.",
+"اسحب كوماندات نايت بوت":"Import from Nightbot","أو ابدأ من الصفر، وعدّل كل شي من اللوحة.":"Or start from scratch and edit everything from the dashboard.",
+"أسئلة متكررة":"FAQ","أقدر أنقل كوماندات نايت بوت؟":"Can I bring my Nightbot commands?","إيه، من صفحة الكوماندات اضغط «سحب من Nightbot» واكتب اسم قناتك، وتختار اللي تبيه.":"Yes. On the Commands page press “Import from Nightbot”, type your channel and pick the ones you want.",
+"خلّ البوت يشتغل عنك":"Let the bot do the work","فعّله الحين وجرّبه في بثك الجاي.":"Turn it on now and try it on your next stream.","دخول المودات":"Mod login"});
 for(const k in EN)AR[EN[k]]=k;
 (function(){
-  const tabs=[...document.querySelectorAll(".ftabs button")],ps=[...document.querySelectorAll(".fp dl")];
-  tabs.forEach(b=>b.onclick=()=>{tabs.forEach(x=>x.setAttribute("aria-selected",String(x===b)));ps.forEach(p=>p.hidden=p.dataset.p!==b.dataset.t)});
+  const IC={raid:'<path d="M4 20 20 4M14 4h6v6M4 14v6h6"/>',follow:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',sub:'<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3z"/>',pts:'<circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/>',word:'<path d="M4 5h16v11H8l-4 4V5z"/>'};
+  const F=[
+    {k:"raid",ar:["ريد","ترحيب بالريد","Twitch › ريد",[["شاوت آوت","fahad_x مع كليب من قناته على البث"],["رسالة بالشات","حيّاكم يا جماعة fahad_x!"],["انتظر","10 ثواني"],["صوت على البث","تصفيق"],["وضع الشات","متابعين فقط 5 دقايق"]]],en:["Raid","Raid welcome","Twitch › Raid",[["Shoutout","fahad_x with a clip from their channel on stream"],["Chat message","Welcome raiders from fahad_x!"],["Wait","10 seconds"],["Sound on stream","Applause"],["Chat mode","Followers-only for 5 minutes"]]]},
+    {k:"follow",ar:["متابعة","شكر المتابع","Twitch › متابعة",[["رسالة بالشات","حيّاك الله noor نورت القناة ♡"],["صوت على البث","صوت متابع جديد"],["رسالة بالديسكورد","بقناة #المتابعين"]]],en:["Follow","Thank the follower","Twitch › Follow",[["Chat message","Welcome noor, glad you're here ♡"],["Sound on stream","New follower sound"],["Discord message","In #followers"]]]},
+    {k:"sub",ar:["اشتراك","اشتراك جديد","Twitch › اشتراك",[["رسالة بالشات","شكراً sara22 على الاشتراك!"],["قراءة بصوت","يقرأ رسالة المشترك على البث"],["كليب","آخر 30 ثانية"]]],en:["Sub","New sub","Twitch › Sub",[["Chat message","Thanks sara22 for subscribing!"],["Text to speech","Reads the sub message on stream"],["Clip","Last 30 seconds"]]]},
+    {k:"pts",ar:["نقاط القناة","تحدي 1v1","Twitch › مكافأة",[["تحدي 1v1","bigs ضد اللي منشنه، والخسران ياخذ تايم"],["انتظر","60 ثانية"],["مكافأة النقاط","توقّف 5 دقايق"]]],en:["Channel points","1v1 duel","Twitch › Reward",[["1v1 duel","bigs vs who they mention, loser gets timed out"],["Wait","60 seconds"],["Channel points reward","Paused for 5 minutes"]]]},
+    {k:"word",ar:["كلمة بالشات","السلام","الشات › كلمة",[["رسالة بالشات","وعليكم السلام ♡ @noor"]]],en:["Chat word","Greeting","Chat › Word",[["Chat message","Hey there ♡ @noor"]]]}
+  ];
+  const tabs=document.getElementById("tabs"),steps=document.getElementById("steps"),run=document.getElementById("run");
+  if(!tabs)return;
+  const still=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let cur=0,tm=null;
+  function L(f){return LANG==="en"?f.en:f.ar}
+  function draw(){
+    tabs.textContent="";
+    F.forEach((f,i)=>{const b=document.createElement("button");b.setAttribute("role","tab");b.setAttribute("data-nt","");b.setAttribute("aria-selected",String(i===cur));
+      b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+IC[f.k]+'</svg>';
+      const s=document.createElement("span");s.textContent=L(f)[0];b.appendChild(s);b.onclick=()=>{cur=i;draw()};tabs.appendChild(b)});
+    const d=L(F[cur]);
+    const fn=document.getElementById("fname"),fs=document.getElementById("fsrc");fn.setAttribute("data-nt","");fs.setAttribute("data-nt","");fn.textContent=d[1];fs.textContent=d[2];
+    steps.textContent="";
+    d[3].forEach((x,i)=>{const r=document.createElement("div");r.className="stp";r.setAttribute("data-nt","");
+      r.innerHTML='<i></i><div><small></small><span dir="auto"></span></div>';r.querySelector("i").textContent=i+1;r.querySelector("small").textContent=x[0];r.querySelector("span").textContent=x[1];steps.appendChild(r)});
+    play();
+  }
+  function play(){
+    clearTimeout(tm);const rows=[...steps.children];let i=0;
+    run.setAttribute("data-nt","");
+    const tick=()=>{rows.forEach((r,k)=>{r.classList.toggle("on",k===i);r.classList.toggle("done",k<i)});
+      if(i<rows.length){run.textContent=(LANG==="en"?"Running: ":"يشتغل الحين: ")+L(F[cur])[3][i][0];i++;tm=setTimeout(tick,still?0:900)}
+      else{run.textContent=LANG==="en"?"Done":"خلص";rows.forEach(r=>{r.classList.remove("on");r.classList.add("done")});tm=setTimeout(()=>{if(!still){cur=(cur+1)%F.length;draw()}},2600)}};
+    tick();
+  }
+  onLang=draw;
 })();
 initLang();
 </script>
@@ -7834,6 +7903,30 @@ def make_web_app(bot):
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     if is_https(request):
       resp.headers.setdefault("Strict-Transport-Security", "max-age=15552000")
+    return resp
+
+  STG_OPEN = ("/auth/", "/avatar.png", "/banner.jpg", "/banner-en.jpg", "/icon-", "/favicon.ico",
+              "/manifest.json", "/sw.js", "/version", "/ping", "/robots.txt")
+  STG_BAR = ('<div style="position:fixed;inset:auto 0 0 auto;z-index:9999;margin:10px;padding:5px 12px;'
+             'border-radius:6px;background:#FFC53D;color:#1A1200;font:700 12.5px system-ui;pointer-events:none">'
+             '🧪 موقع التجربة: ما ينحفظ شي</div>')
+
+  @web.middleware
+  async def staging_mw(request, handler):
+    """[جديد] موقع التجربة يدخله بس الأونر (أو STAGING_USERS)، والباقي يشوف «غير موجود»."""
+    if not STAGING:
+      return await handler(request)
+    if request.path == "/robots.txt":
+      return web.Response(text="User-agent: *\nDisallow: /\n", content_type="text/plain")
+    who = read_session(request.cookies.get("ssess", ""))
+    allowed = authed(request) or (who and who.lower() in STAGING_USERS)
+    if not allowed and not request.path.startswith(STG_OPEN) and request.path != "/s":
+      return web.Response(status=404, text="Not found")
+    resp = await handler(request)
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow"
+    if (allowed and isinstance(resp, web.Response) and (resp.content_type or "").startswith("text/html")
+        and resp.text and "</body>" in resp.text):
+      resp.text = resp.text.replace("</body>", STG_BAR + "</body>", 1)
     return resp
 
   @web.middleware
@@ -9493,7 +9586,7 @@ def make_web_app(bot):
     await bot.reset_bot(a[1])
     return web.json_response({"ok": True})
 
-  app = web.Application(middlewares=[security_mw, nocache_mw, auth_mw], client_max_size=256 * 1024)
+  app = web.Application(middlewares=[security_mw, staging_mw, nocache_mw, auth_mw], client_max_size=256 * 1024)
   r = app.router
   r.add_get("/", home)
   r.add_get("/admin", index)
@@ -10170,6 +10263,8 @@ async def discord_register_commands():
 
 
 async def discord_webhook_embed(url, content, embed=None, role=""):
+  if STAGING:
+    return False
   """[جديد] رسالة ديسكورد فيها بطاقة (إعلان البث)."""
   if not url or not DISCORD_WEBHOOK_RE.fullmatch(url):
     return False
@@ -10188,6 +10283,8 @@ async def discord_webhook_embed(url, content, embed=None, role=""):
 
 
 async def discord_webhook_post(url, content):
+  if STAGING:
+    return False
   if not url or not DISCORD_WEBHOOK_RE.fullmatch(url):
     return False
   try:
@@ -10426,6 +10523,9 @@ class Bot:
     except Exception as e:
       print(f"nb_migrate: {e}")
     asyncio.create_task(start_web_server(self))
+    if STAGING:  # موقع التجربة: الموقع بس، بدون أي شي يكتب أو يرسل
+      print(f"🧪 موقع التجربة شغال: يدخله بس {', '.join(sorted(STAGING_USERS))}، وما يحفظ ولا يرسل شي")
+      return
     asyncio.create_task(self.periodic_reminders())
     asyncio.create_task(self.resub_loop())
     asyncio.create_task(self.keepalive_loop())
@@ -10532,6 +10632,8 @@ class Bot:
       await asyncio.sleep(3600)
 
   async def join_channels(self, names):
+    if STAGING:
+      return
     for n in names:
       self.paused.discard(n)  # الاستدعاء الصريح (إضافة أو إعادة ربط) يرفع الإيقاف
       ok, why = await self.twitch.subscribe_chat(n)
@@ -10592,6 +10694,9 @@ class Bot:
 
   # ---------- الإرسال: طابور لكل قناة مع حدود تحمي الحساب من السبام ----------
   async def send_chat(self, channel_name, text):
+    if STAGING:
+      print(f"[تجربة] ما انرسل للشات ({channel_name}): {str(text)[:120]}")
+      return
     if channel_name in self.store.data["banned"]:
       return
     text = safe_chat(text).strip()
